@@ -6,6 +6,8 @@ import { avatarsDir, initAvatars, listAvatars } from './avatars';
 import { config } from './config';
 import { initDb } from './db';
 import { adminRouter } from './routes/admin';
+import { assignmentAdminRouter } from './routes/assignmentAdmin';
+import { assignmentsRouter } from './routes/assignments';
 import { authRouter } from './routes/auth';
 import { mediaRouter } from './routes/media';
 import { playRouter } from './routes/play';
@@ -33,7 +35,9 @@ app.use('/avatars', express.static(avatarsDir));
 app.get('/api/avatars', (_req, res) => res.json(listAvatars()));
 
 app.use('/api/admin', adminRouter);
+app.use('/api/admin/assignments', assignmentAdminRouter);
 app.use('/api/admin/users', usersRouter);
+app.use('/api/assignments', assignmentsRouter);
 app.use('/api/auth', authRouter);
 app.use('/api/media', mediaRouter);
 app.use('/api/play', playRouter);

@@ -1,5 +1,5 @@
 import { lazy, Suspense } from 'react';
-import { Navigate, Route, Routes } from 'react-router-dom';
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { PageCenter } from '@/components/layout';
 import { useAuth } from './context/AuthContext';
 
@@ -12,6 +12,10 @@ const SessionDetail = lazy(() => import('./pages/admin/SessionDetail'));
 const GameControl = lazy(() => import('./pages/admin/GameControl'));
 const Settings = lazy(() => import('./pages/admin/Settings'));
 const UserManagement = lazy(() => import('./pages/admin/UserManagement'));
+const Assignments = lazy(() => import('./pages/admin/Assignments'));
+const AssignmentEditor = lazy(() => import('./pages/admin/AssignmentEditor'));
+const AssignmentDetail = lazy(() => import('./pages/admin/AssignmentDetail'));
+const AssignmentPage = lazy(() => import('./pages/assignment/AssignmentPage'));
 const UserLogin = lazy(() => import('./pages/auth/UserLogin'));
 const UserRegister = lazy(() => import('./pages/auth/UserRegister'));
 const UserSettings = lazy(() => import('./pages/user/UserSettings'));
@@ -43,6 +47,17 @@ function RequireUser({ children }: { children: React.ReactNode }) {
   const { role, checking } = useAuth();
   if (checking) return <Loading />;
   if (role !== 'user') return <Navigate to="/login" replace />;
+  return <>{children}</>;
+}
+
+function RequireAssignmentUser({ children }: { children: React.ReactNode }) {
+  const { role, checking } = useAuth();
+  const location = useLocation();
+  if (checking) return <Loading />;
+  if (role !== 'user') {
+    const returnTo = `${location.pathname}${location.search}`;
+    return <Navigate to={`/login?returnTo=${encodeURIComponent(returnTo)}`} replace />;
+  }
   return <>{children}</>;
 }
 
@@ -105,6 +120,46 @@ export default function App() {
         }
       />
       {guardedCreatorRoutes('/admin', RequireSuperAdmin)}
+      <Route
+        path="/admin/assignments"
+        element={
+          <Lazy>
+            <RequireSuperAdmin>
+              <Assignments />
+            </RequireSuperAdmin>
+          </Lazy>
+        }
+      />
+      <Route
+        path="/admin/assignments/new"
+        element={
+          <Lazy>
+            <RequireSuperAdmin>
+              <AssignmentEditor />
+            </RequireSuperAdmin>
+          </Lazy>
+        }
+      />
+      <Route
+        path="/admin/assignments/:id/edit"
+        element={
+          <Lazy>
+            <RequireSuperAdmin>
+              <AssignmentEditor />
+            </RequireSuperAdmin>
+          </Lazy>
+        }
+      />
+      <Route
+        path="/admin/assignments/:id"
+        element={
+          <Lazy>
+            <RequireSuperAdmin>
+              <AssignmentDetail />
+            </RequireSuperAdmin>
+          </Lazy>
+        }
+      />
 
       <Route
         path="/login"
@@ -175,6 +230,16 @@ export default function App() {
         element={
           <Lazy>
             <Game />
+          </Lazy>
+        }
+      />
+      <Route
+        path="/assignment/:accessCode"
+        element={
+          <Lazy>
+            <RequireAssignmentUser>
+              <AssignmentPage />
+            </RequireAssignmentUser>
           </Lazy>
         }
       />

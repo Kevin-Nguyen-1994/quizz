@@ -22,6 +22,131 @@ export const THEME_IDS: ThemeId[] = ['default', 'neon', 'paper', 'space', 'retro
 
 export type AuthRole = 'super_admin' | 'user';
 
+export type AssignmentStatus = 'draft' | 'published' | 'closed' | 'archived';
+export type AssignmentAttemptStatus = 'in_progress' | 'completed' | 'expired';
+
+export interface AdminAssignmentListItem {
+  id: number;
+  quiz_id: number | null;
+  quiz_title: string | null;
+  title: string;
+  access_code: string | null;
+  opens_at_ms: number;
+  deadline_at_ms: number | null;
+  status: AssignmentStatus;
+  max_attempts: number;
+  shuffle_questions: number;
+  shuffle_options: number;
+  question_count: number;
+  member_count: number;
+  attempt_count: number;
+  started_count: number;
+  completed_count: number;
+}
+
+export interface AdminAssignmentMember {
+  id: number;
+  assignment_id: number;
+  user_id: number | null;
+  display_name_snapshot: string;
+  email_snapshot: string;
+  assigned_at_ms: number;
+  attempt_count: number;
+  completed_count: number;
+  participant_status: AssignmentAttemptStatus | 'not_started';
+  attempt_id: number | null;
+  started_at_ms: number | null;
+  completed_at_ms: number | null;
+  correct_count: number | null;
+  total_score: number | null;
+}
+
+export interface AdminAssignmentDetail {
+  assignment: AdminAssignmentListItem & {
+    audience_mode: 'members' | 'open';
+    result_policy: 'highest_score' | 'latest_completed';
+    review_policy: 'after_deadline' | 'after_close';
+    created_at_ms: number;
+    updated_at_ms: number;
+    published_at_ms: number | null;
+  };
+  questions: Array<{ id: number; text: string; order_index: number; time_sec: number }>;
+  members: AdminAssignmentMember[];
+}
+
+export interface ParticipantAssignmentLookup {
+  id: number;
+  title: string;
+  status: AssignmentStatus;
+  opensAtMs: number;
+  deadlineAtMs: number | null;
+  maxAttempts: number;
+  attemptsUsed: number;
+  questionCount: number;
+  participantStatus: AssignmentAttemptStatus | 'not_started';
+  attemptId: number | null;
+  startedAtMs: number | null;
+  completedAtMs: number | null;
+  canResume: boolean;
+  canStart: boolean;
+  reviewAvailable: boolean;
+}
+
+export interface AssignmentQuestionPayload {
+  questionId: number;
+  questionIndex: number;
+  totalQuestions: number;
+  text: string;
+  options: string[];
+  timeSec: number;
+  questionType: QuestionType;
+  imageUrl?: string;
+  mediaUrl?: string;
+  mediaType?: 'audio' | 'video';
+  rangeMin?: number;
+  rangeMax?: number;
+  blankCount?: number;
+  rightOptions?: string[];
+  questionStartedAtMs: number;
+  serverNowMs: number;
+  remainingMs: number;
+}
+
+export interface ParticipantAttemptState {
+  assignment: {
+    id: number;
+    title: string;
+    status: AssignmentStatus;
+    opensAtMs: number;
+    deadlineAtMs: number | null;
+    maxAttempts: number;
+  };
+  attempt: {
+    id: number;
+    attemptNumber: number;
+    status: AssignmentAttemptStatus;
+    currentQuestionIndex: number;
+    startedAtMs: number;
+    completedAtMs: number | null;
+    elapsedTimeMs: number | null;
+    activeAnsweringTimeMs: number;
+    totalScore?: number;
+    correctCount?: number;
+  };
+  reviewAvailable: boolean;
+  question: AssignmentQuestionPayload | null;
+  accepted?: boolean;
+  duplicate?: boolean;
+  timedOut?: boolean;
+}
+
+export interface AssignmentAnswerSubmission {
+  questionId: number;
+  chosenIndex?: number | null;
+  chosenIndices?: Array<number | null>;
+  chosenText?: string | null;
+}
+
 export interface AuthUser {
   id: number;
   email: string | null;

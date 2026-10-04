@@ -1,6 +1,6 @@
 import { Zap } from 'lucide-react';
 import { type FormEvent, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { AppAlert } from '@/components/AppAlert';
 import { AppLogo, AuthCard, PageCenter, Subtitle } from '@/components/layout';
 import { Button } from '@/components/ui/button';
@@ -12,6 +12,7 @@ export default function UserLogin() {
   const { login } = useAuth();
   const { appName } = useApp();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -27,7 +28,9 @@ export default function UserLogin() {
       setError(result.error);
       return;
     }
-    navigate(result.role === 'super_admin' ? '/admin' : '/u');
+    const returnTo = searchParams.get('returnTo');
+    const safeReturnTo = returnTo?.startsWith('/assignment/') ? returnTo : null;
+    navigate(result.role === 'super_admin' ? '/admin' : (safeReturnTo ?? '/u'));
   }
 
   return (

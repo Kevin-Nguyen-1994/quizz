@@ -222,6 +222,82 @@ export interface DbAnswer {
   response_time_ms: number | null;
 }
 
+export type AssignmentStatus = 'draft' | 'published' | 'closed' | 'archived';
+export type AssignmentAudienceMode = 'members' | 'open';
+export type AssignmentResultPolicy = 'highest_score' | 'latest_completed';
+export type AssignmentReviewPolicy = 'after_deadline' | 'after_close';
+export type AssignmentAttemptStatus = 'in_progress' | 'completed' | 'expired';
+export type AttemptAnswerStatus = 'answered' | 'timed_out';
+
+export interface DbAssignment {
+  id: number;
+  quiz_id: number | null;
+  owner_kind: 'admin' | 'user';
+  owner_id: number | null;
+  title: string;
+  access_code: string | null;
+  audience_mode: AssignmentAudienceMode;
+  opens_at_ms: number;
+  deadline_at_ms: number | null;
+  status: AssignmentStatus;
+  max_attempts: number;
+  result_policy: AssignmentResultPolicy;
+  review_policy: AssignmentReviewPolicy;
+  shuffle_questions: number;
+  shuffle_options: number;
+  created_at_ms: number;
+  updated_at_ms: number;
+  published_at_ms: number | null;
+}
+
+/** Immutable question snapshot belonging to a published assignment. */
+export interface DbAssignmentQuestion extends Omit<DbQuestion, 'quiz_id'> {
+  assignment_id: number;
+  source_question_id: number | null;
+}
+
+export interface DbAssignmentMember {
+  id: number;
+  assignment_id: number;
+  user_id: number | null;
+  display_name_snapshot: string;
+  email_snapshot: string;
+  assigned_at_ms: number;
+}
+
+export interface DbAssignmentAttempt {
+  id: number;
+  assignment_id: number;
+  assignment_member_id: number | null;
+  user_id: number | null;
+  participant_name: string;
+  participant_email: string;
+  attempt_number: number;
+  status: AssignmentAttemptStatus;
+  current_question_index: number;
+  current_question_started_at_ms: number | null;
+  started_at_ms: number;
+  completed_at_ms: number | null;
+  last_activity_at_ms: number;
+  correct_count: number;
+  total_score: number;
+}
+
+export interface DbAttemptAnswer {
+  id: number;
+  attempt_id: number;
+  assignment_question_id: number;
+  status: AttemptAnswerStatus;
+  chosen_index: number | null;
+  chosen_indices: string | null;
+  chosen_text: string | null;
+  is_correct: number;
+  score: number;
+  question_started_at_ms: number;
+  response_time_ms: number | null;
+  answered_at_ms: number;
+}
+
 // Socket payloads
 export interface PlayerJoinPayload {
   pin: string;

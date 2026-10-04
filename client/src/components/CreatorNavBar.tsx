@@ -13,6 +13,7 @@ interface Props {
   basePath: string;
   loginPath: string;
   showUsers?: boolean;
+  showAssignments?: boolean;
   showMyGames?: boolean;
   playLabel?: string;
 }
@@ -21,6 +22,7 @@ export default function CreatorNavBar({
   basePath,
   loginPath,
   showUsers = false,
+  showAssignments = false,
   showMyGames = false,
   playLabel = 'Play ↗',
 }: Props) {
@@ -37,6 +39,7 @@ export default function CreatorNavBar({
     { to: basePath, label: 'Dashboard' },
     { to: `${basePath}/quiz/new`, label: '+ New Quiz' },
     { to: `${basePath}/history`, label: 'History' },
+    ...(showAssignments ? [{ to: `${basePath}/assignments`, label: 'Bài kiểm tra' }] : []),
     ...(showMyGames ? [{ to: `${basePath}/my-games`, label: 'My games' }] : []),
     ...(showUsers ? [{ to: `${basePath}/users`, label: 'Users' }] : []),
     { to: `${basePath}/settings`, label: 'Settings' },

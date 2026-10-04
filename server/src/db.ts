@@ -16,6 +16,7 @@ export async function initDb(): Promise<void> {
 
   await db.run('PRAGMA journal_mode = WAL');
   await db.run('PRAGMA foreign_keys = ON');
+  await db.run('PRAGMA busy_timeout = 5000');
 
   await db.exec(`
     CREATE TABLE IF NOT EXISTS quizzes (
@@ -99,6 +100,116 @@ export async function initDb(): Promise<void> {
       created_at    TEXT NOT NULL DEFAULT (datetime('now')),
       UNIQUE(quiz_id, locale, order_index)
     );
+
+    CREATE TABLE IF NOT EXISTS assignments (
+      id                INTEGER PRIMARY KEY AUTOINCREMENT,
+      quiz_id           INTEGER REFERENCES quizzes(id) ON DELETE SET NULL,
+      owner_kind        TEXT NOT NULL CHECK(owner_kind IN ('admin', 'user')),
+      owner_id          INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      title             TEXT NOT NULL,
+      access_code       TEXT UNIQUE,
+      audience_mode     TEXT NOT NULL DEFAULT 'members'
+                        CHECK(audience_mode IN ('members', 'open')),
+      opens_at_ms       INTEGER NOT NULL,
+      deadline_at_ms    INTEGER,
+      status            TEXT NOT NULL DEFAULT 'draft'
+                        CHECK(status IN ('draft', 'published', 'closed', 'archived')),
+      max_attempts      INTEGER NOT NULL DEFAULT 1 CHECK(max_attempts > 0),
+      result_policy     TEXT NOT NULL DEFAULT 'highest_score'
+                        CHECK(result_policy IN ('highest_score', 'latest_completed')),
+      review_policy     TEXT NOT NULL DEFAULT 'after_deadline'
+                        CHECK(review_policy IN ('after_deadline', 'after_close')),
+      shuffle_questions INTEGER NOT NULL DEFAULT 1 CHECK(shuffle_questions IN (0, 1)),
+      shuffle_options   INTEGER NOT NULL DEFAULT 1 CHECK(shuffle_options IN (0, 1)),
+      created_at_ms     INTEGER NOT NULL,
+      updated_at_ms     INTEGER NOT NULL,
+      published_at_ms   INTEGER
+    );
+
+    CREATE TABLE IF NOT EXISTS assignment_questions (
+      id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+      assignment_id      INTEGER NOT NULL REFERENCES assignments(id) ON DELETE CASCADE,
+      source_question_id INTEGER,
+      text               TEXT NOT NULL,
+      options            TEXT NOT NULL,
+      correct_index      INTEGER NOT NULL,
+      correct_indices    TEXT,
+      base_score         INTEGER NOT NULL DEFAULT 500,
+      time_sec           INTEGER NOT NULL DEFAULT 20,
+      order_index        INTEGER NOT NULL DEFAULT 0,
+      image_url          TEXT,
+      explanation        TEXT,
+      range_min          INTEGER,
+      range_max          INTEGER,
+      question_type      TEXT NOT NULL DEFAULT 'multiple_choice',
+      correct_answer     TEXT,
+      media_url          TEXT,
+      media_type         TEXT,
+      blanks             TEXT,
+      geo                TEXT,
+      matches            TEXT,
+      tags               TEXT,
+      UNIQUE(assignment_id, order_index)
+    );
+
+    CREATE TABLE IF NOT EXISTS assignment_members (
+      id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+      assignment_id         INTEGER NOT NULL REFERENCES assignments(id) ON DELETE CASCADE,
+      user_id               INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      display_name_snapshot TEXT NOT NULL,
+      email_snapshot        TEXT NOT NULL,
+      assigned_at_ms        INTEGER NOT NULL,
+      UNIQUE(assignment_id, user_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS assignment_attempts (
+      id                             INTEGER PRIMARY KEY AUTOINCREMENT,
+      assignment_id                  INTEGER NOT NULL REFERENCES assignments(id) ON DELETE CASCADE,
+      assignment_member_id           INTEGER REFERENCES assignment_members(id) ON DELETE SET NULL,
+      user_id                        INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      participant_name               TEXT NOT NULL,
+      participant_email              TEXT NOT NULL,
+      attempt_number                 INTEGER NOT NULL,
+      status                         TEXT NOT NULL DEFAULT 'in_progress'
+                                     CHECK(status IN ('in_progress', 'completed', 'expired')),
+      current_question_index         INTEGER NOT NULL DEFAULT 0,
+      current_question_started_at_ms INTEGER,
+      started_at_ms                  INTEGER NOT NULL,
+      completed_at_ms                INTEGER,
+      last_activity_at_ms            INTEGER NOT NULL,
+      correct_count                  INTEGER NOT NULL DEFAULT 0,
+      total_score                    INTEGER NOT NULL DEFAULT 0,
+      UNIQUE(assignment_id, user_id, attempt_number)
+    );
+
+    CREATE TABLE IF NOT EXISTS attempt_answers (
+      id                       INTEGER PRIMARY KEY AUTOINCREMENT,
+      attempt_id               INTEGER NOT NULL REFERENCES assignment_attempts(id) ON DELETE CASCADE,
+      assignment_question_id   INTEGER NOT NULL REFERENCES assignment_questions(id) ON DELETE CASCADE,
+      status                   TEXT NOT NULL CHECK(status IN ('answered', 'timed_out')),
+      chosen_index             INTEGER,
+      chosen_indices           TEXT,
+      chosen_text              TEXT,
+      is_correct               INTEGER NOT NULL DEFAULT 0 CHECK(is_correct IN (0, 1)),
+      score                    INTEGER NOT NULL DEFAULT 0,
+      question_started_at_ms   INTEGER NOT NULL,
+      response_time_ms         INTEGER,
+      answered_at_ms           INTEGER NOT NULL,
+      UNIQUE(attempt_id, assignment_question_id)
+    );
+
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_assignment_attempts_one_in_progress
+      ON assignment_attempts(assignment_id, user_id)
+      WHERE status = 'in_progress' AND user_id IS NOT NULL;
+
+    CREATE INDEX IF NOT EXISTS idx_assignment_members_assignment
+      ON assignment_members(assignment_id);
+
+    CREATE INDEX IF NOT EXISTS idx_assignment_attempts_assignment
+      ON assignment_attempts(assignment_id);
+
+    CREATE INDEX IF NOT EXISTS idx_attempt_answers_attempt
+      ON attempt_answers(attempt_id);
   `);
 
   // Column migrations (safe to run multiple times)
