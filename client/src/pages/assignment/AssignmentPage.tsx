@@ -2,6 +2,7 @@ import { ArrowLeft, Clock3, LogOut, PlayCircle, RotateCcw } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { AppAlert } from '@/components/AppAlert';
+import { AssignmentAttemptReview } from '@/components/AssignmentAttemptReview';
 import { AssignmentStatusBadge } from '@/components/AssignmentStatusBadge';
 import { AppLogo, Page } from '@/components/layout';
 import { Button } from '@/components/ui/button';
@@ -11,6 +12,7 @@ import { useAuth } from '@/context/AuthContext';
 import { useAuthFetch } from '@/hooks/useAuthFetch';
 import type {
   AssignmentAnswerSubmission,
+  AssignmentAttemptDetail,
   ParticipantAssignmentLookup,
   ParticipantAttemptState,
 } from '@/types';
@@ -49,6 +51,8 @@ export default function AssignmentPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const [review, setReview] = useState<AssignmentAttemptDetail | null>(null);
+  const [reviewLoading, setReviewLoading] = useState(false);
   const [timeLeft, setTimeLeft] = useState(0);
   const timeoutSentFor = useRef<number | null>(null);
 
@@ -71,6 +75,7 @@ export default function AssignmentPage() {
 
   const applyAttemptState = useCallback((next: ParticipantAttemptState) => {
     setAttempt(next);
+    setReview(null);
     setSubmitting(false);
     setError('');
     if (next.question) {
@@ -183,6 +188,23 @@ export default function AssignmentPage() {
     }
   }
 
+  async function loadReview() {
+    if (!attempt || reviewLoading) return;
+    setReviewLoading(true);
+    setError('');
+    try {
+      const result = await api.get<AssignmentAttemptDetail & { error?: string }>(
+        `/api/assignments/attempts/${attempt.attempt.id}/review`,
+      );
+      if (result.ok && result.data?.attempt) setReview(result.data);
+      else setError(friendlyError(result.data?.error));
+    } catch {
+      setError('Không thể kết nối máy chủ để tải phần xem lại.');
+    } finally {
+      setReviewLoading(false);
+    }
+  }
+
   const header = (
     <header className="border-b border-border bg-card">
       <div className="mx-auto flex min-h-14 max-w-5xl items-center gap-3 px-4">
@@ -250,8 +272,8 @@ export default function AssignmentPage() {
     return (
       <Page>
         {header}
-        <main className="m-auto w-full max-w-lg px-4 py-8">
-          <Card>
+        <main className="m-auto w-full max-w-3xl px-4 py-8">
+          <Card className="mx-auto max-w-lg">
             <CardContent className="p-6 text-center sm:p-8">
               <AssignmentStatusBadge status={attempt.attempt.status} />
               <h1 className="mt-4">
@@ -291,6 +313,17 @@ export default function AssignmentPage() {
                   Kết quả sẽ được công bố sau khi bài kiểm tra đóng hoặc hết hạn.
                 </AppAlert>
               )}
+              {attempt.reviewAvailable && !review && (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="mt-4 w-full"
+                  disabled={reviewLoading}
+                  onClick={loadReview}
+                >
+                  {reviewLoading ? 'Đang tải…' : 'Xem chi tiết đáp án'}
+                </Button>
+              )}
               <Button variant="ghost" className="mt-5" asChild>
                 <Link to="/u">
                   <ArrowLeft className="size-4" /> Về trang cá nhân
@@ -298,6 +331,17 @@ export default function AssignmentPage() {
               </Button>
             </CardContent>
           </Card>
+          {error && (
+            <AppAlert variant="error" className="mt-4">
+              {error}
+            </AppAlert>
+          )}
+          {review && (
+            <div className="mt-6 text-left">
+              <h2 className="mb-3 text-xl">Chi tiết đáp án</h2>
+              <AssignmentAttemptReview detail={review} />
+            </div>
+          )}
         </main>
       </Page>
     );

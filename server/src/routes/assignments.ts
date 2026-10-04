@@ -8,6 +8,7 @@ import {
   submitAssignmentAnswer,
   timeoutAssignmentQuestion,
 } from '../assignmentService';
+import { getParticipantAttemptReview } from '../assignmentReporting';
 import { getRequestUser, requireAuth } from '../middleware';
 
 export const assignmentsRouter = Router();
@@ -49,6 +50,17 @@ assignmentsRouter.get(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       res.json(await getParticipantAttemptState(attemptId(req), participantId(req)));
+    } catch (error) {
+      handleError(error, res, next);
+    }
+  },
+);
+
+assignmentsRouter.get(
+  '/attempts/:attemptId/review',
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      res.json(await getParticipantAttemptReview(attemptId(req), participantId(req)));
     } catch (error) {
       handleError(error, res, next);
     }

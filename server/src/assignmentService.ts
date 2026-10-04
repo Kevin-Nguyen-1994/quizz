@@ -822,12 +822,14 @@ async function reconcileAttempt(
   assignment: DbAssignment,
   attempt: DbAssignmentAttempt,
   nowMs: number,
+  knownPresentedQuestions?: DbAssignmentQuestion[],
 ): Promise<DbAssignmentAttempt> {
   if (attempt.status !== 'in_progress') return attempt;
   if (assignment.status === 'closed') {
     return finalizeAttempt(database, attempt, 'expired', nowMs);
   }
-  const questions = await getPresentedQuestions(database, assignment, attempt);
+  const questions =
+    knownPresentedQuestions ?? (await getPresentedQuestions(database, assignment, attempt));
   const question = questions[attempt.current_question_index];
   if (assignment.deadline_at_ms !== null && nowMs >= assignment.deadline_at_ms) {
     // Preserve a genuine per-question timeout that happened before the overall
@@ -1070,6 +1072,47 @@ export async function getParticipantAttemptState(
     const { assignment, attempt } = await requireParticipantAttempt(database, attemptId, userId);
     const reconciled = await reconcileAttempt(database, assignment, attempt, nowMs);
     return buildAttemptState(database, assignment, reconciled, nowMs);
+  });
+}
+
+/**
+ * Finalize stale in-progress attempts once the assignment deadline has passed.
+ * Reporting calls this once before its batch reads so an admin does not see
+ * attempts stuck as in-progress merely because the participant never reopened
+ * the browser. It intentionally does nothing before the deadline, because a
+ * report view must never start the next unseen question's timer.
+ */
+export async function reconcileAssignmentDeadlineForReport(
+  actor: AssignmentActor,
+  assignmentId: number,
+  nowMs = Date.now(),
+): Promise<void> {
+  await withAssignmentTransaction(async (database) => {
+    const assignment = await requireOwnedAssignment(database, actor, assignmentId);
+    if (assignment.deadline_at_ms === null || nowMs < assignment.deadline_at_ms) return;
+    const activeAttempts = await database.all<DbAssignmentAttempt[]>(
+      "SELECT * FROM assignment_attempts WHERE assignment_id = ? AND status = 'in_progress'",
+      [assignmentId],
+    );
+    const questions = await database.all<DbAssignmentQuestion[]>(
+      'SELECT * FROM assignment_questions WHERE assignment_id = ? ORDER BY order_index',
+      [assignmentId],
+    );
+    for (const attempt of activeAttempts) {
+      const order = getAssignmentQuestionOrder(
+        questions.length,
+        assignment.id,
+        attempt.id,
+        assignment.shuffle_questions === 1,
+      );
+      await reconcileAttempt(
+        database,
+        assignment,
+        attempt,
+        nowMs,
+        order.map((index) => questions[index]),
+      );
+    }
   });
 }
 

@@ -9,6 +9,12 @@ import {
   setAssignmentMembers,
   updateDraftAssignment,
 } from '../assignmentService';
+import {
+  buildAssignmentCsv,
+  getAdminAttemptDetail,
+  getAdminQuestionDetail,
+  getAssignmentReport,
+} from '../assignmentReporting';
 import { getRequestUser, requireAuth } from '../middleware';
 
 export const assignmentAdminRouter = Router();
@@ -25,6 +31,14 @@ function assignmentId(req: Request): number {
   const id = Number(req.params.id);
   if (!Number.isInteger(id) || id < 1) throw new AssignmentServiceError('Invalid assignment id');
   return id;
+}
+
+function positiveParam(req: Request, name: string): number {
+  const value = Number(req.params[name]);
+  if (!Number.isInteger(value) || value < 1) {
+    throw new AssignmentServiceError(`Invalid ${name}`);
+  }
+  return value;
 }
 
 function handleError(error: unknown, res: Response, next: NextFunction): void {
@@ -59,6 +73,61 @@ assignmentAdminRouter.get('/:id', async (req: Request, res: Response, next: Next
     handleError(error, res, next);
   }
 });
+
+assignmentAdminRouter.get(
+  '/:id/report',
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      res.json(await getAssignmentReport(actor(req), assignmentId(req)));
+    } catch (error) {
+      handleError(error, res, next);
+    }
+  },
+);
+
+assignmentAdminRouter.get(
+  '/:id/attempts/:attemptId',
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      res.json(
+        await getAdminAttemptDetail(actor(req), assignmentId(req), positiveParam(req, 'attemptId')),
+      );
+    } catch (error) {
+      handleError(error, res, next);
+    }
+  },
+);
+
+assignmentAdminRouter.get(
+  '/:id/questions/:questionId',
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      res.json(
+        await getAdminQuestionDetail(
+          actor(req),
+          assignmentId(req),
+          positiveParam(req, 'questionId'),
+        ),
+      );
+    } catch (error) {
+      handleError(error, res, next);
+    }
+  },
+);
+
+assignmentAdminRouter.get(
+  '/:id/export.csv',
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const csv = await buildAssignmentCsv(actor(req), assignmentId(req));
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename="${csv.filename}"`);
+      res.send(csv.body);
+    } catch (error) {
+      handleError(error, res, next);
+    }
+  },
+);
 
 assignmentAdminRouter.put('/:id', async (req: Request, res: Response, next: NextFunction) => {
   try {

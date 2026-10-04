@@ -147,6 +147,133 @@ export interface AssignmentAnswerSubmission {
   chosenText?: string | null;
 }
 
+export type AssignmentReportResult = 'correct' | 'incorrect' | 'no_answer';
+
+export interface AssignmentAttemptReportRow {
+  id: number;
+  attemptNumber: number;
+  status: AssignmentAttemptStatus;
+  isSelected: boolean;
+  startedAtMs: number;
+  completedAtMs: number | null;
+  correct: number;
+  wrong: number;
+  noAnswer: number;
+  score: number;
+  maxScore: number;
+  scorePercent: number;
+  elapsedTimeMs: number | null;
+  activeAnsweringTimeMs: number;
+  averageResponseTimeMs: number | null;
+}
+
+export interface AssignmentParticipantReportRow {
+  memberId: number;
+  userId: number | null;
+  name: string;
+  email: string;
+  status: AssignmentAttemptStatus | 'not_started';
+  selectedAttemptId: number | null;
+  attempts: AssignmentAttemptReportRow[];
+}
+
+export interface AssignmentQuestionReportRow {
+  questionId: number;
+  questionNumber: number;
+  text: string;
+  questionType: QuestionType;
+  sampleSize: number;
+  answered: number;
+  correct: number;
+  incorrect: number;
+  noAnswer: number;
+  correctRate: number;
+  correctRateAmongAnswered: number | null;
+  averageScore: number;
+  maxScore: number;
+  averageResponseTimeMs: number | null;
+  timeLimitSec: number;
+}
+
+export interface AssignmentReport {
+  assignment: {
+    id: number;
+    title: string;
+    quizTitle: string | null;
+    status: AssignmentStatus;
+    accessCode: string | null;
+    opensAtMs: number;
+    deadlineAtMs: number | null;
+    maxAttempts: number;
+    resultPolicy: 'highest_score' | 'latest_completed';
+    reviewPolicy: 'after_deadline' | 'after_close';
+    questionCount: number;
+    maxScore: number;
+  };
+  overview: {
+    assigned: number;
+    notStarted: number;
+    inProgress: number;
+    completed: number;
+    expired: number;
+    completionRate: number;
+    averageScore: number;
+    averageScorePercent: number;
+    averageElapsedTimeMs: number | null;
+    averageActiveAnsweringTimeMs: number | null;
+  };
+  participants: AssignmentParticipantReportRow[];
+  questions: AssignmentQuestionReportRow[];
+}
+
+export interface AssignmentAttemptQuestionDetail {
+  questionId: number;
+  questionNumber: number;
+  text: string;
+  questionType: QuestionType;
+  submittedAnswer: string;
+  correctAnswer: string;
+  result: AssignmentReportResult;
+  score: number;
+  maxScore: number;
+  responseTimeMs: number | null;
+  timeLimitSec: number;
+  explanation: string | null;
+  answerStatus: 'answered' | 'timed_out' | 'not_answered';
+}
+
+export interface AssignmentAttemptDetail {
+  assignment: { id: number; title: string; reviewAvailable: boolean };
+  participant: { name: string; email: string };
+  attempt: AssignmentAttemptReportRow;
+  questions: AssignmentAttemptQuestionDetail[];
+}
+
+export interface AssignmentQuestionDetail {
+  question: {
+    id: number;
+    questionNumber: number;
+    text: string;
+    questionType: QuestionType;
+    correctAnswer: string;
+    maxScore: number;
+    timeLimitSec: number;
+    explanation: string | null;
+  };
+  participants: Array<{
+    memberId: number;
+    name: string;
+    email: string;
+    attemptId: number | null;
+    attemptNumber: number | null;
+    attemptStatus: AssignmentAttemptStatus | 'not_started';
+    submittedAnswer: string;
+    result: AssignmentReportResult;
+    responseTimeMs: number | null;
+    score: number;
+  }>;
+}
+
 export interface AuthUser {
   id: number;
   email: string | null;
