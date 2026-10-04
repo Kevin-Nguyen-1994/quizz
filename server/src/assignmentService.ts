@@ -77,6 +77,29 @@ export interface ParticipantAttemptState {
   question: ParticipantQuestionDto | null;
 }
 
+export interface ParticipantAssignmentListItem {
+  assignmentId: number;
+  accessCode: string;
+  title: string;
+  status: DbAssignment['status'];
+  opensAtMs: number;
+  deadlineAtMs: number | null;
+  questionCount: number;
+  maxAttempts: number;
+  attemptsUsed: number;
+  participantStatus: DbAssignmentAttempt['status'] | 'not_started';
+  attemptId: number | null;
+  attemptNumber: number | null;
+  startedAtMs: number | null;
+  completedAtMs: number | null;
+  canStart: boolean;
+  canResume: boolean;
+  canReview: boolean;
+  score?: number;
+  maxScore?: number;
+  scorePercent?: number;
+}
+
 type AssignmentActor = Pick<JwtPayload, 'id' | 'role'>;
 
 const AUDIENCE_MODES = new Set<AssignmentAudienceMode>(['members', 'open']);
@@ -729,6 +752,94 @@ function isReviewAvailable(assignment: DbAssignment, nowMs: number): boolean {
   );
 }
 
+async function buildParticipantAssignmentListItem(
+  database: Database,
+  assignment: DbAssignment,
+  userId: number,
+  nowMs: number,
+): Promise<ParticipantAssignmentListItem> {
+  let active = await database.get<DbAssignmentAttempt>(
+    `SELECT * FROM assignment_attempts
+     WHERE assignment_id = ? AND user_id = ? AND status = 'in_progress'`,
+    [assignment.id, userId],
+  );
+  if (active) active = await reconcileAttempt(database, assignment, active, nowMs);
+
+  const questionTotals = await database.get<{ count: number; max_score: number }>(
+    `SELECT COUNT(*) as count, COALESCE(SUM(base_score), 0) as max_score
+     FROM assignment_questions WHERE assignment_id = ?`,
+    [assignment.id],
+  );
+  const attempts = await database.all<DbAssignmentAttempt[]>(
+    `SELECT * FROM assignment_attempts WHERE assignment_id = ? AND user_id = ?
+     ORDER BY attempt_number DESC`,
+    [assignment.id, userId],
+  );
+  const latest = active ?? attempts[0] ?? null;
+  const attemptsUsed = attempts.length;
+  const deadlinePassed = assignment.deadline_at_ms !== null && nowMs >= assignment.deadline_at_ms;
+  const participantStatus =
+    latest?.status ??
+    (deadlinePassed || assignment.status === 'closed' ? 'expired' : 'not_started');
+  const withinWindow =
+    assignment.status === 'published' && nowMs >= assignment.opens_at_ms && !deadlinePassed;
+  const reviewAvailable = isReviewAvailable(assignment, nowMs);
+  const canReview = latest !== null && latest.status !== 'in_progress' && reviewAvailable;
+  const maxScore = questionTotals?.max_score ?? 0;
+
+  return {
+    assignmentId: assignment.id,
+    accessCode: assignment.access_code ?? '',
+    title: assignment.title,
+    status: assignment.status,
+    opensAtMs: assignment.opens_at_ms,
+    deadlineAtMs: assignment.deadline_at_ms,
+    questionCount: questionTotals?.count ?? 0,
+    maxAttempts: assignment.max_attempts,
+    attemptsUsed,
+    participantStatus,
+    attemptId: latest?.id ?? null,
+    attemptNumber: latest?.attempt_number ?? null,
+    startedAtMs: latest?.started_at_ms ?? null,
+    completedAtMs: latest?.completed_at_ms ?? null,
+    canResume: latest?.status === 'in_progress',
+    canStart:
+      withinWindow && latest?.status !== 'in_progress' && attemptsUsed < assignment.max_attempts,
+    canReview,
+    ...(canReview
+      ? {
+          score: latest.total_score,
+          maxScore,
+          scorePercent:
+            maxScore > 0 ? Math.round((latest.total_score / maxScore) * 10_000) / 100 : 0,
+        }
+      : {}),
+  };
+}
+
+export async function listParticipantAssignments(
+  userId: number,
+  nowMs = Date.now(),
+): Promise<ParticipantAssignmentListItem[]> {
+  return withAssignmentTransaction(async (database) => {
+    const assignments = await database.all<DbAssignment[]>(
+      `SELECT a.* FROM assignments a
+       JOIN assignment_members m ON m.assignment_id = a.id
+       WHERE m.user_id = ? AND a.status NOT IN ('draft', 'archived')
+       ORDER BY
+         CASE WHEN a.deadline_at_ms IS NULL THEN 1 ELSE 0 END,
+         a.deadline_at_ms ASC,
+         a.created_at_ms DESC`,
+      [userId],
+    );
+    const items: ParticipantAssignmentListItem[] = [];
+    for (const assignment of assignments) {
+      items.push(await buildParticipantAssignmentListItem(database, assignment, userId, nowMs));
+    }
+    return items;
+  });
+}
+
 export async function lookupParticipantAssignment(
   accessCode: string,
   userId: number,
@@ -736,44 +847,22 @@ export async function lookupParticipantAssignment(
 ): Promise<unknown> {
   return withAssignmentTransaction(async (database) => {
     const { assignment } = await requireParticipantAssignmentByCode(database, accessCode, userId);
-    let active = await database.get<DbAssignmentAttempt>(
-      `SELECT * FROM assignment_attempts
-       WHERE assignment_id = ? AND user_id = ? AND status = 'in_progress'`,
-      [assignment.id, userId],
-    );
-    if (active) active = await reconcileAttempt(database, assignment, active, nowMs);
-
-    const questionCount = await database.get<{ count: number }>(
-      'SELECT COUNT(*) as count FROM assignment_questions WHERE assignment_id = ?',
-      [assignment.id],
-    );
-    const attempts = await database.all<DbAssignmentAttempt[]>(
-      `SELECT * FROM assignment_attempts WHERE assignment_id = ? AND user_id = ?
-       ORDER BY attempt_number DESC`,
-      [assignment.id, userId],
-    );
-    const latest = active ?? attempts[0] ?? null;
-    const attemptsUsed = attempts.length;
-    const withinWindow =
-      assignment.status === 'published' &&
-      nowMs >= assignment.opens_at_ms &&
-      (assignment.deadline_at_ms === null || nowMs < assignment.deadline_at_ms);
+    const item = await buildParticipantAssignmentListItem(database, assignment, userId, nowMs);
     return {
-      id: assignment.id,
-      title: assignment.title,
-      status: assignment.status,
-      opensAtMs: assignment.opens_at_ms,
-      deadlineAtMs: assignment.deadline_at_ms,
-      maxAttempts: assignment.max_attempts,
-      attemptsUsed,
-      questionCount: questionCount?.count ?? 0,
-      participantStatus: latest?.status ?? 'not_started',
-      attemptId: latest?.id ?? null,
-      startedAtMs: latest?.started_at_ms ?? null,
-      completedAtMs: latest?.completed_at_ms ?? null,
-      canResume: latest?.status === 'in_progress',
-      canStart:
-        withinWindow && latest?.status !== 'in_progress' && attemptsUsed < assignment.max_attempts,
+      id: item.assignmentId,
+      title: item.title,
+      status: item.status,
+      opensAtMs: item.opensAtMs,
+      deadlineAtMs: item.deadlineAtMs,
+      maxAttempts: item.maxAttempts,
+      attemptsUsed: item.attemptsUsed,
+      questionCount: item.questionCount,
+      participantStatus: item.participantStatus,
+      attemptId: item.attemptId,
+      startedAtMs: item.startedAtMs,
+      completedAtMs: item.completedAtMs,
+      canResume: item.canResume,
+      canStart: item.canStart,
       reviewAvailable: isReviewAvailable(assignment, nowMs),
     };
   });

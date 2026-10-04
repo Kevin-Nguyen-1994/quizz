@@ -93,6 +93,29 @@ export interface ParticipantAssignmentLookup {
   reviewAvailable: boolean;
 }
 
+export interface MyAssignmentListItem {
+  assignmentId: number;
+  accessCode: string;
+  title: string;
+  status: AssignmentStatus;
+  opensAtMs: number;
+  deadlineAtMs: number | null;
+  questionCount: number;
+  maxAttempts: number;
+  attemptsUsed: number;
+  participantStatus: AssignmentAttemptStatus | 'not_started';
+  attemptId: number | null;
+  attemptNumber: number | null;
+  startedAtMs: number | null;
+  completedAtMs: number | null;
+  canStart: boolean;
+  canResume: boolean;
+  canReview: boolean;
+  score?: number;
+  maxScore?: number;
+  scorePercent?: number;
+}
+
 export interface AssignmentQuestionPayload {
   questionId: number;
   questionIndex: number;

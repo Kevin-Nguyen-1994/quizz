@@ -3,6 +3,7 @@ import {
   AssignmentServiceError,
   completeAssignmentAttempt,
   getParticipantAttemptState,
+  listParticipantAssignments,
   lookupParticipantAssignment,
   startOrResumeAttempt,
   submitAssignmentAnswer,
@@ -44,6 +45,15 @@ function handleError(error: unknown, res: Response, next: NextFunction): void {
   }
   next(error);
 }
+
+// Keep this static route before /:accessCode so "mine" is never parsed as an access code.
+assignmentsRouter.get('/mine', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.json({ assignments: await listParticipantAssignments(participantId(req)) });
+  } catch (error) {
+    handleError(error, res, next);
+  }
+});
 
 assignmentsRouter.get(
   '/attempts/:attemptId/current',

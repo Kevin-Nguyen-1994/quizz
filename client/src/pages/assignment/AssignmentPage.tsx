@@ -398,6 +398,18 @@ export default function AssignmentPage() {
                   >
                     <PlayCircle className="size-5" /> {submitting ? 'Đang mở…' : 'Tiếp tục làm bài'}
                   </Button>
+                ) : (lookup.participantStatus === 'completed' ||
+                    lookup.participantStatus === 'expired') &&
+                  lookup.reviewAvailable &&
+                  lookup.attemptId ? (
+                  <Button
+                    className="w-full"
+                    size="lg"
+                    disabled={submitting}
+                    onClick={openExistingAttempt}
+                  >
+                    <Clock3 className="size-5" /> Xem kết quả
+                  </Button>
                 ) : lookup.canStart ? (
                   <Button
                     className="w-full"

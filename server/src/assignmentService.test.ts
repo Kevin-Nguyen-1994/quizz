@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
+import express from 'express';
 import { after, before, describe, it } from 'node:test';
 
 let temporaryDataDir = '';
@@ -279,5 +281,146 @@ describe('assignment attempt state machine', () => {
     );
     assert.equal(counts?.assignments, 2);
     assert.equal(counts?.attempts, 2);
+  });
+
+  it('lists only the authenticated employee assignments with reconciled participant states', async () => {
+    const now = Date.now();
+    const actor = { id: 0, role: 'super_admin' } as const;
+    async function createPublished(
+      title: string,
+      memberUserId: number,
+      options: { deadlineAtMs?: number; maxAttempts?: number } = {},
+    ) {
+      const draft = await service.createDraftAssignment(actor, {
+        quizId: sourceQuizId,
+        title,
+        opensAtMs: now - 10_000,
+        deadlineAtMs: options.deadlineAtMs ?? now + 60_000,
+        maxAttempts: options.maxAttempts ?? 1,
+        shuffleQuestions: false,
+      });
+      await service.setAssignmentMembers(actor, draft.id, [memberUserId]);
+      return service.publishAssignment(actor, draft.id);
+    }
+
+    const notStarted = await createPublished('Mine not started', userId, { maxAttempts: 2 });
+    const inProgress = await createPublished('Mine in progress', userId);
+    await databaseModule.db.run(
+      'UPDATE assignment_questions SET time_sec = 3600 WHERE assignment_id = ?',
+      [inProgress.id],
+    );
+    const inProgressAttempt = await service.startOrResumeAttempt(
+      inProgress.access_code as string,
+      userId,
+      now,
+    );
+
+    const completed = await createPublished('Mine completed', userId);
+    const completedAttempt = await service.startOrResumeAttempt(
+      completed.access_code as string,
+      userId,
+      now,
+    );
+    await service.completeAssignmentAttempt(completedAttempt.attempt.id, userId, now + 100);
+    await service.closeAssignment(actor, completed.id);
+
+    const expired = await createPublished('Mine expired', userId);
+    await service.startOrResumeAttempt(expired.access_code as string, userId, now - 5_000);
+    await databaseModule.db.run('UPDATE assignments SET deadline_at_ms = ? WHERE id = ?', [
+      now - 1_000,
+      expired.id,
+    ]);
+    const otherUser = await createPublished('Only outsider', outsiderUserId);
+
+    const mine = await service.listParticipantAssignments(userId, now);
+    const byTitle = new Map(mine.map((item) => [item.title, item]));
+    assert.equal(byTitle.has(otherUser.title), false);
+    assert.equal(byTitle.get(notStarted.title)?.participantStatus, 'not_started');
+    assert.equal(byTitle.get(notStarted.title)?.canStart, true);
+    assert.equal(byTitle.get(notStarted.title)?.maxAttempts, 2);
+    assert.equal(byTitle.get(inProgress.title)?.participantStatus, 'in_progress');
+    assert.equal(byTitle.get(inProgress.title)?.canResume, true);
+    assert.equal(byTitle.get(inProgress.title)?.attemptId, inProgressAttempt.attempt.id);
+    assert.equal(byTitle.get(completed.title)?.participantStatus, 'completed');
+    assert.equal(byTitle.get(completed.title)?.canReview, true);
+    assert.equal(byTitle.get(completed.title)?.score, 0);
+    assert.equal(byTitle.get(completed.title)?.maxScore, 1_000);
+    assert.equal(byTitle.get(expired.title)?.participantStatus, 'expired');
+    assert.equal(byTitle.get(expired.title)?.canResume, false);
+    assert.equal(byTitle.get(expired.title)?.canReview, true);
+
+    const outsiderAssignments = await service.listParticipantAssignments(outsiderUserId, now);
+    assert.deepEqual(
+      outsiderAssignments.map((item) => item.title),
+      ['Only outsider'],
+    );
+
+    const [{ assignmentsRouter }, { signToken }] = await Promise.all([
+      import('./routes/assignments'),
+      import('./middleware'),
+    ]);
+    const app = express();
+    app.use(express.json());
+    app.use('/api/assignments', assignmentsRouter);
+    const server = http.createServer(app);
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    try {
+      const address = server.address();
+      if (!address || typeof address === 'string') throw new Error('Test server did not start');
+      const baseUrl = `http://127.0.0.1:${address.port}`;
+      const userToken = signToken({ id: userId, role: 'user', username: 'employee' });
+      const response = await fetch(`${baseUrl}/api/assignments/mine`, {
+        headers: { Authorization: `Bearer ${userToken}` },
+      });
+      assert.equal(response.status, 200);
+      const body = (await response.json()) as { assignments?: Array<Record<string, unknown>> };
+      assert.equal(Array.isArray(body.assignments), true);
+      const endpointItem = body.assignments?.find((item) => item.title === 'Mine in progress');
+      assert.equal(endpointItem?.accessCode, inProgress.access_code);
+      assert.equal(endpointItem?.attemptId, inProgressAttempt.attempt.id);
+      const serialized = JSON.stringify(body);
+      for (const secret of [
+        '"correct_index"',
+        '"correct_indices"',
+        '"correct_answer"',
+        '"correctAnswer"',
+        '"explanation"',
+        '"assignment_questions"',
+        '"members"',
+      ]) {
+        assert.equal(serialized.includes(secret), false, `/mine leaked ${secret}`);
+      }
+
+      const outsiderToken = signToken({
+        id: outsiderUserId,
+        role: 'user',
+        username: 'outsider',
+      });
+      const outsiderResponse = await fetch(`${baseUrl}/api/assignments/mine`, {
+        headers: { Authorization: `Bearer ${outsiderToken}` },
+      });
+      assert.equal(outsiderResponse.status, 200);
+      const outsiderBody = (await outsiderResponse.json()) as {
+        assignments?: Array<{ title: string }>;
+      };
+      assert.deepEqual(
+        outsiderBody.assignments?.map((assignment) => assignment.title),
+        ['Only outsider'],
+      );
+
+      const adminToken = signToken({ id: 0, role: 'super_admin', username: 'admin' });
+      const adminResponse = await fetch(`${baseUrl}/api/assignments/mine`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      assert.equal(adminResponse.status, 403);
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+
+    const adminList = (await service.listAssignmentsForAdmin(actor)) as Array<{ id: number }>;
+    assert.equal(
+      adminList.some((assignment) => assignment.id === notStarted.id),
+      true,
+    );
   });
 });

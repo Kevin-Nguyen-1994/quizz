@@ -19,6 +19,7 @@ const AssignmentPage = lazy(() => import('./pages/assignment/AssignmentPage'));
 const UserLogin = lazy(() => import('./pages/auth/UserLogin'));
 const UserRegister = lazy(() => import('./pages/auth/UserRegister'));
 const UserSettings = lazy(() => import('./pages/user/UserSettings'));
+const MyAssignments = lazy(() => import('./pages/user/MyAssignments'));
 const PlayHistory = lazy(() => import('./pages/user/PlayHistory'));
 const PlaySessionDetail = lazy(() => import('./pages/user/PlaySessionDetail'));
 const Game = lazy(() => import('./pages/play/Game'));
@@ -174,6 +175,16 @@ export default function App() {
         element={
           <Lazy>
             <UserRegister />
+          </Lazy>
+        }
+      />
+      <Route
+        path="/u/assignments"
+        element={
+          <Lazy>
+            <RequireUser>
+              <MyAssignments />
+            </RequireUser>
           </Lazy>
         }
       />

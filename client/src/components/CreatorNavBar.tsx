@@ -15,6 +15,8 @@ interface Props {
   showUsers?: boolean;
   showAssignments?: boolean;
   showMyGames?: boolean;
+  userNavigation?: boolean;
+  assignmentCount?: number;
   playLabel?: string;
 }
 
@@ -24,6 +26,8 @@ export default function CreatorNavBar({
   showUsers = false,
   showAssignments = false,
   showMyGames = false,
+  userNavigation = false,
+  assignmentCount = 0,
   playLabel = 'Play ↗',
 }: Props) {
   const { logout } = useAuth();
@@ -35,15 +39,25 @@ export default function CreatorNavBar({
   const active = (path: string) =>
     cn(navBtn, location.pathname === path && 'bg-muted text-foreground');
 
-  const links = [
-    { to: basePath, label: 'Dashboard' },
-    { to: `${basePath}/quiz/new`, label: '+ New Quiz' },
-    { to: `${basePath}/history`, label: 'History' },
-    ...(showAssignments ? [{ to: `${basePath}/assignments`, label: 'Bài kiểm tra' }] : []),
-    ...(showMyGames ? [{ to: `${basePath}/my-games`, label: 'My games' }] : []),
-    ...(showUsers ? [{ to: `${basePath}/users`, label: 'Quản lý nhân viên' }] : []),
-    { to: `${basePath}/settings`, label: 'Settings' },
-  ];
+  const links = userNavigation
+    ? [
+        { to: basePath, label: 'Trang chủ' },
+        {
+          to: `${basePath}/assignments`,
+          label: `Bài kiểm tra của tôi${assignmentCount > 0 ? ` (${assignmentCount})` : ''}`,
+        },
+        { to: `${basePath}/my-games`, label: 'Lịch sử trò chơi' },
+        { to: `${basePath}/settings`, label: 'Cài đặt' },
+      ]
+    : [
+        { to: basePath, label: 'Dashboard' },
+        { to: `${basePath}/quiz/new`, label: '+ New Quiz' },
+        { to: `${basePath}/history`, label: 'History' },
+        ...(showAssignments ? [{ to: `${basePath}/assignments`, label: 'Bài kiểm tra' }] : []),
+        ...(showMyGames ? [{ to: `${basePath}/my-games`, label: 'My games' }] : []),
+        ...(showUsers ? [{ to: `${basePath}/users`, label: 'Quản lý nhân viên' }] : []),
+        { to: `${basePath}/settings`, label: 'Settings' },
+      ];
 
   async function handleLogout() {
     setMenuOpen(false);

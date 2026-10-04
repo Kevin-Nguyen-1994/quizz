@@ -2,6 +2,7 @@ import { ArrowRight, Eye, FileText, Pencil, Play, Plus, Trash2, X } from 'lucide
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { MainContent, Page, PageLoading, Subtitle } from '@/components/layout';
+import { PendingAssignmentsBlock } from '@/components/PendingAssignmentsBlock';
 import { QuizPreviewModal } from '@/components/QuizPreviewModal';
 import { StatusBadge } from '@/components/StatusBadge';
 import { Button } from '@/components/ui/button';
@@ -226,6 +227,7 @@ export default function Dashboard() {
     <Page>
       <CreatorNav />
       <MainContent>
+        {basePath === '/u' && <PendingAssignmentsBlock />}
         {activeSessions.length > 0 && (
           <Card className="mb-6 border-blue-500/30 bg-blue-500/[0.05]">
             <CardContent className="flex flex-col gap-3 p-5">
