@@ -254,9 +254,9 @@ function normalizeTheme(theme: unknown): ThemeId {
   return THEME_IDS.includes(theme as ThemeId) ? (theme as ThemeId) : 'default';
 }
 
-/** The quiz's authoring language (open-ended locale code). Defaults to French. */
+/** The quiz's authoring language (open-ended locale code). Defaults to Vietnamese. */
 function normalizeLanguage(language: unknown): string {
-  return typeof language === 'string' && language.trim() ? language.trim() : 'fr';
+  return typeof language === 'string' && language.trim() ? language.trim() : 'vi';
 }
 
 adminRouter.post('/quizzes', requireAuth, async (req: Request, res: Response) => {

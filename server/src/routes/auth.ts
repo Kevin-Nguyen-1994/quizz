@@ -168,7 +168,7 @@ authRouter.patch('/play-profile', requireAuth, async (req: Request, res: Respons
   }
 
   const { displayName, avatar } = req.body as { displayName?: string; avatar?: string };
-  const cleanName = (displayName ?? '').trim().slice(0, 24);
+  const cleanName = (displayName ?? '').trim().slice(0, 50);
   if (!cleanName) {
     return res.status(400).json({ error: 'Display name is required' });
   }

@@ -69,7 +69,7 @@ function SpeedBonusPreview({ max, min }: { max: number; min: number }) {
 
 function BrandingPreview({ appName, appSubtitle }: { appName: string; appSubtitle: string }) {
   const name = appName.trim();
-  const logo = name ? `${name} by ⚡ Quizz` : '⚡ Quizz';
+  const logo = name || 'TiL Quiz';
 
   return (
     <div className="rounded-lg border border-border bg-muted/30 p-4 mt-4">
@@ -336,11 +336,11 @@ export default function Settings() {
                 placeholder="e.g. Scaleway (leave blank for default)"
                 value={cfg.appName ?? ''}
                 onChange={(e) => update('appName', e.target.value)}
-                hint='Shown as "Your Name by ⚡ Quizz" — leave blank to show just ⚡ Quizz'
+                hint='Shown as your primary application name — leave blank to show TiL Quiz'
               />
               <Input
                 label="Join page subtitle"
-                placeholder="e.g. Quizz of the day — Cloud Edition"
+                placeholder="e.g. Đào tạo & Kiểm tra nội bộ"
                 value={cfg.appSubtitle ?? ''}
                 onChange={(e) => update('appSubtitle', e.target.value)}
                 noMargin

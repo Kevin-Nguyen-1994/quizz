@@ -9,11 +9,12 @@ export function localeName(code: string): string {
   }
 }
 
-/** New quizzes default to French unless the maker picks something else. */
-export const DEFAULT_LOCALE = 'fr';
+/** New quizzes default to Vietnamese unless the maker picks something else. */
+export const DEFAULT_LOCALE = 'vi';
 
 /** A handful of common locale codes to suggest — pickers also accept any free-text code. */
 export const COMMON_LOCALES = [
+  'vi',
   'fr',
   'en',
   'es',
@@ -33,7 +34,6 @@ export const COMMON_LOCALES = [
   'ko',
   'zh',
   'zh-TW',
-  'vi',
   'id',
   'sv',
   'da',

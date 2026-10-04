@@ -57,17 +57,12 @@ export default function CreatorNavBar({
         >
           <Zap className="size-5 shrink-0 fill-blue-500 text-blue-500" />
           {appName ? (
-            <span className="truncate">
-              <span className="bg-gradient-to-br from-blue-600 to-blue-400 bg-clip-text text-transparent">
-                {appName}
-              </span>{' '}
-              <span className="hidden font-normal text-[0.72em] text-muted-foreground opacity-80 sm:inline">
-                by Quizz
-              </span>
+            <span className="truncate bg-gradient-to-br from-blue-600 to-blue-400 bg-clip-text text-transparent">
+              {appName}
             </span>
           ) : (
             <span className="bg-gradient-to-br from-blue-600 to-blue-400 bg-clip-text text-transparent">
-              Quizz
+              TiL Quiz
             </span>
           )}
         </Link>

@@ -89,7 +89,7 @@ export interface QuizImportPayload {
   description?: string;
   coverImage?: string;
   theme?: ThemeId;
-  /** The language the quiz is authored in (locale code, e.g. "fr"). Defaults to French. */
+  /** The language the quiz is authored in (locale code, e.g. "vi"). Defaults to Vietnamese. */
   language?: string;
   questions: QuizQuestion[];
 }
@@ -179,6 +179,7 @@ export interface DbSession {
   created_at: string;
   started_at: string | null;
   finished_at: string | null;
+  current_question_started_at_ms: number | null;
   quiz_title?: string;
   hosted_by_user_id: number | null;
 }
@@ -218,6 +219,7 @@ export interface DbAnswer {
   answer_order: number;
   answered_at: string;
   chosen_text: string | null;
+  response_time_ms: number | null;
 }
 
 // Socket payloads

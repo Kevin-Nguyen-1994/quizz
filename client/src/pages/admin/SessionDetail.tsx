@@ -1,4 +1,4 @@
-import { ArrowLeft, BarChart3, Check, Trophy, X } from 'lucide-react';
+import { ArrowLeft, BarChart3, Check, Download, Trophy, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { MedalIcon } from '@/components/game/MedalIcon';
@@ -22,7 +22,16 @@ interface FullSession {
     chosen_index: number;
     is_correct: number;
     score: number;
+    response_time_ms: number | null;
   }>;
+}
+
+function formatResponseTime(responseTimeMs: number | null | undefined): string {
+  return responseTimeMs == null ? '—' : `${(responseTimeMs / 1000).toFixed(2)}s`;
+}
+
+function escapeCsvCell(value: string | number): string {
+  return `"${String(value).replace(/"/g, '""')}"`;
 }
 
 export default function SessionDetail() {
@@ -48,6 +57,68 @@ export default function SessionDetail() {
   const answerMap = new Map(answers.map((a) => [`${a.player_id}:${a.question_id}`, a]));
 
   const sortedPlayers = [...players].sort((a, b) => b.total_score - a.total_score);
+  const playerStats = new Map(
+    players.map((player) => {
+      const playerAnswers = answers.filter((answer) => answer.player_id === player.id);
+      const correct = playerAnswers.filter((answer) => answer.is_correct === 1).length;
+      const responseTimes = playerAnswers
+        .map((answer) => answer.response_time_ms)
+        .filter((time): time is number => time != null);
+      const averageResponseTimeMs = responseTimes.length
+        ? responseTimes.reduce((sum, time) => sum + time, 0) / responseTimes.length
+        : null;
+
+      return [
+        player.id,
+        {
+          correct,
+          wrong: questions.length - correct,
+          averageResponseTimeMs,
+        },
+      ] as const;
+    }),
+  );
+
+  function exportCsv() {
+    const rows: Array<Array<string | number>> = [
+      [
+        'Player',
+        'Question number',
+        'Question text',
+        'Correct/Incorrect',
+        'Response time ms',
+        'Response time seconds',
+        'Score',
+      ],
+    ];
+
+    for (const player of sortedPlayers) {
+      questions.forEach((question, questionIndex) => {
+        const answer = answerMap.get(`${player.id}:${question.id}`);
+        const responseTimeMs = answer?.response_time_ms;
+        rows.push([
+          player.username,
+          questionIndex + 1,
+          question.text,
+          answer?.is_correct === 1 ? 'Correct' : 'Incorrect',
+          responseTimeMs ?? '',
+          responseTimeMs == null ? '' : (responseTimeMs / 1000).toFixed(2),
+          answer?.score ?? 0,
+        ]);
+      });
+    }
+
+    const csv = rows.map((row) => row.map(escapeCsvCell).join(',')).join('\r\n');
+    const blob = new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `til-quiz-session-${session.id}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  }
 
   return (
     <Page>
@@ -69,7 +140,12 @@ export default function SessionDetail() {
               {session.finished_at && ` · ${new Date(session.finished_at).toLocaleString()}`}
             </Subtitle>
           </div>
-          <StatusBadge status={session.status} className="ml-auto" />
+          <div className="ml-auto flex items-center gap-2">
+            <Button type="button" variant="secondary" size="sm" onClick={exportCsv}>
+              <Download className="size-4" /> Xuất kết quả CSV
+            </Button>
+            <StatusBadge status={session.status} />
+          </div>
         </div>
 
         <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -96,13 +172,25 @@ export default function SessionDetail() {
                 <Trophy className="size-4" /> Final Leaderboard
               </h2>
               <ul className="leaderboard" style={{ gap: 6 }}>
-                {sortedPlayers.map((p, i) => (
-                  <li key={p.id} className={`lb-item rank-${Math.min(i + 1, 4)}`}>
-                    <div className="lb-rank">{i + 1}</div>
-                    <div className="lb-name">{p.username}</div>
-                    <div className="lb-score">{p.total_score.toLocaleString()}</div>
-                  </li>
-                ))}
+                {sortedPlayers.map((p, i) => {
+                  const stats = playerStats.get(p.id);
+                  return (
+                    <li key={p.id} className={`lb-item rank-${Math.min(i + 1, 4)}`}>
+                      <div className="lb-rank">{i + 1}</div>
+                      <div className="lb-name">
+                        <div>{p.username}</div>
+                        <div className="mt-0.5 text-xs font-normal text-muted-foreground">
+                          Correct: {stats?.correct ?? 0} · Wrong: {stats?.wrong ?? questions.length}{' '}
+                          · Average: {formatResponseTime(stats?.averageResponseTimeMs)}
+                        </div>
+                      </div>
+                      <div className="lb-score text-right">
+                        <div>{p.total_score.toLocaleString()}</div>
+                        <div className="text-xs font-normal text-muted-foreground">Total score</div>
+                      </div>
+                    </li>
+                  );
+                })}
               </ul>
             </CardContent>
           </Card>
@@ -131,7 +219,7 @@ export default function SessionDetail() {
                       <div className="answer-bar-fill" style={{ width: `${pct}%` }} />
                     </div>
                     <div className="mt-1 text-xs text-muted-foreground">
-                      Correct: {q.options[q.correct_index]}
+                      Time limit: {q.time_sec}s · Correct: {q.options[q.correct_index]}
                     </div>
                   </div>
                 );
@@ -173,14 +261,21 @@ export default function SessionDetail() {
                         <td key={q.id} className="px-4 py-3">
                           {a == null ? (
                             <span className="text-muted-foreground">—</span>
-                          ) : a.is_correct ? (
-                            <span className="inline-flex items-center gap-1 text-emerald-500">
-                              <Check className="size-4" /> +{a.score}
-                            </span>
                           ) : (
-                            <span className="text-destructive">
-                              <X className="size-4" />
-                            </span>
+                            <div>
+                              {a.is_correct ? (
+                                <span className="inline-flex items-center gap-1 text-emerald-500">
+                                  <Check className="size-4" /> +{a.score}
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 text-destructive">
+                                  <X className="size-4" /> +{a.score}
+                                </span>
+                              )}
+                              <div className="mt-0.5 text-xs text-muted-foreground">
+                                {formatResponseTime(a.response_time_ms)}
+                              </div>
+                            </div>
                           )}
                         </td>
                       );

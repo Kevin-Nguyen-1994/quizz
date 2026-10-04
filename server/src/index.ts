@@ -46,7 +46,7 @@ app.get('/{*path}', (_req, res) => res.sendFile(path.join(clientDist, 'index.htm
 initDb().then(() => {
   setupSockets(httpServer);
   httpServer.listen(config.port, () => {
-    console.log(`\n🎯  Quizz — http://localhost:${config.port}`);
+    console.log(`\n🎯  TiL Quiz — http://localhost:${config.port}`);
     console.log(`    Admin : http://localhost:${config.port}/admin`);
     console.log(`    Play  : http://localhost:${config.port}/play\n`);
   });

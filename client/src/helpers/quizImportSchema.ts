@@ -8,7 +8,7 @@ export const QUIZ_IMPORT_EXAMPLE = {
   description: 'A quick 12-question warm-up — geography, code, music & more',
   coverImage: 'https://images.unsplash.com/photo-1481627834876-b7833e8f5570?w=1200',
   theme: 'space',
-  language: 'fr',
+  language: 'vi',
   questions: [
     {
       text: 'What is the capital of France?',
@@ -171,7 +171,7 @@ export const QUIZ_IMPORT_JSON_SHORT = `{
   "description": "Optional subtitle shown in the lobby",
   "coverImage": "https://example.com/cover.jpg",
   "theme": "default",
-  "language": "fr",
+  "language": "vi",
   "questions": [
     {
       "text": "What is the capital of France?",
@@ -202,9 +202,9 @@ const QUIZ_IMPORT_SCHEMA_OBJECT = {
     },
     language: {
       type: 'string',
-      default: 'fr',
+      default: 'vi',
       description:
-        'Locale code the quiz is authored in (e.g. "fr", "en", "es"). Defaults to French.',
+        'Locale code the quiz is authored in (e.g. "vi", "en", "fr"). Defaults to Vietnamese.',
     },
     questions: {
       type: 'array',
@@ -323,7 +323,7 @@ Requirements:
 1. Output ONLY valid JSON — no markdown code fences, no commentary before or after.
 2. Use the exact field names and question types from the Quizz JSON schema below.
 3. Include a clear title and description for the quiz lobby.
-3b. Set "language" to the locale code you're writing the questions in (default "fr" for French; use "en" if I ask for English, etc.).
+3b. Set "language" to the locale code you're writing the questions in (default "vi" for Vietnamese; use "en" if I ask for English, etc.).
 4. Add an explanation on each question (shown after the answer is revealed).
 5. Add tags (topic, difficulty) on questions when helpful.
 6. Mix question types where appropriate.

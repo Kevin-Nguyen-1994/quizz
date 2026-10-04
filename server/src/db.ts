@@ -130,7 +130,9 @@ export async function initDb(): Promise<void> {
     `ALTER TABLE players ADD COLUMN avatar TEXT`,
     `ALTER TABLE questions ADD COLUMN matches TEXT`,
     `ALTER TABLE players ADD COLUMN locale TEXT`,
-    `ALTER TABLE quizzes ADD COLUMN language TEXT NOT NULL DEFAULT 'fr'`,
+    `ALTER TABLE quizzes ADD COLUMN language TEXT NOT NULL DEFAULT 'vi'`,
+    `ALTER TABLE answers ADD COLUMN response_time_ms INTEGER`,
+    `ALTER TABLE sessions ADD COLUMN current_question_started_at_ms INTEGER`,
   ];
   for (const sql of columnMigrations) {
     try {

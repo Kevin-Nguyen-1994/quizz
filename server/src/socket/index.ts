@@ -203,7 +203,7 @@ export function setupSockets(httpServer: HttpServer): SocketServer {
         // 3-2-1 countdown before first question
         io.to(`session:${data.sessionId}`).emit('game:countdown', { seconds: 3 });
         setTimeout(() => {
-          sendQuestion(io, state, 0);
+          void sendQuestion(io, state, 0);
         }, 4000);
       },
     );
@@ -226,7 +226,7 @@ export function setupSockets(httpServer: HttpServer): SocketServer {
       if (nextIndex >= state.questions.length) {
         endGame(io, state);
       } else {
-        sendQuestion(io, state, nextIndex);
+        await sendQuestion(io, state, nextIndex);
       }
     });
 
@@ -383,7 +383,7 @@ export function setupSockets(httpServer: HttpServer): SocketServer {
           socket.emit('player:error', { message: 'Username required' });
           return;
         }
-        const cleanName = username.trim().slice(0, 24);
+        const cleanName = username.trim().slice(0, 50);
 
         const quiz = await db.get<DbQuiz>('SELECT * FROM quizzes WHERE id = ?', session.quiz_id);
 
@@ -921,8 +921,10 @@ async function recordAnswer(opts: {
   const { io, socket, state, answered, sessionId, questionId, playerId, score } = opts;
 
   const answerOrder = answered.size;
+  const responseTimeMs =
+    state.questionStartedAt === null ? null : Math.max(0, Date.now() - state.questionStartedAt);
   await db.run(
-    'INSERT INTO answers (player_id, session_id, question_id, chosen_index, is_correct, score, answer_order, chosen_text, chosen_indices) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    'INSERT INTO answers (player_id, session_id, question_id, chosen_index, is_correct, score, answer_order, chosen_text, chosen_indices, response_time_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
     playerId,
     sessionId,
     questionId,
@@ -932,6 +934,7 @@ async function recordAnswer(opts: {
     answerOrder,
     opts.chosenText,
     opts.chosenIndices,
+    responseTimeMs,
   );
 
   if (opts.alwaysUpdateTotal || score > 0) {
@@ -1083,15 +1086,40 @@ function coldRebuildQuestion(
     state.questions.length,
     state.answerSeed,
   ) as Record<string, unknown>;
+  const persistedStartedAt = session.current_question_started_at_ms;
+  const startedAt =
+    typeof persistedStartedAt === 'number' && Number.isFinite(persistedStartedAt)
+      ? persistedStartedAt
+      : Date.now();
+  const elapsedMs = Math.max(0, Date.now() - startedAt);
+  const remainingMs = Math.max(0, currentQ.time_sec * 1000 - elapsedMs);
+
   state.questionPhase = 'question';
+  state.questionStartedAt = startedAt;
+
+  // Sessions created before this column existed cannot recover the original
+  // start time, but persist the fallback so subsequent restarts stay consistent.
+  if (persistedStartedAt === null) {
+    db.run(
+      'UPDATE sessions SET current_question_started_at_ms = ? WHERE id = ?',
+      startedAt,
+      state.sessionId,
+    );
+  }
+
+  if (remainingMs <= 0) {
+    state.lastQuestionPayload = null;
+    showResults(io, state, currentQ.id);
+    return null;
+  }
+
   state.lastQuestionPayload = basePayload;
-  state.questionStartedAt = Date.now();
 
   if (!state.questionTimer) {
     state.questionTimer = setTimeout(() => {
       state.questionTimer = null;
       showResults(io, state, currentQ.id);
-    }, currentQ.time_sec * 1000);
+    }, remainingMs);
   }
 
   if (locale === 'base') return basePayload;
@@ -1129,6 +1157,15 @@ async function emitReconnectGameState(
     return;
   }
 
+  // After a cold restart, rebuild the live question before checking whether
+  // this particular player already answered. Otherwise the first reconnecting
+  // answered player would return early without restoring the shared timer.
+  let coldPayload: Record<string, unknown> | null = null;
+  if (state.questionPhase === null) {
+    coldPayload = coldRebuildQuestion(io, state, session, locale);
+    if (!coldPayload) return;
+  }
+
   const currentQ = state.questions[state.currentQuestionIndex];
   if (!currentQ) return;
 
@@ -1163,7 +1200,8 @@ async function emitReconnectGameState(
   }
 
   if (state.questionPhase === 'question' && state.lastQuestionPayload) {
-    restoreQuestionPhase(socket, state, locale);
+    if (coldPayload) socket.emit('game:question', coldPayload);
+    else restoreQuestionPhase(socket, state, locale);
     const myEliminated = state.playerFiftyFiftyIndices.get(playerId);
     if (myEliminated) {
       socket.emit('player:joker-5050-applied', { eliminatedIndices: myEliminated });
@@ -1171,14 +1209,13 @@ async function emitReconnectGameState(
     return;
   }
 
-  // Cold state: server restarted — rebuild question from DB index
-  const coldPayload = coldRebuildQuestion(io, state, session, locale);
-  if (coldPayload) {
-    socket.emit('game:question', coldPayload);
-  }
 }
 
-function sendQuestion(io: SocketServer, state: ActiveSession, index: number): void {
+async function sendQuestion(
+  io: SocketServer,
+  state: ActiveSession,
+  index: number,
+): Promise<void> {
   // Cancel any pending results auto-advance timer
   if (state.resultsTimer) {
     clearTimeout(state.resultsTimer);
@@ -1190,14 +1227,20 @@ function sendQuestion(io: SocketServer, state: ActiveSession, index: number): vo
 
   const q = state.questions[index];
   state.currentQuestionIndex = index;
+  const startedAt = Date.now();
 
-  db.run('UPDATE sessions SET current_question_index = ? WHERE id = ?', index, state.sessionId);
+  await db.run(
+    'UPDATE sessions SET current_question_index = ?, current_question_started_at_ms = ? WHERE id = ?',
+    index,
+    startedAt,
+    state.sessionId,
+  );
 
   const payload = buildQuestionPayload(q, index, state.questions.length, state.answerSeed);
 
   state.questionPhase = 'question';
   state.lastQuestionPayload = payload;
-  state.questionStartedAt = Date.now();
+  state.questionStartedAt = startedAt;
 
   // Players join `session:${id}` alongside the host, but each player now gets
   // a payload localized to their own chosen locale — so the host (always
@@ -1226,6 +1269,11 @@ function sendQuestion(io: SocketServer, state: ActiveSession, index: number): vo
 }
 
 function showResults(io: SocketServer, state: ActiveSession, questionId: number): void {
+  // Mark the phase synchronously so a timeout and the final answer cannot both
+  // start duplicate result calculations while the database reads are pending.
+  if (state.questionPhase === 'results') return;
+  state.questionPhase = 'results';
+
   const q = state.questions.find((x) => x.id === questionId);
   if (!q) return;
 
@@ -1438,7 +1486,7 @@ function showResults(io: SocketServer, state: ActiveSession, questionId: number)
         if (nextIndex >= state.questions.length) {
           endGame(io, state);
         } else {
-          sendQuestion(io, state, nextIndex);
+          void sendQuestion(io, state, nextIndex);
         }
       }, autoAdvanceSec * 1000);
     }

@@ -27,7 +27,7 @@ import type { AuthUser } from '@/types';
 
 function defaultJoinName(user: AuthUser | null): string {
   if (!user) return '';
-  return (user.playDisplayName?.trim() || user.username || '').slice(0, 24);
+  return (user.playDisplayName?.trim() || user.username || '').slice(0, 50);
 }
 
 function defaultJoinAvatar(user: AuthUser | null): string {
@@ -155,15 +155,10 @@ export default function Join() {
         <div className="text-center mb-6">
           <AppLogo>
             {appName ? (
-              <>
-                {appName}{' '}
-                <span className="mt-1 flex items-center justify-center gap-1 text-[0.6em] font-normal text-muted-foreground opacity-85">
-                  by <Zap className="size-4" /> Quizz
-                </span>
-              </>
+              appName
             ) : (
               <span className="inline-flex items-center gap-1">
-                <Zap className="size-4" /> Quizz
+                <Zap className="size-4" /> TiL Quiz
               </span>
             )}
           </AppLogo>
@@ -198,7 +193,7 @@ export default function Join() {
               id="username"
               label="Your Name"
               type="text"
-              maxLength={24}
+              maxLength={50}
               placeholder="e.g. Alice"
               value={username}
               onChange={(e) => setUsername(e.target.value)}

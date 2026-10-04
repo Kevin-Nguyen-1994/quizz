@@ -13,8 +13,8 @@ const PLACEHOLDER_SECRET = 'change-this-secret-in-production';
 // still has a sane value even if the persisted config.json pre-dates it.
 const DEFAULTS: AppConfig = {
   port: 3000,
-  appName: '',
-  appSubtitle: '',
+  appName: 'TiL Quiz',
+  appSubtitle: 'Đào tạo & Kiểm tra nội bộ',
   jwtSecret: PLACEHOLDER_SECRET,
   allowedDomain: '',
   questionTimeSec: 20,

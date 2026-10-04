@@ -4,18 +4,18 @@ interface AppContextValue {
   appName: string;
   appSubtitle: string;
   allowedDomain: string;
-  /** Full display string: "Scaleway by ⚡ Quizz" or "⚡ Quizz" */
+  /** Full display string used in the browser title and primary branding. */
   displayName: string;
-  /** Short brand string: "Scaleway" or "⚡ Quizz" */
+  /** Short brand string used in compact layouts. */
   brandName: string;
 }
 
 const AppContext = createContext<AppContextValue>({
-  appName: '',
-  appSubtitle: '',
+  appName: 'TiL Quiz',
+  appSubtitle: 'Đào tạo & Kiểm tra nội bộ',
   allowedDomain: '',
-  displayName: '⚡ Quizz',
-  brandName: '⚡ Quizz',
+  displayName: 'TiL Quiz',
+  brandName: 'TiL Quiz',
 });
 
 function buildDisplay(
@@ -28,13 +28,15 @@ function buildDisplay(
     appName: trimmed,
     appSubtitle: appSubtitle.trim(),
     allowedDomain: allowedDomain.trim(),
-    displayName: trimmed ? `${trimmed} by ⚡ Quizz` : '⚡ Quizz',
-    brandName: trimmed || '⚡ Quizz',
+    displayName: trimmed || 'TiL Quiz',
+    brandName: trimmed || 'TiL Quiz',
   };
 }
 
 export function AppProvider({ children }: { children: ReactNode }) {
-  const [value, setValue] = useState<AppContextValue>(buildDisplay('', '', ''));
+  const [value, setValue] = useState<AppContextValue>(
+    buildDisplay('TiL Quiz', 'Đào tạo & Kiểm tra nội bộ', ''),
+  );
 
   useEffect(() => {
     fetch('/api/public')

@@ -37,7 +37,7 @@ export default function UserLogin() {
           <AppLogo>
             {appName || (
               <span className="inline-flex items-center gap-1.5">
-                <Zap className="size-4" /> Quizz
+                <Zap className="size-4" /> TiL Quiz
               </span>
             )}
           </AppLogo>

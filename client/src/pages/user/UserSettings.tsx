@@ -112,7 +112,7 @@ export default function UserSettings() {
                 id="playName"
                 label="Display name in games"
                 type="text"
-                maxLength={24}
+                maxLength={50}
                 required
                 value={playName}
                 onChange={(e) => setPlayName(e.target.value)}

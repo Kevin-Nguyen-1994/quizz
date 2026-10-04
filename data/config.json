@@ -1,8 +1,8 @@
 {
   "port": 3000,
-  "appName": "Scaleway",
-  "appSubtitle": "",
-  "jwtSecret": "f5d9d85fd335fab4193190bd1758d7657e500f4dd75d45bcf650375ec71019c4",
+  "appName": "TiL Quiz",
+  "appSubtitle": "Đào tạo & Kiểm tra nội bộ",
+  "jwtSecret": "change-this-secret-in-production",
   "allowedDomain": "",
   "questionTimeSec": 20,
   "defaultBaseScore": 500,
