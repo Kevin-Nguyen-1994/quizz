@@ -79,7 +79,8 @@ export async function initDb(): Promise<void> {
 
     CREATE TABLE IF NOT EXISTS users (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      email TEXT NOT NULL UNIQUE,
+      login_name TEXT COLLATE NOCASE,
+      email TEXT UNIQUE,
       username TEXT NOT NULL,
       password_hash TEXT NOT NULL,
       is_banned INTEGER NOT NULL DEFAULT 0,
@@ -156,6 +157,7 @@ export async function initDb(): Promise<void> {
       id                    INTEGER PRIMARY KEY AUTOINCREMENT,
       assignment_id         INTEGER NOT NULL REFERENCES assignments(id) ON DELETE CASCADE,
       user_id               INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      login_name_snapshot   TEXT,
       display_name_snapshot TEXT NOT NULL,
       email_snapshot        TEXT NOT NULL,
       assigned_at_ms        INTEGER NOT NULL,
@@ -167,6 +169,7 @@ export async function initDb(): Promise<void> {
       assignment_id                  INTEGER NOT NULL REFERENCES assignments(id) ON DELETE CASCADE,
       assignment_member_id           INTEGER REFERENCES assignment_members(id) ON DELETE SET NULL,
       user_id                        INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      participant_login_name         TEXT,
       participant_name               TEXT NOT NULL,
       participant_email              TEXT NOT NULL,
       attempt_number                 INTEGER NOT NULL,
@@ -237,6 +240,7 @@ export async function initDb(): Promise<void> {
     `ALTER TABLE users ADD COLUMN is_banned INTEGER NOT NULL DEFAULT 0`,
     `ALTER TABLE users ADD COLUMN play_display_name TEXT`,
     `ALTER TABLE users ADD COLUMN play_avatar TEXT`,
+    `ALTER TABLE users ADD COLUMN login_name TEXT`,
     `ALTER TABLE players ADD COLUMN user_id INTEGER REFERENCES users(id) ON DELETE SET NULL`,
     `ALTER TABLE players ADD COLUMN avatar TEXT`,
     `ALTER TABLE questions ADD COLUMN matches TEXT`,
@@ -244,6 +248,8 @@ export async function initDb(): Promise<void> {
     `ALTER TABLE quizzes ADD COLUMN language TEXT NOT NULL DEFAULT 'vi'`,
     `ALTER TABLE answers ADD COLUMN response_time_ms INTEGER`,
     `ALTER TABLE sessions ADD COLUMN current_question_started_at_ms INTEGER`,
+    `ALTER TABLE assignment_members ADD COLUMN login_name_snapshot TEXT`,
+    `ALTER TABLE assignment_attempts ADD COLUMN participant_login_name TEXT`,
   ];
   for (const sql of columnMigrations) {
     try {
@@ -252,6 +258,8 @@ export async function initDb(): Promise<void> {
       /* column already exists */
     }
   }
+
+  await migrateInternalUserIdentifiers();
 
   // Migrate admin from config to database if needed
   const adminCount = await db.get('SELECT COUNT(*) as count FROM admins');
@@ -279,6 +287,111 @@ export async function initDb(): Promise<void> {
       username,
       hashedPassword,
     ]);
+  }
+}
+
+function normalizeLegacyLoginName(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replaceAll('đ', 'd')
+    .replaceAll('Đ', 'D')
+    .replace(/[^a-zA-Z0-9._-]+/g, '-')
+    .replace(/^[._-]+|[._-]+$/g, '')
+    .slice(0, 64);
+}
+
+/**
+ * Phase 2D user migration. SQLite cannot remove NOT NULL from a column in
+ * place, so legacy databases get a transactionally rebuilt users table. The
+ * separate unique index keeps login names case-insensitively unique while
+ * allowing old/custom databases to be repaired before the constraint applies.
+ */
+async function migrateInternalUserIdentifiers(): Promise<void> {
+  const columns = await db.all<Array<{ name: string; notnull: number }>>(
+    'PRAGMA table_info(users)',
+  );
+  const emailColumn = columns.find((column) => column.name === 'email');
+
+  if (emailColumn?.notnull === 1) {
+    await db.run('PRAGMA foreign_keys = OFF');
+    try {
+      await db.exec(`
+        BEGIN IMMEDIATE;
+        DROP TABLE IF EXISTS users_phase2d_new;
+        CREATE TABLE users_phase2d_new (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          login_name TEXT COLLATE NOCASE,
+          email TEXT UNIQUE,
+          username TEXT NOT NULL,
+          password_hash TEXT NOT NULL,
+          is_banned INTEGER NOT NULL DEFAULT 0,
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          last_password_change TEXT,
+          play_display_name TEXT,
+          play_avatar TEXT
+        );
+        INSERT INTO users_phase2d_new (
+          id, login_name, email, username, password_hash, is_banned, created_at,
+          last_password_change, play_display_name, play_avatar
+        )
+        SELECT
+          id, login_name, email, username, password_hash, is_banned, created_at,
+          last_password_change, play_display_name, play_avatar
+        FROM users;
+        DROP TABLE users;
+        ALTER TABLE users_phase2d_new RENAME TO users;
+        COMMIT;
+      `);
+    } catch (error) {
+      await db.exec('ROLLBACK').catch(() => undefined);
+      throw error;
+    } finally {
+      await db.run('PRAGMA foreign_keys = ON');
+    }
+  }
+
+  const users = await db.all<
+    Array<{ id: number; login_name: string | null; email: string | null; username: string }>
+  >('SELECT id, login_name, email, username FROM users ORDER BY id');
+  const used = new Set<string>();
+  for (const user of users) {
+    const source = user.login_name?.trim() || user.email?.split('@')[0] || user.username;
+    const base = normalizeLegacyLoginName(source) || `user${user.id}`;
+    let candidate = base;
+    let suffix = 2;
+    while (used.has(candidate.toLowerCase())) {
+      const suffixText = `-${suffix++}`;
+      candidate = `${base.slice(0, 64 - suffixText.length)}${suffixText}`;
+    }
+    used.add(candidate.toLowerCase());
+    if (candidate !== user.login_name) {
+      await db.run('UPDATE users SET login_name = ? WHERE id = ?', candidate, user.id);
+    }
+  }
+  await db.run(
+    'CREATE UNIQUE INDEX IF NOT EXISTS idx_users_login_name_nocase ON users(login_name COLLATE NOCASE)',
+  );
+  await db.run(`
+    UPDATE assignment_members
+    SET login_name_snapshot = COALESCE(
+      (SELECT u.login_name FROM users u WHERE u.id = assignment_members.user_id),
+      NULLIF(email_snapshot, '')
+    )
+    WHERE login_name_snapshot IS NULL OR trim(login_name_snapshot) = ''
+  `);
+  await db.run(`
+    UPDATE assignment_attempts
+    SET participant_login_name = COALESCE(
+      (SELECT u.login_name FROM users u WHERE u.id = assignment_attempts.user_id),
+      NULLIF(participant_email, '')
+    )
+    WHERE participant_login_name IS NULL OR trim(participant_login_name) = ''
+  `);
+
+  const foreignKeyErrors = await db.all('PRAGMA foreign_key_check');
+  if (foreignKeyErrors.length > 0) {
+    throw new Error('User migration failed foreign key validation');
   }
 }
 

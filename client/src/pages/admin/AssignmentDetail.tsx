@@ -361,7 +361,7 @@ export default function AssignmentDetail() {
               <table className="w-full min-w-[1500px] text-sm">
                 <thead>
                   <tr className="border-b border-border text-left text-muted-foreground">
-                    <th className="px-3 py-3">Họ tên / Email</th>
+                    <th className="px-3 py-3">Họ tên / Tên đăng nhập</th>
                     <th className="px-3 py-3">Trạng thái</th>
                     <th className="px-3 py-3">Attempt</th>
                     <th className="px-3 py-3">Bắt đầu</th>
@@ -386,7 +386,10 @@ export default function AssignmentDetail() {
                     >
                       <td className="px-3 py-3">
                         <strong className="block">{participant.name}</strong>
-                        <span className="text-xs text-muted-foreground">{participant.email}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {participant.loginName}
+                          {participant.email ? ` · ${participant.email}` : ''}
+                        </span>
                       </td>
                       <td className="px-3 py-3">
                         <AssignmentStatusBadge status={attempt?.status ?? 'not_started'} />
@@ -532,7 +535,10 @@ export default function AssignmentDetail() {
         <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-5xl">
           <DialogHeader>
             <DialogTitle>
-              Chi tiết lượt làm{attemptDetail ? ` · ${attemptDetail.participant.name}` : ''}
+              Chi tiết lượt làm
+              {attemptDetail
+                ? ` · ${attemptDetail.participant.name} · ${attemptDetail.participant.loginName}`
+                : ''}
             </DialogTitle>
             <DialogDescription>
               Câu trả lời, đáp án đúng, điểm và thời gian từng câu.
@@ -595,7 +601,10 @@ export default function AssignmentDetail() {
                       >
                         <td className="px-3 py-2">
                           <strong className="block">{participant.name}</strong>
-                          <span className="text-xs text-muted-foreground">{participant.email}</span>
+                          <span className="text-xs text-muted-foreground">
+                            {participant.loginName}
+                            {participant.email ? ` · ${participant.email}` : ''}
+                          </span>
                         </td>
                         <td className="px-3 py-2">
                           {participant.attemptNumber ? `#${participant.attemptNumber}` : '—'}

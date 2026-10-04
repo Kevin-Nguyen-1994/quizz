@@ -94,8 +94,13 @@ export default function UserSettings() {
               <span className="text-muted-foreground">Name:</span> {user?.username}
             </p>
             <p className="mt-2">
-              <span className="text-muted-foreground">Email:</span> {user?.email}
+              <span className="text-muted-foreground">Tên đăng nhập:</span> {user?.loginName}
             </p>
+            {user?.email && (
+              <p className="mt-2">
+                <span className="text-muted-foreground">Email:</span> {user.email}
+              </p>
+            )}
           </CardContent>
         </Card>
 

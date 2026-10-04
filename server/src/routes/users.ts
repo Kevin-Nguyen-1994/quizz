@@ -2,8 +2,8 @@ import crypto from 'node:crypto';
 import { type Request, type Response, Router } from 'express';
 import { db } from '../db';
 import { requireSuperAdmin } from '../middleware';
-import { hashPassword, MIN_PASSWORD_LENGTH } from '../passwords';
 import type { DbUser } from '../types';
+import { createInternalUser, setUserPassword, UserAccountError } from '../userAccounts';
 
 export const usersRouter = Router();
 
@@ -16,7 +16,8 @@ usersRouter.get('/', async (_req: Request, res: Response) => {
   const users = await db.all<
     Array<{
       id: number;
-      email: string;
+      login_name: string;
+      email: string | null;
       username: string;
       is_banned: number;
       created_at: string;
@@ -24,12 +25,39 @@ usersRouter.get('/', async (_req: Request, res: Response) => {
       quiz_count: number;
     }>
   >(`
-    SELECT u.id, u.email, u.username, u.is_banned, u.created_at, u.last_password_change,
+    SELECT u.id, COALESCE(u.login_name, u.email, 'user-' || u.id) as login_name,
+      u.email, u.username, u.is_banned, u.created_at, u.last_password_change,
       (SELECT COUNT(*) FROM quizzes q WHERE q.owner_id = u.id AND q.owner_kind = 'user') as quiz_count
     FROM users u
     ORDER BY u.created_at DESC
   `);
   res.json({ users });
+});
+
+// ─── Create internal employee account ────────────────────────────────────────
+
+usersRouter.post('/', async (req: Request, res: Response) => {
+  try {
+    const user = await createInternalUser(db, req.body ?? {});
+    res.status(201).json({
+      user: {
+        id: user.id,
+        login_name: user.login_name,
+        email: user.email,
+        username: user.username,
+        is_banned: user.is_banned,
+        created_at: user.created_at,
+        last_password_change: user.last_password_change,
+        quiz_count: 0,
+      },
+    });
+  } catch (error) {
+    if (error instanceof UserAccountError) {
+      return res.status(error.statusCode).json({ error: error.message });
+    }
+    console.error('Create user error:', error);
+    res.status(500).json({ error: 'Failed to create employee account' });
+  }
 });
 
 // ─── Ban / unban ──────────────────────────────────────────────────────────────
@@ -49,21 +77,25 @@ usersRouter.post('/:id/unban', async (req: Request, res: Response) => {
 // ─── Reset password ───────────────────────────────────────────────────────────
 
 usersRouter.post('/:id/reset-password', async (req: Request, res: Response) => {
+  const userId = Number(req.params.id);
+  if (!Number.isInteger(userId) || userId < 1) {
+    return res.status(400).json({ error: 'Invalid user id' });
+  }
   // Allow caller to supply a password, otherwise generate a random one.
   const { newPassword } = (req.body ?? {}) as { newPassword?: string };
-  const password =
-    newPassword && newPassword.length >= MIN_PASSWORD_LENGTH
-      ? newPassword
-      : crypto.randomBytes(6).toString('base64url').slice(0, 12);
-
-  const hash = await hashPassword(password);
-  const result = await db.run(
-    'UPDATE users SET password_hash = ?, last_password_change = datetime("now") WHERE id = ?',
-    [hash, req.params.id],
-  );
-  if (result.changes === 0) return res.status(404).json({ error: 'User not found' });
-  // Return the generated plaintext once so the super admin can hand it to the user.
-  res.json({ ok: true, password });
+  const password = newPassword || crypto.randomBytes(6).toString('base64url').slice(0, 12);
+  try {
+    if (!(await setUserPassword(db, userId, password))) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    // Return the generated plaintext once so the super admin can hand it to the user.
+    res.json({ ok: true, password });
+  } catch (error) {
+    if (error instanceof UserAccountError) {
+      return res.status(error.statusCode).json({ error: error.message });
+    }
+    throw error;
+  }
 });
 
 // ─── Delete ──────────────────────────────────────────────────────────────────

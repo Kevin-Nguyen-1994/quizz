@@ -19,9 +19,8 @@ interface AuthCtx {
   /** Any authenticated role (super admin or user). */
   isAdmin: boolean;
   isSuperAdmin: boolean;
-  /** Unified login — super-admin username or user email, same endpoint. */
+  /** Unified login — super-admin username or employee login name, same endpoint. */
   login: (identifier: string, password: string) => Promise<LoginResult>;
-  registerUser: (email: string, password: string, username: string) => Promise<string | null>;
   updatePlayProfile: (displayName: string, avatar: string) => void;
   logout: () => Promise<void>;
 }
@@ -36,6 +35,7 @@ type MeResult =
       role: AuthRole;
       id: number;
       username: string;
+      loginName: string;
       email: string | null;
       playDisplayName: string | null;
       playAvatar: string | null;
@@ -51,6 +51,7 @@ async function fetchMe(token: string): Promise<MeResult> {
     role?: AuthRole;
     id?: number;
     username?: string;
+    loginName?: string;
     email?: string | null;
     playDisplayName?: string | null;
     playAvatar?: string | null;
@@ -63,6 +64,7 @@ async function fetchMe(token: string): Promise<MeResult> {
     role: data.role as AuthRole,
     id: data.id as number,
     username: data.username as string,
+    loginName: data.loginName ?? data.email ?? (data.username as string),
     email: (data.email as string | null) ?? null,
     playDisplayName: data.playDisplayName ?? null,
     playAvatar: data.playAvatar ?? null,
@@ -87,6 +89,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setRole(me.role);
         setUser({
           id: me.id,
+          loginName: me.loginName,
           email: me.email,
           username: me.username,
           playDisplayName: me.playDisplayName,
@@ -113,6 +116,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setRole(me.role);
     setUser({
       id: me.id,
+      loginName: me.loginName,
       email: me.email,
       username: me.username,
       playDisplayName: me.playDisplayName,
@@ -126,26 +130,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: identifier, password }),
+        body: JSON.stringify({ identifier, password }),
       });
       const data = await res.json();
       if (!res.ok) return { ok: false, error: (data.error as string) ?? 'Login failed' };
       return applyToken(data.token as string);
-    },
-    [applyToken],
-  );
-
-  const registerUser = useCallback(
-    async (email: string, password: string, username: string): Promise<string | null> => {
-      const res = await fetch('/api/auth/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password, username }),
-      });
-      const data = await res.json();
-      if (!res.ok) return (data.error as string) ?? 'Registration failed';
-      const result = await applyToken(data.token as string);
-      return result.ok ? null : result.error;
     },
     [applyToken],
   );
@@ -179,11 +168,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isAdmin: role !== null,
       isSuperAdmin: role === 'super_admin',
       login,
-      registerUser,
       updatePlayProfile,
       logout,
     }),
-    [role, user, checking, token, login, registerUser, updatePlayProfile, logout],
+    [role, user, checking, token, login, updatePlayProfile, logout],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

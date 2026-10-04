@@ -41,7 +41,7 @@ export default function CreatorNavBar({
     { to: `${basePath}/history`, label: 'History' },
     ...(showAssignments ? [{ to: `${basePath}/assignments`, label: 'Bài kiểm tra' }] : []),
     ...(showMyGames ? [{ to: `${basePath}/my-games`, label: 'My games' }] : []),
-    ...(showUsers ? [{ to: `${basePath}/users`, label: 'Users' }] : []),
+    ...(showUsers ? [{ to: `${basePath}/users`, label: 'Quản lý nhân viên' }] : []),
     { to: `${basePath}/settings`, label: 'Settings' },
   ];
 

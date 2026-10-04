@@ -1,9 +1,19 @@
-import { useCallback, useEffect, useState } from 'react';
+import { Copy, Plus } from 'lucide-react';
+import { type FormEvent, useCallback, useEffect, useState } from 'react';
 import { AppAlert } from '@/components/AppAlert';
 import { MainContent, Page, Subtitle } from '@/components/layout';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Input } from '@/components/Input';
 import { cn } from '@/lib/utils';
 import AdminNav from '../../components/AdminNav';
 import { useDialog } from '../../context/DialogContext';
@@ -19,22 +29,40 @@ type UserActionsProps = {
   onDelete: (id: number) => void;
 };
 
-/** Ban/Unban · Reset pw · Delete — shared between the mobile list and desktop table. */
+/** Employee actions shared between the mobile list and desktop table. */
 function UserActions({ user, actionId, onUnban, onBan, onReset, onDelete }: UserActionsProps) {
   const busy = actionId === user.id;
   return (
     <>
       {user.is_banned ? (
-        <Button type="button" variant="secondary" size="sm" disabled={busy} onClick={() => onUnban(user.id)}>
-          Unban
+        <Button
+          type="button"
+          variant="secondary"
+          size="sm"
+          disabled={busy}
+          onClick={() => onUnban(user.id)}
+        >
+          Mở khóa
         </Button>
       ) : (
-        <Button type="button" variant="ghost" size="sm" disabled={busy} onClick={() => onBan(user.id)}>
-          Ban
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          disabled={busy}
+          onClick={() => onBan(user.id)}
+        >
+          Khóa
         </Button>
       )}
-      <Button type="button" variant="secondary" size="sm" disabled={busy} onClick={() => onReset(user.id)}>
-        Reset pw
+      <Button
+        type="button"
+        variant="secondary"
+        size="sm"
+        disabled={busy}
+        onClick={() => onReset(user.id)}
+      >
+        Đặt lại mật khẩu
       </Button>
       <Button
         type="button"
@@ -44,7 +72,7 @@ function UserActions({ user, actionId, onUnban, onBan, onReset, onDelete }: User
         onClick={() => onDelete(user.id)}
         className="text-destructive"
       >
-        Delete
+        Xóa
       </Button>
     </>
   );
@@ -56,13 +84,22 @@ export default function UserManagement() {
   const [users, setUsers] = useState<UserAccount[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionId, setActionId] = useState<number | null>(null);
-  const [resetPassword, setResetPassword] = useState<{ id: number; password: string } | null>(null);
+  const [resetPassword, setResetPassword] = useState<{
+    loginName: string;
+    password: string;
+  } | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [loginName, setLoginName] = useState('');
+  const [username, setUsername] = useState('');
+  const [initialPassword, setInitialPassword] = useState('');
   const [error, setError] = useState('');
+  const [createError, setCreateError] = useState('');
 
   const load = useCallback(async () => {
     const { ok, data } = await api.get<{ users?: UserAccount[] }>('/api/admin/users');
     if (!ok) {
-      setError('Failed to load users');
+      setError('Không thể tải danh sách nhân viên.');
       setLoading(false);
       return;
     }
@@ -89,10 +126,11 @@ export default function UserManagement() {
   }
 
   async function resetUserPassword(id: number) {
+    const selected = users.find((user) => user.id === id);
     const proceed = await confirm({
-      title: 'Reset password?',
-      message: 'This generates a new password for this user.',
-      confirmText: 'Generate',
+      title: 'Đặt lại mật khẩu?',
+      message: 'Hệ thống sẽ tạo mật khẩu mới và chỉ hiển thị một lần.',
+      confirmText: 'Tạo mật khẩu mới',
     });
     if (!proceed) return;
     setActionId(id);
@@ -101,15 +139,16 @@ export default function UserManagement() {
       {},
     );
     setActionId(null);
-    if (ok && data?.password) setResetPassword({ id, password: data.password });
-    else setError(data?.error ?? 'Reset failed');
+    if (ok && data?.password) {
+      setResetPassword({ loginName: selected?.login_name ?? `#${id}`, password: data.password });
+    } else setError(data?.error ?? 'Không thể đặt lại mật khẩu.');
   }
 
   async function deleteUser(id: number) {
     const ok = await confirm({
-      title: 'Delete user?',
-      message: 'Their quizzes will become unowned.',
-      confirmText: 'Delete',
+      title: 'Xóa nhân viên?',
+      message: 'Các quiz của tài khoản sẽ được giữ lại nhưng không còn chủ sở hữu.',
+      confirmText: 'Xóa',
       variant: 'danger',
     });
     if (!ok) return;
@@ -119,36 +158,82 @@ export default function UserManagement() {
     load();
   }
 
+  async function createUser(event: FormEvent) {
+    event.preventDefault();
+    setCreateError('');
+    setCreating(true);
+    const { ok, data } = await api.post<{ user?: UserAccount; error?: string }>(
+      '/api/admin/users',
+      {
+        loginName,
+        username,
+        password: initialPassword,
+      },
+    );
+    setCreating(false);
+    if (!ok || !data?.user) {
+      setCreateError(data?.error ?? 'Không thể tạo nhân viên.');
+      return;
+    }
+    setUsers((current) => [data.user as UserAccount, ...current]);
+    setLoginName('');
+    setUsername('');
+    setInitialPassword('');
+    setCreateOpen(false);
+  }
+
+  async function copyResetPassword() {
+    if (!resetPassword) return;
+    await navigator.clipboard.writeText(resetPassword.password);
+  }
+
   return (
     <Page>
       <AdminNav />
       <MainContent>
-        <h1>User Management</h1>
-        <Subtitle className="mb-6">Manage registered quiz creators</Subtitle>
+        <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h1>Quản lý nhân viên</h1>
+            <Subtitle>Quản lý tài khoản nội bộ được phép đăng nhập TiL Quiz</Subtitle>
+          </div>
+          <Button
+            type="button"
+            onClick={() => {
+              setCreateError('');
+              setCreateOpen(true);
+            }}
+          >
+            <Plus className="size-4" /> Tạo nhân viên
+          </Button>
+        </div>
 
         {error && <AppAlert variant="error">{error}</AppAlert>}
         {resetPassword && (
           <AppAlert variant="success">
-            New password for user #{resetPassword.id}: <code>{resetPassword.password}</code> — copy
-            it now, it won&apos;t be shown again.
+            Mật khẩu mới cho <strong>{resetPassword.loginName}</strong>:{' '}
+            <code>{resetPassword.password}</code>. Hãy sao chép ngay; mật khẩu này sẽ không được
+            hiển thị lại.
             <Button
               type="button"
               variant="ghost"
               size="sm"
               className="ml-2"
-              onClick={() => setResetPassword(null)}
+              onClick={copyResetPassword}
             >
-              Dismiss
+              <Copy className="size-4" /> Sao chép
+            </Button>
+            <Button type="button" variant="ghost" size="sm" onClick={() => setResetPassword(null)}>
+              Đóng
             </Button>
           </AppAlert>
         )}
 
         {loading ? (
-          <p className="text-muted-foreground">Loading…</p>
+          <p className="text-muted-foreground">Đang tải…</p>
         ) : users.length === 0 ? (
           <Card>
             <CardContent className="px-6 py-12 text-center">
-              <p className="text-muted-foreground">No registered users yet.</p>
+              <p className="text-muted-foreground">Chưa có tài khoản nhân viên.</p>
             </CardContent>
           </Card>
         ) : (
@@ -158,10 +243,11 @@ export default function UserManagement() {
                 <li key={u.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
                   <div className="min-w-0 flex-1">
                     <span className="block truncate font-medium">{u.username}</span>
-                    <span className="block truncate text-sm text-muted-foreground">{u.email}</span>
+                    <span className="block truncate text-sm text-muted-foreground">
+                      {u.login_name}
+                    </span>
                     <span className="mt-0.5 block text-xs text-muted-foreground">
-                      {u.quiz_count} quiz{u.quiz_count !== 1 ? 'zes' : ''} ·{' '}
-                      {new Date(u.created_at).toLocaleDateString()}
+                      Tạo ngày {new Date(u.created_at).toLocaleDateString('vi-VN')}
                     </span>
                   </div>
                   <Badge
@@ -173,7 +259,7 @@ export default function UserManagement() {
                         : 'border-emerald-500/30 bg-emerald-500/15 text-emerald-300',
                     )}
                   >
-                    {u.is_banned ? 'banned' : 'active'}
+                    {u.is_banned ? 'Đã khóa' : 'Hoạt động'}
                   </Badge>
                   <div className="flex w-full flex-wrap gap-2 sm:w-auto">
                     <UserActions
@@ -193,20 +279,18 @@ export default function UserManagement() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-border text-left text-muted-foreground">
-                      <th className="px-4 py-3 font-medium">Email</th>
-                      <th className="px-4 py-3 font-medium">Name</th>
-                      <th className="px-4 py-3 font-medium">Quizzes</th>
-                      <th className="px-4 py-3 font-medium">Status</th>
-                      <th className="px-4 py-3 font-medium">Created</th>
-                      <th className="px-4 py-3 text-right font-medium">Actions</th>
+                      <th className="px-4 py-3 font-medium">Tên đăng nhập</th>
+                      <th className="px-4 py-3 font-medium">Họ tên</th>
+                      <th className="px-4 py-3 font-medium">Trạng thái</th>
+                      <th className="px-4 py-3 font-medium">Ngày tạo</th>
+                      <th className="px-4 py-3 text-right font-medium">Hành động</th>
                     </tr>
                   </thead>
                   <tbody>
                     {users.map((u) => (
                       <tr key={u.id} className="border-b border-border last:border-0">
-                        <td className="max-w-[200px] truncate px-4 py-3">{u.email}</td>
+                        <td className="max-w-[200px] truncate px-4 py-3">{u.login_name}</td>
                         <td className="px-4 py-3">{u.username}</td>
-                        <td className="px-4 py-3">{u.quiz_count}</td>
                         <td className="px-4 py-3">
                           <Badge
                             variant="outline"
@@ -217,11 +301,11 @@ export default function UserManagement() {
                                 : 'border-emerald-500/30 bg-emerald-500/15 text-emerald-300',
                             )}
                           >
-                            {u.is_banned ? 'banned' : 'active'}
+                            {u.is_banned ? 'Đã khóa' : 'Hoạt động'}
                           </Badge>
                         </td>
                         <td className="px-4 py-3 text-sm text-muted-foreground">
-                          {new Date(u.created_at).toLocaleDateString()}
+                          {new Date(u.created_at).toLocaleDateString('vi-VN')}
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex justify-end gap-2">
@@ -243,6 +327,58 @@ export default function UserManagement() {
             </Card>
           </>
         )}
+
+        <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Tạo nhân viên</DialogTitle>
+              <DialogDescription>
+                Tạo tài khoản nội bộ. Email không bắt buộc và nhân viên không thể tự đăng ký.
+              </DialogDescription>
+            </DialogHeader>
+            {createError && <AppAlert variant="error">{createError}</AppAlert>}
+            <form id="create-employee-form" onSubmit={createUser}>
+              <Input
+                id="employee-login-name"
+                label="Tên đăng nhập"
+                autoComplete="off"
+                maxLength={64}
+                pattern="[A-Za-z0-9._-]+"
+                hint="Chỉ dùng chữ cái không dấu, số, dấu chấm, gạch dưới hoặc gạch ngang."
+                required
+                value={loginName}
+                onChange={(event) => setLoginName(event.target.value)}
+              />
+              <Input
+                id="employee-full-name"
+                label="Họ tên"
+                autoComplete="off"
+                maxLength={100}
+                required
+                value={username}
+                onChange={(event) => setUsername(event.target.value)}
+              />
+              <Input
+                id="employee-initial-password"
+                label="Mật khẩu ban đầu"
+                type="password"
+                autoComplete="new-password"
+                minLength={6}
+                required
+                value={initialPassword}
+                onChange={(event) => setInitialPassword(event.target.value)}
+              />
+            </form>
+            <DialogFooter>
+              <Button type="button" variant="ghost" onClick={() => setCreateOpen(false)}>
+                Hủy
+              </Button>
+              <Button type="submit" form="create-employee-form" disabled={creating}>
+                {creating ? 'Đang tạo…' : 'Tạo nhân viên'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </MainContent>
     </Page>
   );

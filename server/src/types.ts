@@ -197,7 +197,8 @@ export interface DbPlayer {
 
 export interface DbUser {
   id: number;
-  email: string;
+  login_name: string | null;
+  email: string | null;
   username: string;
   password_hash: string;
   is_banned: number;
@@ -260,6 +261,7 @@ export interface DbAssignmentMember {
   id: number;
   assignment_id: number;
   user_id: number | null;
+  login_name_snapshot: string | null;
   display_name_snapshot: string;
   email_snapshot: string;
   assigned_at_ms: number;
@@ -270,6 +272,7 @@ export interface DbAssignmentAttempt {
   assignment_id: number;
   assignment_member_id: number | null;
   user_id: number | null;
+  participant_login_name: string | null;
   participant_name: string;
   participant_email: string;
   attempt_number: number;

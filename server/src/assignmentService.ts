@@ -35,6 +35,10 @@ export class AssignmentServiceError extends Error {
   }
 }
 
+function userLoginName(user: DbUser): string {
+  return user.login_name?.trim() || user.email?.trim() || `user-${user.id}`;
+}
+
 export interface AssignmentDraftInput {
   quizId: number;
   title: string;
@@ -310,12 +314,13 @@ export async function setAssignmentMembers(
       const displayName = user.play_display_name?.trim() || user.username;
       await database.run(
         `INSERT INTO assignment_members
-          (assignment_id, user_id, display_name_snapshot, email_snapshot, assigned_at_ms)
-         VALUES (?, ?, ?, ?, ?)`,
+          (assignment_id, user_id, login_name_snapshot, display_name_snapshot, email_snapshot, assigned_at_ms)
+         VALUES (?, ?, ?, ?, ?, ?)`,
         assignmentId,
         user.id,
+        userLoginName(user),
         displayName,
-        user.email,
+        user.email ?? '',
         now,
       );
     }
@@ -470,9 +475,12 @@ export async function publishAssignment(
       const user = await database.get<DbUser>('SELECT * FROM users WHERE id = ?', [member.user_id]);
       if (!user) throw new AssignmentServiceError('An assigned user no longer exists', 409);
       await database.run(
-        'UPDATE assignment_members SET display_name_snapshot = ?, email_snapshot = ? WHERE id = ?',
+        `UPDATE assignment_members
+         SET login_name_snapshot = ?, display_name_snapshot = ?, email_snapshot = ?
+         WHERE id = ?`,
+        userLoginName(user),
         user.play_display_name?.trim() || user.username,
-        user.email,
+        user.email ?? '',
         member.id,
       );
     }
@@ -1023,12 +1031,13 @@ export async function startOrResumeAttempt(
     if (!member && assignment.audience_mode === 'open') {
       const result = await database.run(
         `INSERT INTO assignment_members
-          (assignment_id, user_id, display_name_snapshot, email_snapshot, assigned_at_ms)
-         VALUES (?, ?, ?, ?, ?)`,
+          (assignment_id, user_id, login_name_snapshot, display_name_snapshot, email_snapshot, assigned_at_ms)
+         VALUES (?, ?, ?, ?, ?, ?)`,
         assignment.id,
         user.id,
+        userLoginName(user),
         user.play_display_name?.trim() || user.username,
-        user.email,
+        user.email ?? '',
         nowMs,
       );
       member = (await database.get<DbAssignmentMember>(
@@ -1041,15 +1050,16 @@ export async function startOrResumeAttempt(
     const attemptNumber = (used?.count ?? 0) + 1;
     const result = await database.run(
       `INSERT INTO assignment_attempts (
-        assignment_id, assignment_member_id, user_id, participant_name, participant_email,
+        assignment_id, assignment_member_id, user_id, participant_login_name, participant_name, participant_email,
         attempt_number, status, current_question_index, current_question_started_at_ms,
         started_at_ms, last_activity_at_ms
-      ) VALUES (?, ?, ?, ?, ?, ?, 'in_progress', 0, ?, ?, ?)`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, 'in_progress', 0, ?, ?, ?)`,
       assignment.id,
       member.id,
       user.id,
+      member.login_name_snapshot || userLoginName(user),
       member.display_name_snapshot,
-      member.email_snapshot,
+      member.email_snapshot || '',
       attemptNumber,
       nowMs,
       nowMs,

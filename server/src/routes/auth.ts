@@ -1,16 +1,14 @@
 import bcrypt from 'bcrypt';
 import { type Request, type Response, Router } from 'express';
-import { config } from '../config';
 import { db, getRankedPlayers } from '../db';
 import { getRequestUser, requireAuth, signToken } from '../middleware';
 import { hashPassword, MIN_PASSWORD_LENGTH } from '../passwords';
 import { savePlayProfile } from '../playProfile';
 import type { DbQuestion, DbSession, DbUser } from '../types';
+import { authenticateInternalUser } from '../userAccounts';
 import { isUserBanned, parseQuestionRow } from '../utils';
 
 export const authRouter = Router();
-
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function signUserToken(user: { id: number; username: string }): string {
   return signToken({ id: user.id, role: 'user', username: user.username });
@@ -34,64 +32,23 @@ async function trySuperAdminLogin(identifier: string, password: string): Promise
   return null;
 }
 
-function emailMatchesAllowedDomain(email: string): boolean {
-  const domain = config.allowedDomain;
-  if (!domain) return false;
-  return email.toLowerCase().endsWith(`@${domain.toLowerCase()}`);
-}
-
 // ─── Register ─────────────────────────────────────────────────────────────────
 
-authRouter.post('/register', async (req: Request, res: Response) => {
-  const { email, password, username } = req.body as {
-    email: string;
-    password: string;
-    username?: string;
-  };
-
-  const cleanEmail = (email ?? '').trim().toLowerCase();
-  if (!EMAIL_RE.test(cleanEmail)) {
-    return res.status(400).json({ error: 'Invalid email address' });
-  }
-  if (!emailMatchesAllowedDomain(cleanEmail)) {
-    const d = config.allowedDomain || '(none configured)';
-    return res.status(403).json({ error: `Registration is restricted to @${d} email addresses` });
-  }
-  if (!password || password.length < MIN_PASSWORD_LENGTH) {
-    return res.status(400).json({ error: 'Password must be at least 6 characters' });
-  }
-  const cleanUsername = (username ?? '').trim().slice(0, 32);
-  if (!cleanUsername) {
-    return res.status(400).json({ error: 'Username is required' });
-  }
-
-  try {
-    const existing = await db.get('SELECT id FROM users WHERE email = ?', cleanEmail);
-    if (existing) {
-      return res.status(409).json({ error: 'An account with this email already exists' });
-    }
-    const hash = await hashPassword(password);
-    const result = await db.run(
-      'INSERT INTO users (email, username, password_hash) VALUES (?, ?, ?)',
-      cleanEmail,
-      cleanUsername,
-      hash,
-    );
-    const userId = Number(result.lastID);
-    const token = signUserToken({ id: userId, username: cleanUsername });
-    res.status(201).json({ token });
-  } catch (error) {
-    console.error('Register error:', error);
-    res.status(500).json({ error: 'Registration failed' });
-  }
+authRouter.post('/register', (_req: Request, res: Response) => {
+  res.status(403).json({ error: 'Self-registration is disabled. Contact an administrator.' });
 });
 
 // ─── Login ────────────────────────────────────────────────────────────────────
 
 authRouter.post('/login', async (req: Request, res: Response) => {
-  const { email, password } = req.body as { email: string; password: string };
-  const identifier = (email ?? '').trim();
-  const cleanEmail = identifier.toLowerCase();
+  const body = (req.body ?? {}) as {
+    identifier?: string;
+    loginName?: string;
+    email?: string;
+    password?: string;
+  };
+  const identifier = (body.identifier ?? body.loginName ?? body.email ?? '').trim();
+  const password = body.password ?? '';
 
   try {
     const adminToken = await trySuperAdminLogin(identifier, password);
@@ -99,17 +56,14 @@ authRouter.post('/login', async (req: Request, res: Response) => {
       return res.json({ token: adminToken });
     }
 
-    const user = await db.get<DbUser>('SELECT * FROM users WHERE email = ?', cleanEmail);
-    if (!user) {
+    const result = await authenticateInternalUser(db, identifier, password);
+    if (!result.ok && result.reason === 'invalid_credentials') {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
-    if (isUserBanned(user.is_banned)) {
+    if (!result.ok) {
       return res.status(403).json({ error: 'This account has been banned' });
     }
-    const valid = await bcrypt.compare(password, user.password_hash);
-    if (!valid) {
-      return res.status(401).json({ error: 'Invalid credentials' });
-    }
+    const { user } = result;
     const token = signUserToken({ id: user.id, username: user.username });
     res.json({ token });
   } catch (error) {
@@ -137,6 +91,7 @@ authRouter.get('/me', requireAuth, async (req, res) => {
       role: 'super_admin',
       id: 0,
       username: user.username,
+      loginName: user.username,
       email: null,
     });
   }
@@ -153,6 +108,7 @@ authRouter.get('/me', requireAuth, async (req, res) => {
     role: 'user',
     id: row.id,
     username: row.username,
+    loginName: row.login_name ?? row.email ?? '',
     email: row.email,
     playDisplayName: row.play_display_name ?? null,
     playAvatar: row.play_avatar ?? null,
@@ -249,9 +205,7 @@ authRouter.get('/play-history/:sessionId', requireAuth, async (req, res) => {
   );
   if (!player) return res.status(404).json({ error: 'Not found' });
 
-  const session = await db.get<
-    DbSession & { quiz_title: string }
-  >(
+  const session = await db.get<DbSession & { quiz_title: string }>(
     `SELECT s.*, q.title as quiz_title
      FROM sessions s JOIN quizzes q ON q.id = s.quiz_id
      WHERE s.id = ?`,

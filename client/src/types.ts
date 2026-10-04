@@ -48,6 +48,7 @@ export interface AdminAssignmentMember {
   id: number;
   assignment_id: number;
   user_id: number | null;
+  login_name_snapshot: string | null;
   display_name_snapshot: string;
   email_snapshot: string;
   assigned_at_ms: number;
@@ -171,7 +172,8 @@ export interface AssignmentParticipantReportRow {
   memberId: number;
   userId: number | null;
   name: string;
-  email: string;
+  loginName: string;
+  email: string | null;
   status: AssignmentAttemptStatus | 'not_started';
   selectedAttemptId: number | null;
   attempts: AssignmentAttemptReportRow[];
@@ -244,7 +246,7 @@ export interface AssignmentAttemptQuestionDetail {
 
 export interface AssignmentAttemptDetail {
   assignment: { id: number; title: string; reviewAvailable: boolean };
-  participant: { name: string; email: string };
+  participant: { name: string; loginName: string; email: string | null };
   attempt: AssignmentAttemptReportRow;
   questions: AssignmentAttemptQuestionDetail[];
 }
@@ -263,7 +265,8 @@ export interface AssignmentQuestionDetail {
   participants: Array<{
     memberId: number;
     name: string;
-    email: string;
+    loginName: string;
+    email: string | null;
     attemptId: number | null;
     attemptNumber: number | null;
     attemptStatus: AssignmentAttemptStatus | 'not_started';
@@ -276,6 +279,7 @@ export interface AssignmentQuestionDetail {
 
 export interface AuthUser {
   id: number;
+  loginName: string;
   email: string | null;
   username: string;
   playDisplayName?: string | null;
@@ -284,7 +288,8 @@ export interface AuthUser {
 
 export interface UserAccount {
   id: number;
-  email: string;
+  login_name: string;
+  email: string | null;
   username: string;
   is_banned: number;
   created_at: string;

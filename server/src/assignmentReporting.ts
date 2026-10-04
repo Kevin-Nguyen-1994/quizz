@@ -44,7 +44,8 @@ export interface ParticipantReportRow {
   memberId: number;
   userId: number | null;
   name: string;
-  email: string;
+  loginName: string;
+  email: string | null;
   status: DbAssignmentAttempt['status'] | 'not_started';
   selectedAttemptId: number | null;
   attempts: AttemptReportRow[];
@@ -123,7 +124,8 @@ export interface AttemptDetailDto {
   };
   participant: {
     name: string;
-    email: string;
+    loginName: string;
+    email: string | null;
   };
   attempt: AttemptReportRow;
   questions: AttemptQuestionDetail[];
@@ -302,7 +304,8 @@ export function buildAssignmentReport(data: LoadedReportData): AssignmentReportD
       memberId: member.id,
       userId: member.user_id,
       name: member.display_name_snapshot,
-      email: member.email_snapshot,
+      loginName: member.login_name_snapshot?.trim() || member.email_snapshot || '',
+      email: member.email_snapshot || null,
       status: selected?.status ?? 'not_started',
       selectedAttemptId: selected?.id ?? null,
       attempts: [...memberAttempts]
@@ -499,7 +502,11 @@ function buildAttemptDetail(
   );
   return {
     assignment: { id: assignment.id, title: assignment.title, reviewAvailable },
-    participant: { name: attempt.participant_name, email: attempt.participant_email },
+    participant: {
+      name: attempt.participant_name,
+      loginName: attempt.participant_login_name?.trim() || attempt.participant_email || '',
+      email: attempt.participant_email || null,
+    },
     attempt: calculateAttemptMetrics(attempt, questions, answers, true),
     questions: presentedQuestions.map((question, index) => {
       const answer = answerByQuestion.get(question.id);
@@ -590,7 +597,8 @@ export async function getAdminQuestionDetail(
       return {
         memberId: member.id,
         name: member.display_name_snapshot,
-        email: member.email_snapshot,
+        loginName: member.login_name_snapshot?.trim() || member.email_snapshot || '',
+        email: member.email_snapshot || null,
         attemptId: selected?.id ?? null,
         attemptNumber: selected?.attempt_number ?? null,
         attemptStatus: selected?.status ?? 'not_started',
@@ -677,7 +685,8 @@ export async function buildAssignmentCsv(
   }
   const headers = [
     'Assignment',
-    'Participant',
+    'Login name',
+    'Participant name',
     'Email',
     'Attempt number',
     'Attempt status',
@@ -728,6 +737,7 @@ export async function buildAssignmentCsv(
         const answer = answerMap.get(question.id);
         rows.push([
           data.assignment.title,
+          member.login_name_snapshot?.trim() || member.email_snapshot || '',
           member.display_name_snapshot,
           member.email_snapshot,
           attempt?.attempt_number ?? '',

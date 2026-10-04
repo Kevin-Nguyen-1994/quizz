@@ -12,6 +12,7 @@
     "build": "pnpm -r build",
     "start": "pnpm --filter server start",
     "typecheck": "pnpm -r typecheck",
+    "test": "pnpm --filter server test",
     "lint": "biome lint .",
     "format": "biome format --write .",
     "check": "biome check --write ."

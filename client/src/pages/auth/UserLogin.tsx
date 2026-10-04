@@ -44,7 +44,7 @@ export default function UserLogin() {
               </span>
             )}
           </AppLogo>
-          <Subtitle className="mt-2">Sign in to create and host quizzes</Subtitle>
+          <Subtitle className="mt-2">Đăng nhập hệ thống đào tạo nội bộ</Subtitle>
         </div>
 
         {error && <AppAlert variant="error">{error}</AppAlert>}
@@ -52,17 +52,17 @@ export default function UserLogin() {
         <form onSubmit={handleSubmit}>
           <Input
             id="identifier"
-            label="Email or username"
+            label="Tên đăng nhập"
             type="text"
             autoComplete="username"
-            placeholder="you@company.com"
+            placeholder="Ví dụ: LOG01"
             required
             value={identifier}
             onChange={(e) => setIdentifier(e.target.value)}
           />
           <Input
             id="password"
-            label="Password"
+            label="Mật khẩu"
             type="password"
             autoComplete="current-password"
             placeholder="••••••••"
@@ -77,15 +77,12 @@ export default function UserLogin() {
             size="lg"
             className="mt-2 w-full"
           >
-            {loading ? 'Signing in…' : 'Sign in'}
+            {loading ? 'Đang đăng nhập…' : 'Đăng nhập'}
           </Button>
         </form>
 
-        <p className="text-center text-muted-foreground text-sm mt-4">
-          No account? <Link to="/register">Register</Link>
-        </p>
         <p className="text-center text-muted-foreground text-sm mt-2">
-          <Link to="/play">Join a game</Link> · <Link to="/">Home</Link>
+          <Link to="/play">Tham gia Live Game</Link> · <Link to="/">Trang chủ</Link>
         </p>
       </AuthCard>
     </PageCenter>

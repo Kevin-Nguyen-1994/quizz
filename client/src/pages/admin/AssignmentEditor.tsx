@@ -105,7 +105,9 @@ export default function AssignmentEditor() {
     const query = search.trim().toLocaleLowerCase('vi');
     if (!query) return users;
     return users.filter((user) =>
-      `${user.username} ${user.email}`.toLocaleLowerCase('vi').includes(query),
+      `${user.username} ${user.login_name} ${user.email ?? ''}`
+        .toLocaleLowerCase('vi')
+        .includes(query),
     );
   }, [search, users]);
   const selectedQuiz = quizzes.find((quiz) => quiz.id === Number(quizId));
@@ -384,7 +386,7 @@ export default function AssignmentEditor() {
                 <Input
                   value={search}
                   onChange={(event) => setSearch(event.target.value)}
-                  placeholder="Tìm theo tên hoặc email"
+                  placeholder="Tìm theo họ tên hoặc tên đăng nhập"
                   className="pl-9"
                 />
               </div>
@@ -406,7 +408,8 @@ export default function AssignmentEditor() {
                       <span className="min-w-0">
                         <strong className="block truncate text-sm">{user.username}</strong>
                         <span className="block truncate text-xs text-muted-foreground">
-                          {user.email}
+                          {user.login_name}
+                          {user.email ? ` · ${user.email}` : ''}
                         </span>
                       </span>
                     </label>
