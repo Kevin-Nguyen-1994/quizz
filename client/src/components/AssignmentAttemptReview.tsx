@@ -96,21 +96,29 @@ function QuestionCard({ question }: { question: AssignmentAttemptQuestionDetail 
 export function AssignmentAttemptReview({ detail }: { detail: AssignmentAttemptDetail }) {
   return (
     <div className="space-y-4">
-      <div className="grid gap-2 rounded-lg bg-muted p-4 text-sm sm:grid-cols-4">
+      <div className="grid gap-2 rounded-lg bg-muted p-4 text-sm sm:grid-cols-3 lg:grid-cols-6">
         <div>
           <span className="block text-xs text-muted-foreground">Lượt</span>#
           {detail.attempt.attemptNumber}
         </div>
         <div>
-          <span className="block text-xs text-muted-foreground">Đúng / Sai</span>
-          {detail.attempt.correct} / {detail.attempt.wrong}
+          <span className="block text-xs text-muted-foreground">Đúng</span>
+          {detail.attempt.correct}
+        </div>
+        <div>
+          <span className="block text-xs text-muted-foreground">Sai</span>
+          {detail.attempt.incorrect}
+        </div>
+        <div>
+          <span className="block text-xs text-muted-foreground">Bỏ câu</span>
+          {detail.attempt.noAnswer}
         </div>
         <div>
           <span className="block text-xs text-muted-foreground">Điểm</span>
           {detail.attempt.score}/{detail.attempt.maxScore} ({detail.attempt.scorePercent}%)
         </div>
         <div>
-          <span className="block text-xs text-muted-foreground">Thời gian trả lời</span>
+          <span className="block text-xs text-muted-foreground">Thời gian làm thực tế</span>
           {formatDurationMs(detail.attempt.activeAnsweringTimeMs)}
         </div>
       </div>

@@ -30,7 +30,7 @@ export interface AttemptReportRow {
   startedAtMs: number;
   completedAtMs: number | null;
   correct: number;
-  wrong: number;
+  incorrect: number;
   noAnswer: number;
   score: number;
   maxScore: number;
@@ -246,7 +246,8 @@ function calculateAttemptMetrics(
   const questionById = new Map(questions.map((question) => [question.id, question]));
   const answered = answers.filter((answer) => answer.status === 'answered');
   const timedOut = answers.filter((answer) => answer.status === 'timed_out');
-  const correct = answers.filter((answer) => answer.is_correct === 1).length;
+  const correct = answered.filter((answer) => answer.is_correct === 1).length;
+  const incorrect = answered.filter((answer) => answer.is_correct === 0).length;
   const recordedQuestionIds = new Set(answers.map((answer) => answer.assignment_question_id));
   const missingFinalAnswers =
     attempt.status === 'completed' || attempt.status === 'expired'
@@ -271,7 +272,7 @@ function calculateAttemptMetrics(
     startedAtMs: attempt.started_at_ms,
     completedAtMs: attempt.completed_at_ms,
     correct,
-    wrong: Math.max(0, questions.length - correct),
+    incorrect,
     noAnswer: timedOut.length + missingFinalAnswers,
     score,
     maxScore,
@@ -343,20 +344,29 @@ export function buildAssignmentReport(data: LoadedReportData): AssignmentReportD
     );
   }
   const questionRows = questions.map<QuestionReportRow>((question, index) => {
+    let sampleSize = 0;
     let answeredCount = 0;
     let correct = 0;
     let incorrect = 0;
+    let noAnswer = 0;
     let scoreTotal = 0;
     const responseTimes: number[] = [];
     for (const member of members) {
       const selected = selectedByMember.get(member.id);
       const answer = selected ? answerMaps.get(selected.id)?.get(question.id) : undefined;
       if (answer?.status === 'answered') {
+        sampleSize++;
         answeredCount++;
         scoreTotal += answer.score;
         if (answer.is_correct === 1) correct++;
         else incorrect++;
         if (answer.response_time_ms !== null) responseTimes.push(answer.response_time_ms);
+      } else if (
+        answer?.status === 'timed_out' ||
+        (selected && (selected.status === 'completed' || selected.status === 'expired'))
+      ) {
+        sampleSize++;
+        noAnswer++;
       }
     }
     return {
@@ -364,14 +374,14 @@ export function buildAssignmentReport(data: LoadedReportData): AssignmentReportD
       questionNumber: index + 1,
       text: question.text,
       questionType: question.question_type,
-      sampleSize: members.length,
+      sampleSize,
       answered: answeredCount,
       correct,
       incorrect,
-      noAnswer: members.length - answeredCount,
-      correctRate: members.length > 0 ? round((correct / members.length) * 100) : 0,
+      noAnswer,
+      correctRate: sampleSize > 0 ? round((correct / sampleSize) * 100) : 0,
       correctRateAmongAnswered: answeredCount > 0 ? round((correct / answeredCount) * 100) : null,
-      averageScore: members.length > 0 ? round(scoreTotal / members.length) : 0,
+      averageScore: sampleSize > 0 ? round(scoreTotal / sampleSize) : 0,
       maxScore: question.base_score,
       averageResponseTimeMs: average(responseTimes),
       timeLimitSec: question.time_sec,

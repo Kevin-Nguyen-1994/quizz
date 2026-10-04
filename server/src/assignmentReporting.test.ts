@@ -242,8 +242,12 @@ describe('assignment reporting', () => {
     const selected = an?.attempts.find((attempt) => attempt.isSelected);
     assert.equal(selected?.attemptNumber, 1);
     assert.equal(selected?.correct, 1);
-    assert.equal(selected?.wrong, 3);
+    assert.equal(selected?.incorrect, 1);
     assert.equal(selected?.noAnswer, 2);
+    assert.equal(
+      (selected?.correct ?? 0) + (selected?.incorrect ?? 0) + (selected?.noAnswer ?? 0),
+      4,
+    );
     assert.equal(selected?.score, 150);
     assert.equal(selected?.scorePercent, 37.5);
     assert.equal(selected?.elapsedTimeMs, 10_000);
@@ -251,19 +255,100 @@ describe('assignment reporting', () => {
     assert.equal(selected?.averageResponseTimeMs, 1_500);
 
     const firstQuestion = report.questions.find((question) => question.questionNumber === 1);
-    assert.equal(firstQuestion?.sampleSize, 4);
+    assert.equal(firstQuestion?.sampleSize, 3);
     assert.equal(firstQuestion?.answered, 3);
     assert.equal(firstQuestion?.correct, 1);
     assert.equal(firstQuestion?.incorrect, 2);
-    assert.equal(firstQuestion?.noAnswer, 1);
-    assert.equal(firstQuestion?.correctRate, 25);
+    assert.equal(firstQuestion?.noAnswer, 0);
+    assert.equal(firstQuestion?.correctRate, 33.33);
     assert.equal(firstQuestion?.correctRateAmongAnswered, 33.33);
-    assert.equal(firstQuestion?.averageScore, 25);
+    assert.equal(firstQuestion?.averageScore, 33.33);
 
     const partialQuestion = report.questions.find((question) => question.questionNumber === 2);
     assert.equal(partialQuestion?.correct, 0);
     assert.equal(partialQuestion?.incorrect, 1);
-    assert.equal(partialQuestion?.averageScore, 12.5);
+    assert.equal(partialQuestion?.noAnswer, 1);
+    assert.equal(partialQuestion?.averageScore, 25);
+  });
+
+  it('separates answered-incorrect from no-answer for a finished six-question attempt', async () => {
+    const now = Date.now();
+    const assignment = await databaseModule.db.run(
+      `INSERT INTO assignments (
+        owner_kind, title, access_code, opens_at_ms, status, max_attempts,
+        result_policy, review_policy, shuffle_questions, shuffle_options,
+        created_at_ms, updated_at_ms, published_at_ms
+      ) VALUES ('admin', 'Semantics test', 'semantics-test', ?, 'closed', 1,
+        'highest_score', 'after_close', 0, 0, ?, ?, ?)`,
+      now - 10_000,
+      now - 20_000,
+      now - 20_000,
+      now - 20_000,
+    );
+    const semanticsAssignmentId = Number(assignment.lastID);
+    const questionIds: number[] = [];
+    for (let index = 0; index < 6; index++) {
+      const question = await databaseModule.db.run(
+        `INSERT INTO assignment_questions (
+          assignment_id, text, options, correct_index, base_score, time_sec,
+          order_index, question_type
+        ) VALUES (?, ?, '["A","B"]', 0, 100, 10, ?, 'multiple_choice')`,
+        semanticsAssignmentId,
+        `Câu ${index + 1}`,
+        index,
+      );
+      questionIds.push(Number(question.lastID));
+    }
+    const member = await databaseModule.db.run(
+      `INSERT INTO assignment_members (
+        assignment_id, user_id, display_name_snapshot, email_snapshot, assigned_at_ms
+      ) VALUES (?, ?, 'An', 'an@example.com', ?)`,
+      semanticsAssignmentId,
+      userA,
+      now - 20_000,
+    );
+    const attempt = await databaseModule.db.run(
+      `INSERT INTO assignment_attempts (
+        assignment_id, assignment_member_id, user_id, participant_name, participant_email,
+        attempt_number, status, started_at_ms, completed_at_ms, last_activity_at_ms,
+        correct_count, total_score
+      ) VALUES (?, ?, ?, 'An', 'an@example.com', 1, 'completed', ?, ?, ?, 0, 0)`,
+      semanticsAssignmentId,
+      member.lastID,
+      userA,
+      now - 10_000,
+      now,
+      now,
+    );
+    for (let index = 0; index < 6; index++) {
+      await databaseModule.db.run(
+        `INSERT INTO attempt_answers (
+          attempt_id, assignment_question_id, status, chosen_index, is_correct, score,
+          question_started_at_ms, response_time_ms, answered_at_ms
+        ) VALUES (?, ?, ?, ?, 0, 0, ?, ?, ?)`,
+        attempt.lastID,
+        questionIds[index],
+        index < 3 ? 'answered' : 'timed_out',
+        index < 3 ? 1 : null,
+        now - 9_000,
+        index < 3 ? 1_000 : 10_000,
+        now - 8_000,
+      );
+    }
+
+    const report = await reporting.getAssignmentReport(
+      { id: 0, role: 'super_admin' },
+      semanticsAssignmentId,
+    );
+    const metrics = report.participants[0].attempts[0];
+    assert.equal(metrics.correct, 0);
+    assert.equal(metrics.incorrect, 3);
+    assert.equal(metrics.noAnswer, 3);
+    assert.equal(metrics.correct + metrics.incorrect + metrics.noAnswer, 6);
+    assert.equal(report.questions[0].incorrect, 1);
+    assert.equal(report.questions[0].noAnswer, 0);
+    assert.equal(report.questions[3].incorrect, 0);
+    assert.equal(report.questions[3].noAnswer, 1);
   });
 
   it('selects attempts according to result_policy', () => {

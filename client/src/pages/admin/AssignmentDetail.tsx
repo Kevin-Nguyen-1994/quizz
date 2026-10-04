@@ -339,16 +339,24 @@ export default function AssignmentDetail() {
             value={`${number(overview.averageScorePercent)}%`}
           />
           <MetricCard
-            label="Thời gian hoàn thành TB"
-            value={formatDurationMs(overview.averageElapsedTimeMs)}
+            label="Thời gian làm thực tế TB"
+            value={formatDurationMs(overview.averageActiveAnsweringTimeMs)}
+            note="Tổng thời gian xử lý câu hỏi; câu hết giờ tính theo giới hạn thời gian."
           />
           <MetricCard
-            label="Thời gian trả lời thực tế TB"
-            value={formatDurationMs(overview.averageActiveAnsweringTimeMs)}
+            label="Từ bắt đầu đến nộp TB"
+            value={formatDurationMs(overview.averageElapsedTimeMs)}
+            note="Bao gồm cả thời gian nhân viên rời khỏi bài."
           />
         </div>
 
         <h2 className="mb-3 text-xl">Kết quả theo nhân viên</h2>
+        <p className="mb-3 text-sm text-muted-foreground">
+          <strong>Từ bắt đầu đến nộp</strong> bao gồm thời gian rời khỏi bài.{' '}
+          <strong>Thời gian làm thực tế</strong> là tổng thời gian xử lý câu hỏi, trong đó câu hết
+          giờ tính theo giới hạn. <strong>Trả lời TB/câu</strong> chỉ tính các câu thực sự đã trả
+          lời.
+        </p>
         {participantRows.length === 0 ? (
           <Card className="mb-7">
             <CardContent className="p-8 text-center text-muted-foreground">
@@ -372,9 +380,18 @@ export default function AssignmentDetail() {
                     <th className="px-3 py-3">Điểm</th>
                     <th className="px-3 py-3">Tối đa</th>
                     <th className="px-3 py-3">%</th>
-                    <th className="px-3 py-3">Thời gian hoàn thành</th>
-                    <th className="px-3 py-3">Trả lời thực tế</th>
-                    <th className="px-3 py-3">Phản hồi TB</th>
+                    <th className="px-3 py-3" title="Bao gồm cả thời gian nhân viên rời khỏi bài">
+                      Từ bắt đầu đến nộp
+                    </th>
+                    <th
+                      className="px-3 py-3"
+                      title="Tổng thời gian xử lý câu hỏi; câu hết giờ tính theo giới hạn thời gian"
+                    >
+                      Thời gian làm thực tế
+                    </th>
+                    <th className="px-3 py-3" title="Chỉ tính các câu thực sự đã trả lời">
+                      Trả lời TB/câu
+                    </th>
                     <th className="px-3 py-3" />
                   </tr>
                 </thead>
@@ -415,8 +432,8 @@ export default function AssignmentDetail() {
                         {dateTime(attempt?.completedAtMs ?? null)}
                       </td>
                       <td className="px-3 py-3">{attempt?.correct ?? 0}</td>
-                      <td className="px-3 py-3">{attempt?.wrong ?? assignment.questionCount}</td>
-                      <td className="px-3 py-3">{attempt?.noAnswer ?? assignment.questionCount}</td>
+                      <td className="px-3 py-3">{attempt?.incorrect ?? 0}</td>
+                      <td className="px-3 py-3">{attempt?.noAnswer ?? 0}</td>
                       <td className="px-3 py-3">{attempt?.score ?? 0}</td>
                       <td className="px-3 py-3">{attempt?.maxScore ?? assignment.maxScore}</td>
                       <td className="px-3 py-3">{number(attempt?.scorePercent ?? 0)}%</td>
@@ -471,7 +488,9 @@ export default function AssignmentDetail() {
                     <th className="px-3 py-3">Tỷ lệ đúng</th>
                     <th className="px-3 py-3">Điểm TB</th>
                     <th className="px-3 py-3">Tối đa</th>
-                    <th className="px-3 py-3">Phản hồi TB</th>
+                    <th className="px-3 py-3" title="Chỉ tính các câu thực sự đã trả lời">
+                      Trả lời TB/câu
+                    </th>
                     <th className="px-3 py-3">Giới hạn</th>
                     <th className="px-3 py-3" />
                   </tr>

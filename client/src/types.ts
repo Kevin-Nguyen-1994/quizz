@@ -158,7 +158,7 @@ export interface AssignmentAttemptReportRow {
   startedAtMs: number;
   completedAtMs: number | null;
   correct: number;
-  wrong: number;
+  incorrect: number;
   noAnswer: number;
   score: number;
   maxScore: number;
