@@ -216,9 +216,9 @@ export default function GameControl() {
 
   const endGame = useCallback(async () => {
     const ok = await confirm({
-      title: 'End game?',
-      message: 'This ends the game now and shows the final scores.',
-      confirmText: 'End game',
+      title: 'Kết thúc trò chơi?',
+      message: 'Phiên chơi sẽ kết thúc ngay và hiển thị bảng điểm cuối cùng.',
+      confirmText: 'Kết thúc trò chơi',
       variant: 'danger',
     });
     if (!ok) return;
@@ -253,9 +253,9 @@ export default function GameControl() {
   );
 
   const modalPlayerName =
-    players.find((p) => p.id === modalPlayerId)?.username ?? `Player #${modalPlayerId}`;
+    players.find((p) => p.id === modalPlayerId)?.username ?? `Người chơi #${modalPlayerId}`;
 
-  if (!sessionState) return <PageLoading message="Connecting…" />;
+  if (!sessionState) return <PageLoading message="Đang kết nối…" />;
 
   const pin = sessionState.session.pin;
   const totalQ = sessionState.questionCount;

@@ -1,10 +1,10 @@
 import { ArrowRight, BarChart3 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { MainContent, Page, Subtitle } from '@/components/layout';
+import { EmptyState, MainContent, Page, PageHeader } from '@/components/layout';
 import { StatusBadge } from '@/components/StatusBadge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card } from '@/components/ui/card';
 import CreatorNav from '../../components/CreatorNav';
 import { CompactSessionList } from '../../components/UserGroupCompactLists';
 import { UserGroupPanel } from '../../components/UserGroupPanel';
@@ -62,17 +62,17 @@ export default function History() {
           <StatusBadge status={s.status} />
         </td>
         <td className="px-4 py-3 text-sm text-muted-foreground">
-          {s.started_at ? new Date(s.started_at).toLocaleString() : '—'}
+          {s.started_at ? new Date(s.started_at).toLocaleString('vi-VN') : '—'}
         </td>
         <td className="px-4 py-3 text-sm text-muted-foreground">
-          {dur != null ? `${Math.floor(dur / 60)}m ${dur % 60}s` : '—'}
+          {dur != null ? `${Math.floor(dur / 60)} phút ${dur % 60} giây` : '—'}
         </td>
         <td className="px-4 py-3">
           {s.status === 'finished' ? (
             <Button variant="ghost" size="sm" asChild>
               <Link to={`${basePath}/sessions/${s.id}`}>
                 <span className="flex items-center gap-1.5">
-                  Results <ArrowRight className="size-4" />
+                  Xem kết quả <ArrowRight className="size-4" />
                 </span>
               </Link>
             </Button>
@@ -80,7 +80,7 @@ export default function History() {
             <Button size="sm" asChild>
               <Link to={`${basePath}/game/${s.id}`}>
                 <span className="flex items-center gap-1.5">
-                  Resume <ArrowRight className="size-4" />
+                  Tiếp tục <ArrowRight className="size-4" />
                 </span>
               </Link>
             </Button>
@@ -96,12 +96,12 @@ export default function History() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border text-left text-muted-foreground">
-              <th className="px-4 py-3 font-medium">Quiz</th>
+              <th className="px-4 py-3 font-medium">Bộ câu hỏi</th>
               <th className="px-4 py-3 font-medium">PIN</th>
-              <th className="px-4 py-3 font-medium">Players</th>
-              <th className="px-4 py-3 font-medium">Status</th>
-              <th className="px-4 py-3 font-medium">Started</th>
-              <th className="px-4 py-3 font-medium">Duration</th>
+              <th className="px-4 py-3 font-medium">Người chơi</th>
+              <th className="px-4 py-3 font-medium">Trạng thái</th>
+              <th className="px-4 py-3 font-medium">Bắt đầu</th>
+              <th className="px-4 py-3 font-medium">Thời lượng</th>
               <th className="px-4 py-3 font-medium" />
             </tr>
           </thead>
@@ -115,16 +115,10 @@ export default function History() {
     <Page>
       <CreatorNav />
       <MainContent>
-        <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
-          <div>
-            <h1>{showGroupedByUser ? 'All Game History' : 'Game History'}</h1>
-            <Subtitle>
-              {sessions.length} sessions total
-              {showGroupedByUser && sessionGroups.length > 0
-                ? ` · ${sessionGroups.length} user${sessionGroups.length !== 1 ? 's' : ''}`
-                : ''}
-            </Subtitle>
-          </div>
+        <PageHeader
+          title="Lịch sử Live Game"
+          description={`${sessions.length} phiên${showGroupedByUser && sessionGroups.length > 0 ? ` · ${sessionGroups.length} người tổ chức` : ''}`}
+          actions={
           <div className="flex flex-wrap gap-2">
             {(['all', 'active', 'waiting', 'finished'] as const).map((f) => (
               <Button
@@ -134,24 +128,17 @@ export default function History() {
                 size="sm"
                 onClick={() => setFilter(f)}
               >
-                {f.charAt(0).toUpperCase() + f.slice(1)}
+                {{ all: 'Tất cả', active: 'Đang chơi', waiting: 'Đang chờ', finished: 'Đã kết thúc' }[f]}
               </Button>
             ))}
           </div>
-        </div>
+          }
+        />
 
         {loading ? (
-          <p className="text-muted-foreground">Loading…</p>
+          <p className="text-muted-foreground">Đang tải…</p>
         ) : filtered.length === 0 ? (
-          <Card>
-            <CardContent className="px-8 py-12 text-center">
-              <BarChart3 className="mx-auto mb-2.5 size-10 text-muted-foreground" />
-              <h2>No sessions yet</h2>
-              <Subtitle className="mt-2">
-                Start a game from the Dashboard to see history here
-              </Subtitle>
-            </CardContent>
-          </Card>
+          <EmptyState icon={<BarChart3 className="size-10" />} title="Chưa có phiên chơi" description="Bắt đầu Live Game từ trang Bộ câu hỏi để xem lịch sử tại đây." />
         ) : showGroupedByUser ? (
           <div className="flex flex-col gap-4">
             {sessionGroups.map((group, index) => (
@@ -160,7 +147,7 @@ export default function History() {
                 email={group.email}
                 username={group.username}
                 count={group.items.length}
-                countLabel={group.items.length === 1 ? 'session' : 'sessions'}
+                countLabel="phiên"
                 defaultOpen={index === 0}
               >
                 <CompactSessionList items={group.items} basePath={basePath} />

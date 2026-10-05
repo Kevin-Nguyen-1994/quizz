@@ -45,10 +45,10 @@ export function GameResults({
   return (
     <MainContent>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-4">
-        <h2>Results — Q{questionIndex + 1}</h2>
+        <h2>Kết quả — Câu {questionIndex + 1}</h2>
         <div className="flex items-center gap-2">
           <Button type="button" variant="ghost" size="lg" onClick={onEndGame}>
-            End Game
+            Kết thúc trò chơi
           </Button>
           <Button
             type="button"
@@ -58,11 +58,11 @@ export function GameResults({
           >
             {results.isLastQuestion ? (
               <span className="flex items-center gap-1.5">
-                <Flag className="size-4" /> Final Scores
+                <Flag className="size-4" /> Bảng điểm cuối
               </span>
             ) : (
               <span className="flex items-center gap-1.5">
-                Next <ArrowRight className="size-4" />
+                Câu tiếp theo <ArrowRight className="size-4" />
               </span>
             )}
             {results.autoAdvanceSec > 0 && (
@@ -77,7 +77,7 @@ export function GameResults({
           <Card className="mb-4 w-full max-w-4xl border-blue-500/30 bg-blue-500/[0.06]">
             <CardContent className="flex flex-wrap items-center gap-x-3 gap-y-1 p-4">
               <span className="mono-label text-blue-300">
-                Up next · Q{nextPreview.index + 1} of {nextPreview.total}
+                Tiếp theo · Câu {nextPreview.index + 1} / {nextPreview.total}
               </span>
               {nextPreview.mediaType && (
                 <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-500/15 px-2 py-0.5 text-xs font-semibold text-blue-300">
@@ -113,7 +113,7 @@ export function GameResults({
           ) : (
             <div className="pre-reveal">
               <Heart className="pre-reveal-heart" fill="currentColor" />
-              <span>Revealing…</span>
+              <span>Đang hiển thị…</span>
             </div>
           )}
         </CardContent>
@@ -122,7 +122,7 @@ export function GameResults({
       {isClosestTo && closestList.length > 0 && (
         <Card className="mb-4 w-full max-w-4xl">
           <CardContent className="p-6">
-            <h2 className="mb-4">Closest Guesses</h2>
+            <h2 className="mb-4">Dự đoán gần nhất</h2>
             <ClosestGuessesList entries={closestList} limit={10} />
           </CardContent>
         </Card>
@@ -145,10 +145,10 @@ export function GameResults({
                     variant="ghost"
                     size="sm"
                     className="px-2 py-0.5 text-[0.7rem] text-destructive"
-                    title="Remove points for this question"
+                    title="Trừ điểm của câu hỏi này"
                     onClick={() => onRemovePoints(e.playerId, results.questionId)}
                   >
-                    Remove pts
+                    Trừ điểm
                   </Button>
                 )}
                 <Button
@@ -156,7 +156,7 @@ export function GameResults({
                   variant="ghost"
                   size="sm"
                   className="px-1.5 py-0.5 text-[0.8rem]"
-                  title="View all answers"
+                  title="Xem tất cả câu trả lời"
                   onClick={() => onOpenPlayerAnswers(e.playerId)}
                 >
                   ...

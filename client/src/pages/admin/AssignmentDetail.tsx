@@ -253,13 +253,13 @@ export default function AssignmentDetail() {
             </div>
             <h1>{assignment.title}</h1>
             <Subtitle className="mt-1">
-              Quiz: {assignment.quizTitle ?? 'Quiz nguồn đã xóa'} · {assignment.questionCount} câu ·
+              Bộ câu hỏi: {assignment.quizTitle ?? 'Bộ câu hỏi nguồn đã xóa'} · {assignment.questionCount} câu ·
               Tối đa {assignment.maxScore} điểm
             </Subtitle>
           </div>
           <div className="flex flex-wrap gap-2">
             <Button variant="secondary" disabled={busy} onClick={exportCsv}>
-              <Download className="size-4" /> Xuất kết quả CSV
+              <Download className="size-4" /> Xuất báo cáo CSV
             </Button>
             {assignment.status === 'draft' && (
               <Button asChild>
@@ -371,7 +371,7 @@ export default function AssignmentDetail() {
                   <tr className="border-b border-border text-left text-muted-foreground">
                     <th className="px-3 py-3">Họ tên / Tên đăng nhập</th>
                     <th className="px-3 py-3">Trạng thái</th>
-                    <th className="px-3 py-3">Attempt</th>
+                    <th className="px-3 py-3">Lượt làm</th>
                     <th className="px-3 py-3">Bắt đầu</th>
                     <th className="px-3 py-3">Hoàn thành</th>
                     <th className="px-3 py-3">Đúng</th>

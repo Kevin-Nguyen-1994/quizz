@@ -9,13 +9,13 @@ export const ALL_TYPES = Object.keys(QUESTION_TYPE_META) as QuestionType[];
 
 /** Short tag shown on the slide-rail thumbnail. */
 export const TYPE_SHORT: Record<QuestionType, string> = {
-  multiple_choice: 'Quiz',
-  multi_select: 'Multi',
-  true_false: 'T/F',
-  open_text: 'Text',
-  closest_to: 'Slider',
-  fill_blank: 'Blank',
-  ordering: 'Order',
-  geo: 'Map',
-  matching: 'Match',
+  multiple_choice: '1 đáp án',
+  multi_select: 'Nhiều đáp án',
+  true_false: 'Đ/S',
+  open_text: 'Trả lời ngắn',
+  closest_to: 'Số gần đúng',
+  fill_blank: 'Điền trống',
+  ordering: 'Sắp xếp',
+  geo: 'Bản đồ',
+  matching: 'Nối cặp',
 };

@@ -1,10 +1,10 @@
 import { Copy, Plus } from 'lucide-react';
 import { type FormEvent, useCallback, useEffect, useState } from 'react';
 import { AppAlert } from '@/components/AppAlert';
-import { MainContent, Page, Subtitle } from '@/components/layout';
+import { EmptyState, MainContent, Page, PageHeader } from '@/components/layout';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card } from '@/components/ui/card';
 import {
   Dialog,
   DialogContent,
@@ -112,6 +112,15 @@ export default function UserManagement() {
   }, [load]);
 
   async function banUser(id: number) {
+    const selected = users.find((user) => user.id === id);
+    const proceed = await confirm({
+      title: `Khóa nhân viên ${selected?.username ?? `#${id}`}?`,
+      message: 'Nhân viên sẽ không thể đăng nhập cho đến khi được mở khóa.',
+      confirmText: 'Khóa nhân viên',
+      cancelText: 'Hủy',
+      variant: 'danger',
+    });
+    if (!proceed) return;
     setActionId(id);
     await api.post(`/api/admin/users/${id}/ban`);
     setActionId(null);
@@ -128,7 +137,7 @@ export default function UserManagement() {
   async function resetUserPassword(id: number) {
     const selected = users.find((user) => user.id === id);
     const proceed = await confirm({
-      title: 'Đặt lại mật khẩu?',
+      title: `Đặt lại mật khẩu cho ${selected?.username ?? `#${id}`}?`,
       message: 'Hệ thống sẽ tạo mật khẩu mới và chỉ hiển thị một lần.',
       confirmText: 'Tạo mật khẩu mới',
     });
@@ -145,8 +154,9 @@ export default function UserManagement() {
   }
 
   async function deleteUser(id: number) {
+    const selected = users.find((user) => user.id === id);
     const ok = await confirm({
-      title: 'Xóa nhân viên?',
+      title: `Xóa nhân viên ${selected?.username ?? `#${id}`}?`,
       message: 'Các quiz của tài khoản sẽ được giữ lại nhưng không còn chủ sở hữu.',
       confirmText: 'Xóa',
       variant: 'danger',
@@ -191,12 +201,10 @@ export default function UserManagement() {
     <Page>
       <AdminNav />
       <MainContent>
-        <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <h1>Quản lý nhân viên</h1>
-            <Subtitle>Quản lý tài khoản nội bộ được phép đăng nhập TiL Quiz</Subtitle>
-          </div>
-          <Button
+        <PageHeader
+          title="Quản lý nhân viên"
+          description="Quản lý tài khoản nhân viên sử dụng TiL Quiz."
+          actions={<Button
             type="button"
             onClick={() => {
               setCreateError('');
@@ -204,8 +212,8 @@ export default function UserManagement() {
             }}
           >
             <Plus className="size-4" /> Tạo nhân viên
-          </Button>
-        </div>
+          </Button>}
+        />
 
         {error && <AppAlert variant="error">{error}</AppAlert>}
         {resetPassword && (
@@ -231,11 +239,7 @@ export default function UserManagement() {
         {loading ? (
           <p className="text-muted-foreground">Đang tải…</p>
         ) : users.length === 0 ? (
-          <Card>
-            <CardContent className="px-6 py-12 text-center">
-              <p className="text-muted-foreground">Chưa có tài khoản nhân viên.</p>
-            </CardContent>
-          </Card>
+          <EmptyState title="Chưa có nhân viên" description="Tạo tài khoản để giao bài kiểm tra và theo dõi kết quả." />
         ) : (
           <>
             <ul className="divide-y divide-border rounded-xl border border-border md:hidden">

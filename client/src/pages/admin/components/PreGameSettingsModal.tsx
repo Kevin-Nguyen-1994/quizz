@@ -38,19 +38,19 @@ export function PreGameSettingsModal({ config, onConfirm, onCancel }: Props) {
     <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 p-6">
       <Card className="z-[201] max-h-[90vh] w-full max-w-lg overflow-y-auto">
         <CardContent className="p-6">
-          <h2 className="mb-1">Game Settings</h2>
+          <h2 className="mb-1">Cài đặt phiên chơi</h2>
           <p className="mb-5 text-sm text-muted-foreground">
-            These settings apply to this game only and won&apos;t change your defaults.
+            Các cài đặt này chỉ áp dụng cho phiên chơi này và không thay đổi mặc định hệ thống.
           </p>
 
           <div className="flex flex-col gap-5">
             <IntegerInput
               id="pass-joker-score"
-              label="Pass joker score"
+              label="Điểm khi dùng quyền bỏ qua"
               min={0}
               value={baseScore}
               onValueChange={setBaseScore}
-              hint="Points awarded to each player when the Pass joker is used"
+              hint="Điểm cộng cho mỗi người chơi khi dùng quyền bỏ qua"
             />
 
             <div className="space-y-3">
@@ -61,14 +61,14 @@ export function PreGameSettingsModal({ config, onConfirm, onCancel }: Props) {
                   onCheckedChange={(v) => setStreakEnabled(v === true)}
                 />
                 <Label htmlFor="streak-enabled" className="font-semibold">
-                  Enable streak bonus
+                  Bật thưởng chuỗi trả lời đúng
                 </Label>
               </div>
               {streakEnabled && (
                 <div className="pl-7">
                   <IntegerInput
                     id="streak-base-score"
-                    label="Points per streak level above minimum"
+                    label="Điểm mỗi cấp chuỗi trên mức tối thiểu"
                     min={0}
                     value={streakBase}
                     onValueChange={setStreakBase}
@@ -81,10 +81,10 @@ export function PreGameSettingsModal({ config, onConfirm, onCancel }: Props) {
             <Separator />
 
             <div>
-              <h3 className="mb-1 font-semibold">Jokers</h3>
+              <h3 className="mb-1 font-semibold">Quyền trợ giúp</h3>
               <p className="mb-4 text-sm text-muted-foreground">
-                Activate jokers from the game control panel during gameplay. Each joker can be used
-                once per game.
+                Kích hoạt quyền trợ giúp từ bảng điều khiển trong khi chơi. Mỗi quyền chỉ dùng một
+                lần trong một phiên.
               </p>
               <div className="flex flex-col gap-4">
                 <div className="flex items-start gap-3">
@@ -96,10 +96,10 @@ export function PreGameSettingsModal({ config, onConfirm, onCancel }: Props) {
                   />
                   <div>
                     <Label htmlFor="pass-joker" className="font-semibold">
-                      Pass
+                      Bỏ qua
                     </Label>
                     <p className="text-sm text-muted-foreground">
-                      Allow players to skip the current question and award base score once
+                      Cho phép bỏ qua câu hiện tại và nhận điểm cơ bản một lần
                     </p>
                   </div>
                 </div>
@@ -115,7 +115,7 @@ export function PreGameSettingsModal({ config, onConfirm, onCancel }: Props) {
                       50/50
                     </Label>
                     <p className="text-sm text-muted-foreground">
-                      Allow players to eliminate 2 wrong answers once (multiple choice only)
+                      Loại hai đáp án sai một lần (chỉ áp dụng câu một đáp án)
                     </p>
                   </div>
                 </div>
@@ -125,7 +125,7 @@ export function PreGameSettingsModal({ config, onConfirm, onCancel }: Props) {
 
           <div className="mt-6 flex gap-2">
             <Button type="button" variant="ghost" className="flex-1" onClick={onCancel}>
-              Cancel
+              Hủy
             </Button>
             <Button
               type="button"
@@ -133,7 +133,7 @@ export function PreGameSettingsModal({ config, onConfirm, onCancel }: Props) {
               className="flex-1"
               onClick={() => onConfirm(defaultSettings)}
             >
-              Use defaults
+              Dùng mặc định
             </Button>
             <Button
               type="button"
@@ -141,7 +141,7 @@ export function PreGameSettingsModal({ config, onConfirm, onCancel }: Props) {
               className="flex-1"
               onClick={() => onConfirm(currentSettings)}
             >
-              Start →
+              Bắt đầu →
             </Button>
           </div>
         </CardContent>

@@ -37,18 +37,18 @@ export function MediaZone({ q, ops, allow, label }: Props) {
       {hasBrokenMedia ? (
         <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-destructive/60 bg-destructive/5 p-6">
           <span className="flex items-center gap-2 text-sm font-semibold text-destructive">
-            <TriangleAlert className="size-4" /> Unsupported media link
+            <TriangleAlert className="size-4" /> Liên kết media không được hỗ trợ
           </span>
           <code className="max-w-full truncate text-xs text-muted-foreground">{q.mediaUrl}</code>
           <span className="text-xs text-muted-foreground">
-            Only YouTube links play in the game — replace it or remove it.
+            Chỉ liên kết YouTube có thể phát trong trò chơi. Hãy thay thế hoặc xóa liên kết này.
           </span>
           <div className="flex gap-2">
             <Button type="button" size="sm" variant="secondary" onClick={() => setPickerOpen(true)}>
               Replace
             </Button>
             <Button type="button" size="sm" variant="destructive" onClick={() => ops.clearMedia()}>
-              Remove
+              Xóa
             </Button>
           </div>
         </div>
@@ -57,7 +57,7 @@ export function MediaZone({ q, ops, allow, label }: Props) {
           {hasImage && (
             <QuestionImage
               src={q.imageUrl}
-              alt="Question media"
+              alt="Media của câu hỏi"
               className="mx-auto max-h-[320px] w-full object-contain"
             />
           )}
@@ -71,7 +71,7 @@ export function MediaZone({ q, ops, allow, label }: Props) {
               Replace
             </Button>
             <Button type="button" size="sm" variant="destructive" onClick={() => ops.clearMedia()}>
-              Remove
+              Xóa
             </Button>
           </div>
         </div>
@@ -85,10 +85,10 @@ export function MediaZone({ q, ops, allow, label }: Props) {
             <ImagePlus className="size-6" />
           </span>
           <span className="text-sm font-semibold text-foreground">
-            {label ?? 'Add an image, GIF, video or audio'}
+            {label ?? 'Thêm ảnh, GIF, video hoặc âm thanh'}
           </span>
           <span className="text-xs text-muted-foreground">
-            Search providers or paste a link — no upload needed
+            Tìm nội dung hoặc dán liên kết, không cần tải tệp lên
           </span>
         </button>
       )}

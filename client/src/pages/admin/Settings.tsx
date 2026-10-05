@@ -1,7 +1,7 @@
 import { Check, Lock, Pencil, Smile, Target, Timer, Trash2, Upload } from 'lucide-react';
 import { type ChangeEvent, useEffect, useState } from 'react';
 import { AppAlert } from '@/components/AppAlert';
-import { FormRow, MainContent, Page, PageLoading, Subtitle } from '@/components/layout';
+import { FormRow, MainContent, Page, PageHeader, PageLoading } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { Input as FileInput } from '@/components/ui/input';
 import { invalidateAvatarCache } from '@/lib/avatars';
@@ -15,11 +15,11 @@ import type { AppConfig } from '../../types';
 import { SettingsFieldGroup, SettingsSection, SettingsToggle } from './components/SettingsSection';
 
 const NAV_SECTIONS = [
-  { id: 'branding', label: 'Branding', icon: Pencil },
-  { id: 'gameplay', label: 'Gameplay', icon: Timer },
-  { id: 'scoring', label: 'Scoring', icon: Target },
-  { id: 'avatars', label: 'Avatars', icon: Smile },
-  { id: 'security', label: 'Security', icon: Lock },
+  { id: 'branding', label: 'Giao diện', icon: Pencil },
+  { id: 'gameplay', label: 'Live Game', icon: Timer },
+  { id: 'scoring', label: 'Tính điểm', icon: Target },
+  { id: 'avatars', label: 'Ảnh đại diện', icon: Smile },
+  { id: 'security', label: 'Bảo mật', icon: Lock },
 ] as const;
 
 function computeSpeedBonus(position: number, totalPlayers: number, max: number, min: number) {
@@ -27,29 +27,23 @@ function computeSpeedBonus(position: number, totalPlayers: number, max: number, 
   return Math.max(Math.round(max - (max - min) * (position / (totalPlayers - 1))), min);
 }
 
-function ordinal(n: number): string {
-  const s = ['th', 'st', 'nd', 'rd'];
-  const v = n % 100;
-  return n + (s[(v - 20) % 10] || s[v] || s[0]);
-}
-
 function SpeedBonusPreview({ max, min }: { max: number; min: number }) {
   const examples = [5, 10, 20];
   return (
     <div className="rounded-lg border border-border bg-muted/30 p-4 mt-4">
       <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">
-        Speed bonus preview
+        Xem trước điểm thưởng tốc độ
       </p>
       <div className="flex flex-wrap gap-4 text-sm">
         {examples.map((n) => (
           <div key={n} className="flex flex-col gap-0.5">
-            <strong>{n} players</strong>
+            <strong>{n} người chơi</strong>
             {Array.from({ length: Math.min(n, 5) }, (_, i) => {
               const bonus = computeSpeedBonus(i, n, max, min);
               return (
                 // biome-ignore lint/suspicious/noArrayIndexKey: stable list based on player count
                 <span key={i}>
-                  {ordinal(i + 1)} = {bonus}
+                  Hạng {i + 1} = {bonus}
                   {i < Math.min(n, 5) - 1 ? ', ' : ''}
                 </span>
               );
@@ -57,7 +51,7 @@ function SpeedBonusPreview({ max, min }: { max: number; min: number }) {
             {n > 5 && (
               <span className="text-muted-foreground">
                 {' '}
-                … {ordinal(n)} = {computeSpeedBonus(n - 1, n, max, min)}
+                … hạng {n} = {computeSpeedBonus(n - 1, n, max, min)}
               </span>
             )}
           </div>
@@ -74,7 +68,7 @@ function BrandingPreview({ appName, appSubtitle }: { appName: string; appSubtitl
   return (
     <div className="rounded-lg border border-border bg-muted/30 p-4 mt-4">
       <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">
-        Join screen preview
+        Xem trước màn hình tham gia
       </p>
       <div className="py-4 text-center">
         <div className="text-xl font-extrabold bg-gradient-to-br from-blue-600 to-blue-400 bg-clip-text text-transparent">
@@ -131,7 +125,7 @@ export default function Settings() {
       })
       .catch(() => {
         setAvailableAvatars([]);
-        setAvatarsError('Could not load current avatars.');
+        setAvatarsError('Không thể tải danh sách ảnh đại diện hiện tại.');
       });
 
     if (isSuperAdmin) {
@@ -146,11 +140,11 @@ export default function Settings() {
 
   async function changePassword() {
     if (!currentPassword) {
-      await alert({ message: 'Please enter your current password' });
+      await alert({ message: 'Vui lòng nhập mật khẩu hiện tại.' });
       return;
     }
     if (!newPassword && !newUsername) {
-      await alert({ message: 'Please enter a new password or username to change' });
+      await alert({ message: 'Vui lòng nhập tên đăng nhập hoặc mật khẩu mới.' });
       return;
     }
 
@@ -163,19 +157,19 @@ export default function Settings() {
       const { ok, data } = await api.post<{ error?: string }>('/api/admin/change-password', body);
 
       if (!ok) {
-        await alert({ message: data?.error || 'Failed to change password' });
+        await alert({ message: data?.error || 'Không thể đổi thông tin đăng nhập.' });
         return;
       }
 
       await alert({
-        title: 'Password changed',
-        message: 'Please log in again.',
+        title: 'Đã cập nhật thông tin đăng nhập',
+        message: 'Vui lòng đăng nhập lại.',
       });
       await logout();
       window.location.href = '/login';
     } catch (error) {
       console.error('Password change failed:', error);
-      await alert({ message: 'Failed to change password' });
+      await alert({ message: 'Không thể đổi thông tin đăng nhập.' });
     } finally {
       setChangingPassword(false);
       setCurrentPassword('');
@@ -190,7 +184,7 @@ export default function Settings() {
     const { ok } = await api.put('/api/admin/config', { ...cfg });
     setSaving(false);
     if (!ok) {
-      await alert({ message: 'Failed to save settings' });
+      await alert({ message: 'Không thể lưu cài đặt.' });
       return;
     }
     setSaved(true);
@@ -237,12 +231,12 @@ export default function Settings() {
 
       setAvatarUploadMessage(
         created > 0
-          ? `Uploaded ${created} new avatar${created === 1 ? '' : 's'}. They will appear in the avatar picker.`
-          : 'Upload completed, but no new avatars were created.',
+          ? `Đã tải lên ${created} ảnh đại diện mới.`
+          : 'Đã tải lên nhưng không tạo được ảnh đại diện mới.',
       );
     } catch (err) {
       console.error(err);
-      setAvatarUploadMessage('Could not upload avatars. Please try again with valid image files.');
+      setAvatarUploadMessage('Không thể tải ảnh đại diện. Vui lòng kiểm tra định dạng tệp.');
     } finally {
       setUploadingAvatars(false);
       e.target.value = '';
@@ -251,9 +245,9 @@ export default function Settings() {
 
   async function handleDeleteAvatar(url: string) {
     const ok = await confirm({
-      title: 'Delete avatar?',
-      message: 'Players who picked this avatar will keep it until they change it.',
-      confirmText: 'Delete',
+      title: 'Xóa ảnh đại diện?',
+      message: 'Người chơi đã chọn ảnh này vẫn giữ ảnh cho đến khi họ thay đổi.',
+      confirmText: 'Xóa ảnh',
       variant: 'danger',
     });
     if (!ok) return;
@@ -264,13 +258,13 @@ export default function Settings() {
     setDeletingAvatar(null);
 
     if (!deleted) {
-      setAvatarUploadMessage(data?.error ?? 'Could not delete avatar.');
+      setAvatarUploadMessage(data?.error ?? 'Không thể xóa ảnh đại diện.');
       return;
     }
 
     setAvailableAvatars((prev) => (prev ?? []).filter((u) => u !== url));
     invalidateAvatarCache();
-    setAvatarUploadMessage('Avatar deleted.');
+    setAvatarUploadMessage('Đã xóa ảnh đại diện.');
   }
 
   function update<K extends keyof AppConfig>(key: K, value: AppConfig[K]) {
@@ -287,30 +281,28 @@ export default function Settings() {
     <Page>
       <AdminNav />
       <MainContent>
-        <header className="flex flex-wrap items-start justify-between gap-4 mb-6">
-          <div>
-            <h1>Settings</h1>
-            <Subtitle>Configure branding, gameplay, scoring, and admin access</Subtitle>
-          </div>
-          <Button type="button" onClick={save} disabled={saving} size="lg">
+        <PageHeader
+          title="Cài đặt"
+          description="Cấu hình giao diện, Live Game, tính điểm và quyền quản trị."
+          actions={<Button type="button" onClick={save} disabled={saving} size="lg">
             {saving ? (
-              'Saving…'
+              'Đang lưu…'
             ) : saved ? (
               <span className="flex items-center gap-1.5">
-                <Check className="size-4" /> Saved!
+                <Check className="size-4" /> Đã lưu
               </span>
             ) : (
-              'Save changes'
+              'Lưu thay đổi'
             )}
-          </Button>
-        </header>
+          </Button>}
+        />
 
-        {saved && <AppAlert variant="success">Settings saved successfully.</AppAlert>}
+        {saved && <AppAlert variant="success">Đã lưu cài đặt thành công.</AppAlert>}
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-[200px_1fr]">
           <nav
-            className="flex gap-1 overflow-x-auto lg:sticky lg:top-20 lg:flex-col lg:self-start"
-            aria-label="Settings sections"
+            className="grid grid-cols-2 gap-1 sm:grid-cols-5 lg:sticky lg:top-20 lg:flex lg:flex-col lg:self-start"
+            aria-label="Các nhóm cài đặt"
           >
             {NAV_SECTIONS.map(({ id, label, icon: Icon }) => (
               <a
@@ -328,23 +320,23 @@ export default function Settings() {
             <SettingsSection
               id="branding"
               icon={Pencil}
-              title="Branding"
-              description="Customise how the app appears on the player join screen."
+              title="Giao diện"
+              description="Tùy chỉnh tên và nội dung hiển thị trên màn hình tham gia."
             >
               <Input
-                label="Organisation / event name"
-                placeholder="e.g. Scaleway (leave blank for default)"
+                label="Tên tổ chức / sự kiện"
+                placeholder="Để trống để dùng TiL Quiz"
                 value={cfg.appName ?? ''}
                 onChange={(e) => update('appName', e.target.value)}
-                hint='Shown as your primary application name — leave blank to show TiL Quiz'
+                hint="Tên chính của ứng dụng; để trống để hiển thị TiL Quiz."
               />
               <Input
-                label="Join page subtitle"
-                placeholder="e.g. Đào tạo & Kiểm tra nội bộ"
+                label="Mô tả trang tham gia"
+                placeholder="Ví dụ: Đào tạo & Kiểm tra nội bộ"
                 value={cfg.appSubtitle ?? ''}
                 onChange={(e) => update('appSubtitle', e.target.value)}
                 noMargin
-                hint="Displayed below the logo on the join screen. Leave blank to hide."
+                hint="Hiển thị dưới tên ứng dụng; để trống để ẩn."
               />
               <BrandingPreview appName={cfg.appName ?? ''} appSubtitle={cfg.appSubtitle ?? ''} />
             </SettingsSection>
@@ -352,19 +344,19 @@ export default function Settings() {
             <SettingsSection
               id="gameplay"
               icon={Timer}
-              title="Gameplay"
-              description="Default timing and session limits for new games."
+              title="Live Game"
+              description="Thời gian và giới hạn mặc định cho phiên chơi mới."
             >
               <FormRow>
                 <IntegerInput
-                  label="Question time (seconds)"
+                  label="Thời gian mỗi câu (giây)"
                   min={5}
                   max={120}
                   value={cfg.questionTimeSec ?? 20}
                   onValueChange={(value) => update('questionTimeSec', value)}
                 />
                 <IntegerInput
-                  label="Max players per session"
+                  label="Số người chơi tối đa"
                   min={2}
                   max={500}
                   value={cfg.maxPlayersPerSession ?? 50}
@@ -373,12 +365,12 @@ export default function Settings() {
               </FormRow>
 
               <SettingsFieldGroup
-                title="Results screen"
-                description="How long to show results before auto-advancing. Set to 0 for manual-only (admin clicks Next)."
+                title="Màn hình kết quả"
+                description="Thời gian hiển thị trước khi tự chuyển. Đặt 0 để quản trị viên tự chuyển."
               >
                 <IntegerInput
                   id="results-auto-advance-sec"
-                  label="Duration (seconds)"
+                  label="Thời lượng (giây)"
                   min={0}
                   max={60}
                   value={cfg.resultsAutoAdvanceSec ?? 5}
@@ -388,13 +380,13 @@ export default function Settings() {
               </SettingsFieldGroup>
 
               <SettingsFieldGroup
-                title="Post-game"
-                description="What to show on the final podium screen after a game ends."
+                title="Sau trò chơi"
+                description="Nội dung hiển thị sau khi phiên chơi kết thúc."
               >
                 <SettingsToggle
                   id="choose-quiz-maker"
-                  label="Pick the next quiz maker"
-                  description="On the final podium, show a picker where you check players and spin to randomly choose who makes the next quiz."
+                  label="Chọn người tạo bộ câu hỏi tiếp theo"
+                  description="Hiển thị công cụ chọn ngẫu nhiên một người chơi trên màn hình tổng kết."
                   checked={cfg.chooseQuizMaker ?? false}
                   onChange={(v) => update('chooseQuizMaker', v)}
                 />
@@ -404,12 +396,12 @@ export default function Settings() {
             <SettingsSection
               id="scoring"
               icon={Target}
-              title="Scoring"
-              description="Points awarded for correct answers, speed, and streaks."
+              title="Tính điểm"
+              description="Điểm cho câu trả lời đúng, tốc độ và chuỗi trả lời đúng."
             >
-              <SettingsFieldGroup title="Base score">
+              <SettingsFieldGroup title="Điểm cơ bản">
                 <IntegerInput
-                  label="Default base score per question"
+                  label="Điểm cơ bản mỗi câu"
                   min={0}
                   step={50}
                   value={cfg.defaultBaseScore ?? 500}
@@ -419,12 +411,12 @@ export default function Settings() {
               </SettingsFieldGroup>
 
               <SettingsFieldGroup
-                title="Speed bonus"
-                description="Extra points for correct answers based on answer order. 1st correct gets max, last gets min."
+                title="Điểm thưởng tốc độ"
+                description="Thưởng thêm theo thứ tự trả lời đúng; người đúng đầu tiên nhận mức cao nhất."
               >
                 <FormRow>
                   <IntegerInput
-                    label="Max bonus (1st correct)"
+                    label="Thưởng tối đa (đúng đầu tiên)"
                     min={0}
                     step={10}
                     value={cfg.speedBonusMax ?? 200}
@@ -432,7 +424,7 @@ export default function Settings() {
                     noMargin
                   />
                   <IntegerInput
-                    label="Min bonus (last correct)"
+                    label="Thưởng tối thiểu (đúng cuối cùng)"
                     min={0}
                     step={5}
                     value={cfg.speedBonusMin ?? 10}
@@ -444,34 +436,34 @@ export default function Settings() {
               </SettingsFieldGroup>
 
               <SettingsFieldGroup
-                title="Streak bonus"
-                description="Reward players who answer correctly multiple times in a row."
+                title="Thưởng chuỗi trả lời đúng"
+                description="Thưởng người chơi trả lời đúng nhiều câu liên tiếp."
               >
                 <SettingsToggle
                   id="streakEnabled"
-                  label="Enable streak bonus"
-                  description="Adds bonus points on consecutive correct answers"
+                  label="Bật thưởng chuỗi"
+                  description="Cộng thêm điểm khi trả lời đúng liên tiếp."
                   checked={streakEnabled}
                   onChange={(checked) => update('streakBonusEnabled', checked)}
                 />
                 <FormRow>
                   <IntegerInput
-                    label="Streak starts at"
+                    label="Bắt đầu thưởng từ"
                     min={2}
                     max={10}
                     value={cfg.streakMinimum ?? 2}
                     onValueChange={(value) => update('streakMinimum', value)}
                     disabled={!streakEnabled}
-                    hint="Minimum consecutive correct answers before bonus kicks in"
+                    hint="Số câu đúng liên tiếp tối thiểu để bắt đầu nhận thưởng."
                   />
                   <IntegerInput
-                    label="Bonus per streak level"
+                    label="Điểm mỗi cấp chuỗi"
                     min={0}
                     step={10}
                     value={cfg.streakBonusBase ?? 50}
                     onValueChange={(value) => update('streakBonusBase', value)}
                     disabled={!streakEnabled}
-                    hint="e.g. 50 → 3-streak: +50, 4-streak: +100…"
+                    hint="Ví dụ 50 → chuỗi 3: +50, chuỗi 4: +100…"
                     noMargin
                   />
                 </FormRow>
@@ -481,11 +473,12 @@ export default function Settings() {
             <SettingsSection
               id="avatars"
               icon={Smile}
-              title="Avatar library"
-              description="Upload emoji-style images for players to pick as avatars."
+              title="Thư viện ảnh đại diện"
+              description="Tải ảnh để người chơi chọn làm ảnh đại diện."
             >
-              <label className="flex cursor-pointer flex-col items-center gap-2 rounded-xl border-2 border-dashed border-border bg-muted/20 p-8 transition hover:border-blue-500/50 hover:bg-muted/40">
+              <label htmlFor="avatar-upload" className="flex cursor-pointer flex-col items-center gap-2 rounded-xl border-2 border-dashed border-border bg-muted/20 p-8 transition hover:border-blue-500/50 hover:bg-muted/40">
                 <FileInput
+                  id="avatar-upload"
                   type="file"
                   accept="image/*"
                   multiple
@@ -495,10 +488,10 @@ export default function Settings() {
                 />
                 <Upload className="size-10 text-muted-foreground" aria-hidden />
                 <span className="font-semibold">
-                  {uploadingAvatars ? 'Uploading…' : 'Click to upload avatars'}
+                  {uploadingAvatars ? 'Đang tải lên…' : 'Bấm để tải ảnh đại diện'}
                 </span>
                 <span className="text-center text-xs text-muted-foreground">
-                  PNG, JPG, GIF, SVG, or WebP — square images around 128×128 work best
+                  PNG, JPG, GIF, SVG hoặc WebP · ảnh vuông khoảng 128×128 hiển thị tốt nhất
                 </span>
               </label>
 
@@ -508,14 +501,14 @@ export default function Settings() {
                 </AppAlert>
               )}
 
-              <SettingsFieldGroup title="Available avatars">
+              <SettingsFieldGroup title="Ảnh đại diện hiện có">
                 {availableAvatars === null && !avatarsError && (
-                  <p className="text-sm text-muted-foreground">Loading current avatars…</p>
+                  <p className="text-sm text-muted-foreground">Đang tải ảnh đại diện…</p>
                 )}
                 {avatarsError && <p className="text-sm text-muted-foreground">{avatarsError}</p>}
                 {availableAvatars && availableAvatars.length === 0 && !avatarsError && (
                   <p className="text-sm text-muted-foreground">
-                    No avatars yet. Upload some above to populate the library.
+                    Chưa có ảnh đại diện. Hãy tải ảnh lên ở khu vực phía trên.
                   </p>
                 )}
                 {availableAvatars && availableAvatars.length > 0 && (
@@ -528,7 +521,7 @@ export default function Settings() {
                         <img src={url} alt="" className="h-full w-full object-cover" />
                         <button
                           type="button"
-                          aria-label="Delete avatar"
+                          aria-label="Xóa ảnh đại diện"
                           disabled={deletingAvatar === url}
                           onClick={() => handleDeleteAvatar(url)}
                           className={cn(
@@ -548,22 +541,22 @@ export default function Settings() {
             <SettingsSection
               id="security"
               icon={Lock}
-              title="Security"
+              title="Bảo mật"
               description={
                 isSuperAdmin
-                  ? 'Manage database admin accounts.'
-                  : 'Update your admin username and password.'
+                  ? 'Quản lý tài khoản quản trị lưu trong cơ sở dữ liệu.'
+                  : 'Cập nhật tên đăng nhập và mật khẩu quản trị.'
               }
             >
               {isSuperAdmin ? (
                 <>
                   <AppAlert variant="warn" className="mb-4">
-                    You are logged in as super admin. Your password is managed via the{' '}
-                    <code>ADMIN_PASSWORD</code> environment variable.
+                    Bạn đang đăng nhập bằng tài khoản quản trị hệ thống. Mật khẩu được quản lý qua
+                    biến môi trường <code>ADMIN_PASSWORD</code>.
                   </AppAlert>
 
                   {dbAdmins.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">No database admins found.</p>
+                    <p className="text-sm text-muted-foreground">Không có tài khoản quản trị cơ sở dữ liệu.</p>
                   ) : (
                     <div className="flex flex-col gap-4">
                       {dbAdmins.map((admin) => (
@@ -573,10 +566,10 @@ export default function Settings() {
                         >
                           <div className="pb-2 font-semibold text-sm sm:pb-0">{admin.username}</div>
                           <Input
-                            label="New password"
+                            label="Mật khẩu mới"
                             type="password"
                             autoComplete="new-password"
-                            placeholder="Enter new password"
+                            placeholder="Nhập mật khẩu mới"
                             value={resetPasswords[admin.id] || ''}
                             onChange={(e) =>
                               setResetPasswords((prev) => ({
@@ -598,19 +591,19 @@ export default function Settings() {
                                   { newPassword: resetPasswords[admin.id] },
                                 );
                                 if (ok) {
-                                  await alert({ message: `Password reset for ${admin.username}` });
+                                  await alert({ message: `Đã đặt lại mật khẩu cho ${admin.username}.` });
                                   setResetPasswords((prev) => ({ ...prev, [admin.id]: '' }));
                                 } else {
-                                  await alert({ message: err?.error || 'Reset failed' });
+                                  await alert({ message: err?.error || 'Không thể đặt lại mật khẩu.' });
                                 }
                               } catch {
-                                await alert({ message: 'Reset failed' });
+                                await alert({ message: 'Không thể đặt lại mật khẩu.' });
                               } finally {
                                 setResettingId(null);
                               }
                             }}
                           >
-                            {resettingId === admin.id ? 'Resetting…' : 'Reset'}
+                            {resettingId === admin.id ? 'Đang đặt lại…' : 'Đặt lại'}
                           </Button>
                         </div>
                       ))}
@@ -620,33 +613,33 @@ export default function Settings() {
               ) : (
                 <>
                   <div className="mb-4 rounded-lg border border-border bg-muted/30 p-4">
-                    <p className="mb-1 text-xs text-muted-foreground">Current username</p>
+                    <p className="mb-1 text-xs text-muted-foreground">Tên đăng nhập hiện tại</p>
                     <p className="text-lg font-semibold">{adminUsername || '…'}</p>
                   </div>
 
                   <Input
-                    label="Current password"
+                    label="Mật khẩu hiện tại"
                     type="password"
                     autoComplete="off"
                     value={currentPassword}
                     onChange={(e) => setCurrentPassword(e.target.value)}
-                    placeholder="Required to make changes"
+                    placeholder="Bắt buộc để xác nhận thay đổi"
                   />
                   <Input
-                    label="New username"
+                    label="Tên đăng nhập mới"
                     autoComplete="off"
                     value={newUsername}
                     onChange={(e) => setNewUsername(e.target.value)}
                     placeholder={adminUsername || 'admin'}
-                    hint="Leave blank to keep current username"
+                    hint="Để trống để giữ tên đăng nhập hiện tại."
                   />
                   <Input
-                    label="New password"
+                    label="Mật khẩu mới"
                     type="password"
                     autoComplete="new-password"
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value)}
-                    placeholder="Leave blank to keep current password"
+                    placeholder="Để trống để giữ mật khẩu hiện tại"
                     noMargin
                   />
 
@@ -656,11 +649,11 @@ export default function Settings() {
                     disabled={changingPassword}
                     className="mt-4"
                   >
-                    {changingPassword ? 'Updating…' : 'Update credentials'}
+                    {changingPassword ? 'Đang cập nhật…' : 'Cập nhật thông tin đăng nhập'}
                   </Button>
 
                   <AppAlert variant="warn" className="mt-4">
-                    After changing credentials, you&apos;ll be logged out and need to sign in again.
+                    Sau khi thay đổi, bạn sẽ được đăng xuất và cần đăng nhập lại.
                   </AppAlert>
                 </>
               )}

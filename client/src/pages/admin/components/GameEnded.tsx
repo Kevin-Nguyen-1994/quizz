@@ -52,7 +52,7 @@ export function GameEnded({
       <Card className="mx-auto w-full max-w-xl">
         <CardContent className="p-6">
           <h2 className="mb-4 flex items-center justify-center gap-1.5">
-            <Trophy className="size-4" /> Final Leaderboard
+            <Trophy className="size-4" /> Bảng xếp hạng cuối
           </h2>
           <FinalLeaderboard
             entries={leaderboard}

@@ -76,14 +76,14 @@ export function QuestionTextEditor({ value, onChange }: Props) {
               rows={1}
               value={b.content}
               onChange={(e) => update(b.id, { content: e.target.value })}
-              placeholder={i === 0 ? 'Start typing your question…' : 'More text…'}
+              placeholder={i === 0 ? 'Nhập nội dung câu hỏi…' : 'Nhập thêm nội dung…'}
               className="field-sizing-content w-full resize-none rounded-xl border border-border bg-white/[0.03] px-4 py-3 text-center text-2xl font-extrabold tracking-tight outline-none placeholder:text-muted-foreground focus:border-primary"
             />
             {blocks.length > 1 && (
               <button
                 type="button"
                 onClick={() => remove(b.id)}
-                title="Remove block"
+                title="Xóa khối nội dung"
                 className="absolute right-1.5 top-1.5 hidden h-6 w-6 items-center justify-center rounded-md text-muted-foreground hover:text-destructive group-hover:flex"
               >
                 <X className="size-4" />
@@ -100,13 +100,13 @@ export function QuestionTextEditor({ value, onChange }: Props) {
               <input
                 value={b.lang}
                 onChange={(e) => update(b.id, { lang: e.target.value.trim() })}
-                placeholder="language (optional)"
+                placeholder="ngôn ngữ (không bắt buộc)"
                 className="flex-1 bg-transparent text-xs text-slate-300 outline-none placeholder:text-slate-500"
               />
               <button
                 type="button"
                 onClick={() => remove(b.id)}
-                title="Remove code block"
+                title="Xóa khối mã"
                 className="flex h-6 w-6 items-center justify-center rounded-md text-slate-400 hover:text-rose-400"
               >
                 <X className="size-4" />
@@ -116,7 +116,7 @@ export function QuestionTextEditor({ value, onChange }: Props) {
               rows={2}
               value={b.content}
               onChange={(e) => update(b.id, { content: e.target.value })}
-              placeholder="your code…"
+              placeholder="nhập mã…"
               spellCheck={false}
               className={cn(
                 'field-sizing-content w-full resize-none bg-transparent px-4 py-3',
@@ -129,10 +129,10 @@ export function QuestionTextEditor({ value, onChange }: Props) {
 
       <div className="flex justify-center gap-2 pt-1">
         <Button type="button" variant="ghost" size="sm" onClick={() => add('text')}>
-          <Plus className="size-3.5" /> Text
+          <Plus className="size-3.5" /> Văn bản
         </Button>
         <Button type="button" variant="ghost" size="sm" onClick={() => add('code')}>
-          <Code2 className="size-3.5" /> Code block
+          <Code2 className="size-3.5" /> Khối mã
         </Button>
       </div>
     </div>

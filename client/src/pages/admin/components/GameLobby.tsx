@@ -62,7 +62,7 @@ export function GameLobby({
       </div>
 
       {intro ? (
-        <QuizIntroCard intro={intro} layout="row" typesHeading="Question types" className="mb-9" />
+        <QuizIntroCard intro={intro} layout="row" typesHeading="Loại câu hỏi" className="mb-9" />
       ) : (
         <div className="mb-6">
           <h1>{quizTitle}</h1>
@@ -102,7 +102,7 @@ export function GameLobby({
         <div className="flex max-w-[820px] flex-wrap justify-center gap-[9px]">
           {players.length === 0 ? (
             <p className="text-sm text-muted-foreground">
-              Waiting for players to join
+              Đang chờ người chơi tham gia
               <span className="dots">
                 {' '}
                 <span>.</span>
@@ -157,7 +157,7 @@ export function GameLobby({
           disabled={players.length === 0}
           className="mt-8 rounded-2xl border-none bg-gradient-to-br from-blue-400 to-blue-600 px-8 py-[15px] text-[17px] font-bold text-white shadow-[0_10px_30px_-8px_#3b82f6aa] hover:opacity-95"
         >
-          Start game →
+          Bắt đầu trò chơi →
         </Button>
       </div>
     </MainContent>

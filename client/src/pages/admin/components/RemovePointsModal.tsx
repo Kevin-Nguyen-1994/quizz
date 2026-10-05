@@ -17,20 +17,15 @@ interface Props {
 
 export function RemovePointsModal({ playerName, answers, onClose, onRemovePoints }: Props) {
   return (
-    <div
-      className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 p-6"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-    >
+    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 p-6">
       <Card className="z-[201] max-h-[90vh] w-full max-w-lg overflow-y-auto">
         <CardContent className="p-6">
-          <h2 className="mb-1">Remove Points — {playerName}</h2>
+          <h2 className="mb-1">Trừ điểm — {playerName}</h2>
           <p className="mb-4 text-sm text-muted-foreground">
-            Select a question to remove its points from this player.
+            Chọn câu hỏi cần xóa điểm của người chơi này.
           </p>
 
-          {answers.length === 0 && <p className="text-muted-foreground">No answers found.</p>}
+          {answers.length === 0 && <p className="text-muted-foreground">Không có câu trả lời.</p>}
 
           <div className="flex flex-col gap-2">
             {answers.map((a) => (
@@ -41,7 +36,7 @@ export function RemovePointsModal({ playerName, answers, onClose, onRemovePoints
                 <div className="min-w-0 flex-1">
                   <p className="mb-0.5 text-[0.9rem] font-semibold">{a.questionText}</p>
                   <p className="text-sm text-muted-foreground">
-                    {a.isCorrect ? 'Correct' : 'Wrong'} — {a.score} pts
+                    {a.isCorrect ? 'Đúng' : 'Sai'} — {a.score} điểm
                   </p>
                 </div>
                 <Button
@@ -52,7 +47,7 @@ export function RemovePointsModal({ playerName, answers, onClose, onRemovePoints
                   onClick={() => onRemovePoints(a.questionId)}
                   className="shrink-0 text-destructive disabled:opacity-40"
                 >
-                  Remove
+                  Trừ điểm
                 </Button>
               </div>
             ))}
@@ -60,7 +55,7 @@ export function RemovePointsModal({ playerName, answers, onClose, onRemovePoints
 
           <div className="mt-6 flex gap-2">
             <Button type="button" variant="ghost" className="flex-1" onClick={onClose}>
-              Close
+              Đóng
             </Button>
           </div>
         </CardContent>

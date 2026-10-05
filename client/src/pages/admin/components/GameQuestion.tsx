@@ -44,10 +44,10 @@ export function GameQuestion({
     <MainContent>
       <div className="mb-4 flex flex-wrap items-center justify-end gap-2">
         <Button type="button" size="sm" onClick={onFinishQuestion}>
-          Finish Question
+          Kết thúc câu hỏi
         </Button>
         <Button type="button" variant="ghost" size="sm" onClick={onEndGame}>
-          End Game
+          Kết thúc trò chơi
         </Button>
       </div>
 
@@ -56,7 +56,7 @@ export function GameQuestion({
           {/* Counter row */}
           <div className="mb-4 flex items-center justify-between">
             <span className="mono-label">
-              Question {question.questionIndex + 1} of {question.totalQuestions}
+              Câu {question.questionIndex + 1} / {question.totalQuestions}
             </span>
             <span className="mono-label">{question.timeSec}s</span>
           </div>
@@ -85,7 +85,7 @@ export function GameQuestion({
           <TimerBar timeLeft={timeLeft} totalSec={question.timeSec} className="mb-2 gap-4" />
 
           <div className="mb-6 text-center text-[13px] text-[#64748b]">
-            {answeredCount} / {totalPlayers} answered
+            {answeredCount} / {totalPlayers} đã trả lời
           </div>
 
           {isOptionBased && (
@@ -100,7 +100,7 @@ export function GameQuestion({
           {question.questionType === 'closest_to' && (
             <div className="rounded-xl border border-border bg-muted/50 px-4 py-3 text-center">
               <p className="text-sm text-muted-foreground">
-                Closest-to question — players pick a number from{' '}
+                Câu số gần đúng — người chơi chọn một số từ{' '}
                 <strong>
                   {question.rangeMin ?? 0} to {question.rangeMax ?? 100}
                 </strong>
@@ -117,7 +117,7 @@ export function GameQuestion({
           {question.questionType === 'ordering' && (
             <div className="mx-auto flex w-full max-w-xl flex-col gap-2">
               <p className="mb-1 text-center text-sm text-muted-foreground">
-                Ordering question — players are dragging these into the correct order
+                Câu sắp xếp — người chơi đang kéo các mục theo đúng thứ tự
               </p>
               {options.map((opt, pos) => (
                 <div
@@ -140,7 +140,7 @@ export function GameQuestion({
           {question.questionType === 'matching' && (
             <div className="mx-auto grid w-full max-w-2xl grid-cols-2 gap-6">
               <div className="flex flex-col gap-2">
-                <p className="mb-1 text-center text-xs text-muted-foreground">Left</p>
+                <p className="mb-1 text-center text-xs text-muted-foreground">Vế trái</p>
                 {options.map((opt, i) => (
                   <div
                     // biome-ignore lint/suspicious/noArrayIndexKey: left items may repeat text
@@ -160,7 +160,7 @@ export function GameQuestion({
                 ))}
               </div>
               <div className="flex flex-col gap-2">
-                <p className="mb-1 text-center text-xs text-muted-foreground">Right (shuffled)</p>
+                <p className="mb-1 text-center text-xs text-muted-foreground">Vế phải (đã trộn)</p>
                 {(question.rightOptions ?? []).map((opt, i) => (
                   <div
                     // biome-ignore lint/suspicious/noArrayIndexKey: shuffled right column, values may repeat
@@ -178,7 +178,7 @@ export function GameQuestion({
           {question.questionType === 'geo' && (
             <div className="rounded-xl border border-border bg-muted/50 px-4 py-3 text-center">
               <p className="text-sm text-muted-foreground">
-                Map question — players drop a pin on the map
+                Câu bản đồ — người chơi chọn một vị trí trên bản đồ
               </p>
             </div>
           )}

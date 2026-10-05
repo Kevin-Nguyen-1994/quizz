@@ -36,8 +36,13 @@ export default function CreatorNavBar({
   const { appName } = useApp();
   const [menuOpen, setMenuOpen] = useState(false);
 
-  const active = (path: string) =>
-    cn(navBtn, location.pathname === path && 'bg-muted text-foreground');
+  const active = (path: string) => {
+    const isActive =
+      location.pathname === path ||
+      (path !== basePath && location.pathname.startsWith(`${path}/`)) ||
+      (path === basePath && /\/quiz\/(new|\d+\/edit)$/.test(location.pathname));
+    return cn(navBtn, isActive && 'bg-primary/10 text-primary');
+  };
 
   const links = userNavigation
     ? [
@@ -50,12 +55,11 @@ export default function CreatorNavBar({
         { to: `${basePath}/settings`, label: 'Cài đặt' },
       ]
     : [
-        { to: basePath, label: 'Tổng quan' },
-        { to: `${basePath}/quiz/new`, label: '+ Tạo quiz' },
-        { to: `${basePath}/history`, label: 'Lịch sử' },
+        { to: basePath, label: 'Bộ câu hỏi' },
         ...(showAssignments ? [{ to: `${basePath}/assignments`, label: 'Bài kiểm tra' }] : []),
+        ...(showUsers ? [{ to: `${basePath}/users`, label: 'Nhân viên' }] : []),
+        { to: `${basePath}/history`, label: 'Lịch sử' },
         ...(showMyGames ? [{ to: `${basePath}/my-games`, label: 'Trò chơi của tôi' }] : []),
-        ...(showUsers ? [{ to: `${basePath}/users`, label: 'Quản lý nhân viên' }] : []),
         { to: `${basePath}/settings`, label: 'Cài đặt' },
       ];
 

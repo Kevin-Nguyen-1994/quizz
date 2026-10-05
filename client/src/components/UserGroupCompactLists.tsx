@@ -16,7 +16,7 @@ interface CompactQuizListProps {
 }
 
 function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString(undefined, {
+  return new Date(iso).toLocaleDateString('vi-VN', {
     month: 'short',
     day: 'numeric',
     year: 'numeric',
@@ -33,7 +33,6 @@ export function CompactQuizList({
   onDelete,
   onPreview,
 }: CompactQuizListProps) {
-  const employeeView = basePath === '/u';
   return (
     <ul className="divide-y divide-border">
       {items.map((q) => (
@@ -41,9 +40,7 @@ export function CompactQuizList({
           <div className="min-w-0 flex-1">
             <span className="block truncate font-medium">{q.title}</span>
             <span className="block text-sm text-muted-foreground">
-              {employeeView
-                ? `${q.question_count} câu hỏi`
-                : `${q.question_count} question${q.question_count !== 1 ? 's' : ''}`}{' '}
+              {`${q.question_count} câu hỏi`}{' '}
               ·{' '}
               {formatDate(q.created_at)}
             </span>
@@ -60,7 +57,7 @@ export function CompactQuizList({
                 '…'
               ) : (
                 <>
-                  <Play className="size-4" /> {employeeView ? 'Bắt đầu' : 'Start'}
+                  <Play className="size-4" /> Bắt đầu
                 </>
               )}
             </Button>
@@ -71,19 +68,19 @@ export function CompactQuizList({
                 size="sm"
                 onClick={() => onPreview(q.id)}
                 disabled={previewing === q.id}
-                title={employeeView ? 'Xem trước quiz' : 'Preview how this quiz looks — no session needed'}
+                title="Xem trước bộ câu hỏi mà không tạo phiên chơi"
               >
                 {previewing === q.id ? (
                   '…'
                 ) : (
                   <>
-                    <Eye className="size-4" /> {employeeView ? 'Xem trước' : 'Preview'}
+                    <Eye className="size-4" /> Xem trước
                   </>
                 )}
               </Button>
             )}
             <Button variant="secondary" size="sm" asChild>
-              <Link to={`${basePath}/quiz/${q.id}/edit`}>{employeeView ? 'Sửa' : 'Edit'}</Link>
+              <Link to={`${basePath}/quiz/${q.id}/edit`}>Chỉnh sửa</Link>
             </Button>
             <Button
               type="button"
@@ -91,9 +88,10 @@ export function CompactQuizList({
               size="sm"
               onClick={() => onDelete(q.id)}
               disabled={deleting === q.id}
-              title={employeeView ? 'Xóa quiz' : 'Delete quiz'}
+              title={`Xóa bộ câu hỏi ${q.title}`}
+              className="text-destructive hover:bg-destructive/10"
             >
-              {employeeView ? 'Xóa' : 'Delete'}
+              Xóa
             </Button>
           </div>
         </li>
@@ -124,20 +122,20 @@ export function CompactSessionList({ items, basePath }: CompactSessionListProps)
               <span className="block truncate font-medium">{s.quiz_title}</span>
               <span className="block text-sm text-muted-foreground">
                 PIN <code className="font-mono text-blue-400">{s.pin}</code> · {s.player_count ?? 0}{' '}
-                player{(s.player_count ?? 0) !== 1 ? 's' : ''}
-                {s.started_at ? ` · ${new Date(s.started_at).toLocaleDateString()}` : ''}
-                {dur != null ? ` · ${Math.floor(dur / 60)}m ${dur % 60}s` : ''}
+                người chơi
+                {s.started_at ? ` · ${new Date(s.started_at).toLocaleDateString('vi-VN')}` : ''}
+                {dur != null ? ` · ${Math.floor(dur / 60)} phút ${dur % 60} giây` : ''}
               </span>
             </div>
             <StatusBadge status={s.status} className="shrink-0" />
             <div className="flex shrink-0 gap-2">
               {s.status === 'finished' ? (
                 <Button variant="secondary" size="sm" asChild>
-                  <Link to={`${basePath}/sessions/${s.id}`}>View results</Link>
+                  <Link to={`${basePath}/sessions/${s.id}`}>Xem kết quả</Link>
                 </Button>
               ) : (
                 <Button size="sm" asChild>
-                  <Link to={`${basePath}/game/${s.id}`}>Resume game</Link>
+                  <Link to={`${basePath}/game/${s.id}`}>Tiếp tục</Link>
                 </Button>
               )}
             </div>

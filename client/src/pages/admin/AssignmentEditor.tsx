@@ -3,7 +3,7 @@ import { type FormEvent, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { AppAlert } from '@/components/AppAlert';
 import AdminNav from '@/components/AdminNav';
-import { MainContent, Page, Subtitle } from '@/components/layout';
+import { MainContent, Page, PageHeader } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -280,13 +280,19 @@ export default function AssignmentEditor() {
             <ArrowLeft className="size-4" /> Danh sách
           </Link>
         </Button>
-        <h1>{assignmentId ? 'Chỉnh sửa bài kiểm tra' : 'Tạo bài kiểm tra'}</h1>
-        <Subtitle className="mb-6">Thiết lập lịch làm bài và chọn nhân viên được giao.</Subtitle>
+        <PageHeader
+          title={assignmentId ? 'Chỉnh sửa bài kiểm tra' : 'Tạo bài kiểm tra'}
+          description="Thiết lập nội dung, thời gian và nhân viên tham gia."
+        />
         {error && <AppAlert variant="error">{error}</AppAlert>}
 
         <form onSubmit={handleSave} className="space-y-5">
           <Card>
             <CardContent className="grid gap-4 p-5 sm:grid-cols-2">
+              <div className="sm:col-span-2">
+                <h2 className="text-lg">Thông tin bài kiểm tra</h2>
+                <p className="text-sm text-muted-foreground">Tên hiển thị và bộ câu hỏi sử dụng.</p>
+              </div>
               <div className="space-y-2 sm:col-span-2">
                 <Label htmlFor="assignment-title">Tên bài kiểm tra</Label>
                 <Input
@@ -298,10 +304,10 @@ export default function AssignmentEditor() {
                 />
               </div>
               <div className="space-y-2 sm:col-span-2">
-                <Label>Quiz nguồn</Label>
+                <Label>Bộ câu hỏi</Label>
                 <Select value={quizId} onValueChange={setQuizId}>
                   <SelectTrigger>
-                    <SelectValue placeholder="Chọn quiz" />
+                    <SelectValue placeholder="Chọn bộ câu hỏi" />
                   </SelectTrigger>
                   <SelectContent>
                     {quizzes.map((quiz) => (
@@ -311,6 +317,10 @@ export default function AssignmentEditor() {
                     ))}
                   </SelectContent>
                 </Select>
+              </div>
+              <div className="border-t border-border pt-4 sm:col-span-2">
+                <h2 className="text-lg">Thời gian & chính sách làm bài</h2>
+                <p className="text-sm text-muted-foreground">Lịch mở, hạn nộp, số lượt và cách trộn nội dung.</p>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="opens-at">Thời gian mở</Label>

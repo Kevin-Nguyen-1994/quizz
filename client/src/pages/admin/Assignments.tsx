@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom';
 import { AppAlert } from '@/components/AppAlert';
 import { AssignmentStatusBadge } from '@/components/AssignmentStatusBadge';
 import AdminNav from '@/components/AdminNav';
-import { MainContent, Page, Subtitle } from '@/components/layout';
+import { EmptyState, MainContent, Page, PageHeader } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { useDialog } from '@/context/DialogContext';
@@ -68,29 +68,26 @@ export default function Assignments() {
     <Page>
       <AdminNav />
       <MainContent>
-        <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h1>Bài kiểm tra cá nhân</h1>
-            <Subtitle className="mt-1">Giao quiz để nhân viên làm độc lập theo thời hạn.</Subtitle>
-          </div>
-          <Button asChild>
+        <PageHeader
+          title="Bài kiểm tra"
+          description="Tạo và theo dõi các bài kiểm tra dành cho nhân viên."
+          actions={<Button asChild>
             <Link to="/admin/assignments/new">
               <Plus className="size-4" /> Tạo bài kiểm tra
             </Link>
-          </Button>
-        </div>
+          </Button>}
+        />
 
         {error && <AppAlert variant="error">{error}</AppAlert>}
         {loading ? (
           <p className="text-muted-foreground">Đang tải…</p>
         ) : items.length === 0 ? (
-          <Card>
-            <CardContent className="px-6 py-12 text-center">
-              <ClipboardList className="mx-auto mb-3 size-10 text-muted-foreground" />
-              <h2>Chưa có bài kiểm tra</h2>
-              <Subtitle className="mt-2">Tạo bài kiểm tra từ một quiz đã có.</Subtitle>
-            </CardContent>
-          </Card>
+          <EmptyState
+            icon={<ClipboardList className="size-10" />}
+            title="Chưa có bài kiểm tra"
+            description="Tạo bài kiểm tra từ một bộ câu hỏi đã có."
+            action={<Button asChild><Link to="/admin/assignments/new">Tạo bài kiểm tra</Link></Button>}
+          />
         ) : (
           <>
             <div className="grid gap-3 md:hidden">
@@ -101,7 +98,7 @@ export default function Assignments() {
                       <div className="min-w-0">
                         <h2 className="truncate text-base">{item.title}</h2>
                         <p className="truncate text-sm text-muted-foreground">
-                          {item.quiz_title ?? 'Quiz đã xóa'}
+                          {item.quiz_title ?? 'Bộ câu hỏi đã xóa'}
                         </p>
                       </div>
                       <AssignmentStatusBadge status={item.status} />
@@ -139,7 +136,7 @@ export default function Assignments() {
                           disabled={busyId === item.id}
                           onClick={() => closeAssignment(item)}
                         >
-                          Đóng
+                          Đóng bài
                         </Button>
                       )}
                     </div>
@@ -166,7 +163,7 @@ export default function Assignments() {
                         <td className="px-4 py-3">
                           <strong className="block">{item.title}</strong>
                           <span className="text-xs text-muted-foreground">
-                            {item.quiz_title ?? 'Quiz đã xóa'}
+                            {item.quiz_title ?? 'Bộ câu hỏi đã xóa'}
                           </span>
                         </td>
                         <td className="px-4 py-3">
@@ -177,8 +174,8 @@ export default function Assignments() {
                           <span className="block">Hạn: {dateTime(item.deadline_at_ms)}</span>
                         </td>
                         <td className="px-4 py-3">
-                          {item.member_count} giao · {item.started_count} bắt đầu ·{' '}
-                          {item.completed_count} xong
+                          {item.member_count} nhân viên · {item.started_count} đã bắt đầu ·{' '}
+                          {item.completed_count} hoàn thành
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex justify-end gap-2">
@@ -193,11 +190,11 @@ export default function Assignments() {
                             {item.status === 'published' && (
                               <Button
                                 size="sm"
-                                variant="ghost"
+                                variant="destructive"
                                 disabled={busyId === item.id}
                                 onClick={() => closeAssignment(item)}
                               >
-                                Đóng
+                                Đóng bài
                               </Button>
                             )}
                           </div>

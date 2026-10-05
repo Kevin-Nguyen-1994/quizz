@@ -46,12 +46,12 @@ export default function SessionDetail() {
       .get<FullSession>(`/api/admin/sessions/${id}`)
       .then(({ ok, data: d }) => {
         if (ok && d?.session) setData(d);
-        else setError('Could not load this session.');
+        else setError('Không thể tải phiên chơi này.');
       })
-      .catch(() => setError('Could not load this session.'));
+      .catch(() => setError('Không thể tải phiên chơi này.'));
   }, [api, id]);
 
-  if (!data) return <PageLoading message={error ?? 'Loading…'} />;
+  if (!data) return <PageLoading message={error ?? 'Đang tải…'} />;
 
   const { session, players, questions, answers } = data;
   const answerMap = new Map(answers.map((a) => [`${a.player_id}:${a.question_id}`, a]));
@@ -128,16 +128,16 @@ export default function SessionDetail() {
           <Button variant="ghost" size="sm" asChild>
             <Link to={`${basePath}/history`}>
               <span className="flex items-center gap-1.5">
-                <ArrowLeft className="size-4" /> Back
+                <ArrowLeft className="size-4" /> Lịch sử
               </span>
             </Link>
           </Button>
           <div>
             <h1>{session.quiz_title}</h1>
             <Subtitle>
-              Session <code className="font-mono text-blue-400">#{session.id}</code> · PIN{' '}
+              Phiên <code className="font-mono text-blue-400">#{session.id}</code> · PIN{' '}
               <code className="font-mono text-blue-400">{session.pin}</code>
-              {session.finished_at && ` · ${new Date(session.finished_at).toLocaleString()}`}
+              {session.finished_at && ` · ${new Date(session.finished_at).toLocaleString('vi-VN')}`}
             </Subtitle>
           </div>
           <div className="ml-auto flex items-center gap-2">
@@ -151,17 +151,17 @@ export default function SessionDetail() {
         <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
           <div className="rounded-xl border border-border bg-muted/30 p-5 text-center">
             <div className="text-3xl font-extrabold text-blue-400">{players.length}</div>
-            <div className="mt-1 text-sm text-muted-foreground">Players</div>
+            <div className="mt-1 text-sm text-muted-foreground">Người chơi</div>
           </div>
           <div className="rounded-xl border border-border bg-muted/30 p-5 text-center">
             <div className="text-3xl font-extrabold text-blue-400">{questions.length}</div>
-            <div className="mt-1 text-sm text-muted-foreground">Questions</div>
+            <div className="mt-1 text-sm text-muted-foreground">Câu hỏi</div>
           </div>
           <div className="rounded-xl border border-border bg-muted/30 p-5 text-center">
             <div className="text-3xl font-extrabold text-blue-400">
               {sortedPlayers[0]?.total_score ?? 0}
             </div>
-            <div className="mt-1 text-sm text-muted-foreground">Top Score</div>
+            <div className="mt-1 text-sm text-muted-foreground">Điểm cao nhất</div>
           </div>
         </div>
 
@@ -169,7 +169,7 @@ export default function SessionDetail() {
           <Card>
             <CardContent className="p-6">
               <h2 className="mb-4 flex items-center gap-1.5">
-                <Trophy className="size-4" /> Final Leaderboard
+                <Trophy className="size-4" /> Bảng xếp hạng cuối
               </h2>
               <ul className="leaderboard" style={{ gap: 6 }}>
                 {sortedPlayers.map((p, i) => {
@@ -180,13 +180,13 @@ export default function SessionDetail() {
                       <div className="lb-name">
                         <div>{p.username}</div>
                         <div className="mt-0.5 text-xs font-normal text-muted-foreground">
-                          Correct: {stats?.correct ?? 0} · Wrong: {stats?.wrong ?? questions.length}{' '}
-                          · Average: {formatResponseTime(stats?.averageResponseTimeMs)}
+                          Đúng: {stats?.correct ?? 0} · Sai: {stats?.wrong ?? questions.length}{' '}
+                          · Thời gian TB: {formatResponseTime(stats?.averageResponseTimeMs)}
                         </div>
                       </div>
                       <div className="lb-score text-right">
                         <div>{p.total_score.toLocaleString()}</div>
-                        <div className="text-xs font-normal text-muted-foreground">Total score</div>
+                        <div className="text-xs font-normal text-muted-foreground">Tổng điểm</div>
                       </div>
                     </li>
                   );
@@ -198,7 +198,7 @@ export default function SessionDetail() {
           <Card>
             <CardContent className="p-6">
               <h2 className="mb-4 flex items-center gap-1.5">
-                <BarChart3 className="size-4" /> Question Breakdown
+                <BarChart3 className="size-4" /> Phân tích câu hỏi
               </h2>
               {questions.map((q, qi) => {
                 const qAnswers = players.map((p) => answerMap.get(`${p.id}:${q.id}`));
@@ -208,7 +208,7 @@ export default function SessionDetail() {
                   <div key={q.id} className="mb-4">
                     <div className="mb-1 flex items-center justify-between">
                       <span className="text-sm font-semibold">
-                        Q{qi + 1}: {q.text.slice(0, 60)}
+                        Câu {qi + 1}: {q.text.slice(0, 60)}
                         {q.text.length > 60 ? '…' : ''}
                       </span>
                       <span className="text-xs text-muted-foreground">
@@ -219,7 +219,7 @@ export default function SessionDetail() {
                       <div className="answer-bar-fill" style={{ width: `${pct}%` }} />
                     </div>
                     <div className="mt-1 text-xs text-muted-foreground">
-                      Time limit: {q.time_sec}s · Correct: {q.options[q.correct_index]}
+                      Thời gian: {q.time_sec} giây · Đáp án đúng: {q.options[q.correct_index]}
                     </div>
                   </div>
                 );
@@ -230,20 +230,20 @@ export default function SessionDetail() {
 
         <Card className="mt-6 w-full max-w-6xl overflow-hidden">
           <CardContent className="p-6 pb-0">
-            <h2>Answer Matrix</h2>
-            <Subtitle>Every player&apos;s answer for each question</Subtitle>
+            <h2>Ma trận câu trả lời</h2>
+            <Subtitle>Kết quả của từng người chơi theo mỗi câu hỏi</Subtitle>
           </CardContent>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border text-left text-muted-foreground">
-                  <th className="px-4 py-3 font-medium">Player</th>
+                  <th className="px-4 py-3 font-medium">Người chơi</th>
                   {questions.map((q, i) => (
                     <th key={q.id} className="px-4 py-3 font-medium">
-                      Q{i + 1}
+                      Câu {i + 1}
                     </th>
                   ))}
-                  <th className="px-4 py-3 font-medium">Total</th>
+                  <th className="px-4 py-3 font-medium">Tổng điểm</th>
                 </tr>
               </thead>
               <tbody>
