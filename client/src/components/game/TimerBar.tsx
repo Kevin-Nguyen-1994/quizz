@@ -25,11 +25,24 @@ export function TimerBar({ timeLeft, totalSec, className, silent }: Props) {
   const pct = Math.max(0, (timeLeft / totalSec) * 100);
   const numClass = pct > 50 ? '' : pct > 25 ? 'warn' : 'danger';
   return (
-    <div className={cn('flex items-center', className)}>
-      <div className="timer-bar">
+    <div
+      className={cn('flex items-center', className)}
+      role="timer"
+      aria-label={`Còn ${timeLeft} giây`}
+    >
+      <div
+        className="timer-bar"
+        role="progressbar"
+        aria-label="Thời gian còn lại"
+        aria-valuemin={0}
+        aria-valuemax={totalSec}
+        aria-valuenow={timeLeft}
+      >
         <div className="timer-bar-fill" style={{ width: `${pct}%` }} />
       </div>
-      <span className={cn('timer-num', numClass, timeLeft <= 5 && 'pulsing')}>{timeLeft}</span>
+      <span className={cn('timer-num', numClass)} aria-hidden="true">
+        {timeLeft}
+      </span>
     </div>
   );
 }

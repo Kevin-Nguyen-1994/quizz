@@ -10,9 +10,9 @@ import { useAuthFetch } from '@/hooks/useAuthFetch';
 import type { PlayHistoryEntry } from '@/types';
 
 function formatPlayed(g: PlayHistoryEntry): string {
-  if (g.finished_at) return new Date(g.finished_at).toLocaleString();
-  if (g.started_at) return new Date(g.started_at).toLocaleString();
-  return new Date(g.created_at).toLocaleString();
+  if (g.finished_at) return new Date(g.finished_at).toLocaleString('vi-VN');
+  if (g.started_at) return new Date(g.started_at).toLocaleString('vi-VN');
+  return new Date(g.created_at).toLocaleString('vi-VN');
 }
 
 export default function PlayHistory() {
@@ -34,18 +34,18 @@ export default function PlayHistory() {
     <Page>
       <UserNav />
       <MainContent>
-        <h1>My games</h1>
-        <Subtitle className="mb-6">Quizzes you joined as a player</Subtitle>
+        <h1>Lịch sử Live Game</h1>
+        <Subtitle className="mb-6">Các trò chơi bạn đã tham gia</Subtitle>
 
         {loading ? (
-          <p className="text-muted-foreground">Loading…</p>
+          <p className="text-muted-foreground">Đang tải…</p>
         ) : games.length === 0 ? (
           <Card>
             <CardContent className="p-6 text-center text-muted-foreground">
-              <p className="mb-4">You haven&apos;t played any games yet.</p>
+              <p className="mb-4">Bạn chưa tham gia Live Game nào.</p>
               <Button asChild>
                 <a href="/play" target="_blank" rel="noopener">
-                  Join a game
+                  Tham gia Live Game
                 </a>
               </Button>
             </CardContent>
@@ -59,7 +59,7 @@ export default function PlayHistory() {
                     <span className="block truncate font-semibold">{g.quiz_title}</span>
                     <span className="mt-0.5 block text-sm text-muted-foreground">
                       PIN <code className="font-mono text-blue-400">{g.pin}</code> · #{g.rank}/
-                      {g.player_count} · {g.total_score.toLocaleString()} pts
+                      {g.player_count} · {g.total_score.toLocaleString('vi-VN')} điểm
                     </span>
                     <span className="mt-0.5 block text-xs text-muted-foreground">
                       {formatPlayed(g)}
@@ -69,7 +69,7 @@ export default function PlayHistory() {
                   <Button variant="ghost" size="sm" asChild>
                     <Link to={`/u/my-games/${g.session_id}`}>
                       <span className="flex items-center gap-1.5">
-                        Results <ArrowRight className="size-4" />
+                        Kết quả <ArrowRight className="size-4" />
                       </span>
                     </Link>
                   </Button>
@@ -83,10 +83,10 @@ export default function PlayHistory() {
                   <tr className="border-b border-border text-left text-muted-foreground">
                     <th className="px-4 py-3 font-medium">Quiz</th>
                     <th className="px-4 py-3 font-medium">PIN</th>
-                    <th className="px-4 py-3 font-medium">Rank</th>
-                    <th className="px-4 py-3 font-medium">Score</th>
-                    <th className="px-4 py-3 font-medium">Status</th>
-                    <th className="px-4 py-3 font-medium">Played</th>
+                    <th className="px-4 py-3 font-medium">Hạng</th>
+                    <th className="px-4 py-3 font-medium">Điểm</th>
+                    <th className="px-4 py-3 font-medium">Trạng thái</th>
+                    <th className="px-4 py-3 font-medium">Thời gian</th>
                     <th className="px-4 py-3 font-medium" />
                   </tr>
                 </thead>
@@ -100,7 +100,7 @@ export default function PlayHistory() {
                       <td className="px-4 py-3">
                         #{g.rank} / {g.player_count}
                       </td>
-                      <td className="px-4 py-3">{g.total_score.toLocaleString()}</td>
+                      <td className="px-4 py-3">{g.total_score.toLocaleString('vi-VN')}</td>
                       <td className="px-4 py-3">
                         <StatusBadge status={g.status} />
                       </td>
@@ -109,7 +109,7 @@ export default function PlayHistory() {
                         <Button variant="ghost" size="sm" asChild>
                           <Link to={`/u/my-games/${g.session_id}`}>
                             <span className="flex items-center gap-1.5">
-                              Results <ArrowRight className="size-4" />
+                              Kết quả <ArrowRight className="size-4" />
                             </span>
                           </Link>
                         </Button>

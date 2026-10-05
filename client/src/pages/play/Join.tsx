@@ -35,11 +35,18 @@ function defaultJoinAvatar(user: AuthUser | null): string {
   return loadSavedAvatar();
 }
 
+function joinError(message: string): string {
+  if (message === 'Invalid PIN') return 'Mã PIN không hợp lệ.';
+  if (message === 'Game has ended') return 'Trò chơi đã kết thúc.';
+  if (message.toLowerCase().includes('full')) return 'Phòng chơi đã đủ người.';
+  return 'Không thể tham gia trò chơi. Vui lòng kiểm tra PIN và thử lại.';
+}
+
 export default function Join() {
   const { pin: pinParam } = useParams<{ pin?: string }>();
   const navigate = useNavigate();
   const socket = getSocket();
-  const { token, user } = useAuth();
+  const { token, user, role } = useAuth();
 
   const { appName, appSubtitle } = useApp();
   const [pin, setPin] = useState(pinParam ?? '');
@@ -94,7 +101,7 @@ export default function Join() {
   );
 
   useSocketEvent<{ message: string }>('player:error', (data) => {
-    setError(data.message);
+    setError(joinError(data.message));
     setJoining(false);
     setStep('form');
     // Only clear session on hard failures — keep storage for retry on reload/reconnect
@@ -109,11 +116,11 @@ export default function Join() {
     const cleanedPin = cleanPin(pin);
     const cleanName = username.trim();
     if (!cleanedPin || cleanedPin.length < 4) {
-      setError('Enter a valid PIN');
+      setError('Vui lòng nhập mã PIN hợp lệ.');
       return;
     }
     if (!cleanName) {
-      setError('Enter your name');
+      setError('Vui lòng nhập tên của bạn.');
       return;
     }
     setStep('avatar');
@@ -167,8 +174,8 @@ export default function Join() {
           )}
           <Subtitle className="mt-2">
             {step === 'form'
-              ? `Enter a PIN to join${appName ? ` ${appName}` : ''}`
-              : 'Choose your avatar'}
+              ? `Nhập mã PIN để tham gia${appName ? ` ${appName}` : ''}`
+              : 'Chọn ảnh đại diện'}
           </Subtitle>
         </div>
 
@@ -178,7 +185,7 @@ export default function Join() {
           <form onSubmit={handleFormNext}>
             <Input
               id="pin"
-              label="Game PIN"
+              label="Mã PIN trò chơi"
               type="text"
               inputMode="numeric"
               maxLength={8}
@@ -191,10 +198,10 @@ export default function Join() {
             />
             <Input
               id="username"
-              label="Your Name"
+              label="Tên của bạn"
               type="text"
               maxLength={50}
-              placeholder="e.g. Alice"
+              placeholder="Ví dụ: Minh Anh"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               autoFocus={!!pinParam}
@@ -202,7 +209,7 @@ export default function Join() {
             />
             <Button type="submit" variant="default" size="lg" className="mt-2 w-full">
               <span className="inline-flex items-center gap-1.5">
-                Next: Pick Avatar <ArrowRight className="size-4" />
+                Tiếp theo: Chọn ảnh đại diện <ArrowRight className="size-4" />
               </span>
             </Button>
           </form>
@@ -221,7 +228,7 @@ export default function Join() {
                 className="text-[0.78rem]"
                 onClick={() => setStep('form')}
               >
-                Edit
+                Sửa
               </Button>
             </div>
 
@@ -234,7 +241,7 @@ export default function Join() {
             />
 
             <label htmlFor="locale" className="mt-4 block text-sm font-medium text-foreground">
-              Language
+              Ngôn ngữ
             </label>
             <select
               id="locale"
@@ -242,7 +249,7 @@ export default function Join() {
               onChange={(e) => setLocale(e.target.value)}
               className="mt-2 w-full rounded-lg border border-border bg-transparent px-3 py-2 text-sm"
             >
-              <option value="base">{baseLocale ? localeName(baseLocale) : 'Original'}</option>
+              <option value="base">{baseLocale ? localeName(baseLocale) : 'Ngôn ngữ gốc'}</option>
               {availableLocales.map((code) => (
                 <option key={code} value={code}>
                   {localeName(code)}
@@ -251,7 +258,7 @@ export default function Join() {
             </select>
             {availableLocales.length > 0 && (
               <p className="mt-1.5 text-xs text-muted-foreground">
-                Some questions may show in the quiz's original language if not yet translated.
+                Câu hỏi chưa được dịch sẽ hiển thị bằng ngôn ngữ gốc của quiz.
               </p>
             )}
 
@@ -264,10 +271,10 @@ export default function Join() {
               disabled={joining}
             >
               {joining ? (
-                'Joining…'
+                'Đang tham gia…'
               ) : (
                 <span className="inline-flex items-center gap-1.5">
-                  Join Game <ArrowRight className="size-4" />
+                  Tham gia trò chơi <ArrowRight className="size-4" />
                 </span>
               )}
             </Button>
@@ -275,14 +282,18 @@ export default function Join() {
         )}
 
         <p className="mt-4 text-center text-sm text-muted-foreground">
-          {user ? (
+          {user && role === 'user' ? (
             <>
-              Signed in as {user.username} · <a href="/u/my-games">My games</a> ·{' '}
-              <a href="/">Home</a>
+              Đã đăng nhập: {user.username} · <a href="/u/my-games">Lịch sử trò chơi</a> ·{' '}
+              <a href="/">Trang chủ</a>
+            </>
+          ) : user ? (
+            <>
+              Đã đăng nhập: {user.username} · <a href="/">Trang chủ</a>
             </>
           ) : (
             <>
-              <a href="/login">Sign in</a> · <a href="/">Home</a>
+              <a href="/login">Đăng nhập</a> · <a href="/">Trang chủ</a>
             </>
           )}
         </p>

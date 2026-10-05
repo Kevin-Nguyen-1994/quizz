@@ -52,7 +52,7 @@ export function MyAssignmentCard({
       >
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-start justify-between gap-2">
-            <h2 className="line-clamp-2 text-lg">{assignment.title}</h2>
+            <h2 className="break-words text-lg leading-snug">{assignment.title}</h2>
             <AssignmentStatusBadge status={assignment.participantStatus} />
           </div>
           <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
@@ -63,13 +63,6 @@ export function MyAssignmentCard({
           </div>
           {!compact && (
             <div className="mt-3 space-y-1.5 text-sm">
-              <p className="flex items-start gap-2">
-                <Clock3 className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-                <span>
-                  <span className="text-muted-foreground">Mở:</span>{' '}
-                  {dateTime(assignment.opensAtMs)}
-                </span>
-              </p>
               <p className="flex items-start gap-2">
                 <Clock3 className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
                 <span>
@@ -91,15 +84,20 @@ export function MyAssignmentCard({
             </p>
           )}
         </div>
-        <div className={compact ? 'shrink-0' : 'mt-auto'}>
+        <div className={compact ? 'shrink-0 max-sm:w-full' : 'mt-auto'}>
           {action ? (
-            <Button asChild className={compact ? '' : 'w-full'}>
+            <Button asChild className={compact ? 'max-sm:w-full' : 'w-full'}>
               <Link to={href}>
                 <action.icon className="size-4" /> {action.label}
               </Link>
             </Button>
           ) : (
-            <Button type="button" variant="secondary" className={compact ? '' : 'w-full'} disabled>
+            <Button
+              type="button"
+              variant="secondary"
+              className={compact ? 'max-sm:w-full' : 'w-full'}
+              disabled
+            >
               {unavailableLabel(assignment)}
             </Button>
           )}

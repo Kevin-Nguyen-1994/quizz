@@ -84,6 +84,58 @@ export function Subtitle({ children, className }: { children: ReactNode; classNa
   return <p className={cn('text-sm text-muted-foreground', className)}>{children}</p>;
 }
 
+export function PageHeader({
+  title,
+  description,
+  actions,
+  eyebrow,
+  className,
+}: {
+  title: ReactNode;
+  description?: ReactNode;
+  actions?: ReactNode;
+  eyebrow?: ReactNode;
+  className?: string;
+}) {
+  return (
+    <header className={cn('mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between', className)}>
+      <div className="min-w-0">
+        {eyebrow && (
+          <p className="mb-1 text-sm font-semibold text-primary">{eyebrow}</p>
+        )}
+        <h1 className="break-words">{title}</h1>
+        {description && <Subtitle className="mt-1">{description}</Subtitle>}
+      </div>
+      {actions && <div className="flex shrink-0 flex-wrap gap-2">{actions}</div>}
+    </header>
+  );
+}
+
+export function EmptyState({
+  icon,
+  title,
+  description,
+  action,
+  className,
+}: {
+  icon?: ReactNode;
+  title: ReactNode;
+  description?: ReactNode;
+  action?: ReactNode;
+  className?: string;
+}) {
+  return (
+    <Card className={className}>
+      <CardContent className="px-6 py-12 text-center sm:py-14">
+        {icon && <div className="mx-auto mb-3 flex justify-center text-muted-foreground">{icon}</div>}
+        <h2>{title}</h2>
+        {description && <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">{description}</p>}
+        {action && <div className="mt-5 flex justify-center">{action}</div>}
+      </CardContent>
+    </Card>
+  );
+}
+
 /** Full-page loading (or error) placeholder shown under the creator nav. */
 export function PageLoading({ message = 'Đang tải…', nav }: { message?: string; nav?: ReactNode }) {
   return (

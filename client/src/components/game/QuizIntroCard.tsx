@@ -20,7 +20,7 @@ interface Props {
 export function QuizIntroCard({
   intro,
   title,
-  typesHeading = 'Question types',
+  typesHeading = 'Dạng câu hỏi',
   layout = 'row',
   footer,
   className,
@@ -85,8 +85,7 @@ export function QuizIntroCard({
         {intro && (
           <div className={cn('flex flex-wrap gap-2', isRow ? 'mt-3' : 'mt-4')}>
             <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-muted/40 px-3 py-1.5 text-sm font-medium">
-              <CircleHelp className="size-4" /> {intro.questionCount} question
-              {intro.questionCount === 1 ? '' : 's'}
+              <CircleHelp className="size-4" /> {intro.questionCount} câu hỏi
             </span>
             {intro.totalTimeSec > 0 && (
               <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-muted/40 px-3 py-1.5 text-sm font-medium">

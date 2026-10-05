@@ -1,7 +1,7 @@
 import { ClipboardList, RefreshCw } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { AppAlert } from '@/components/AppAlert';
-import { MainContent, Page, Subtitle } from '@/components/layout';
+import { EmptyState, MainContent, Page, PageHeader } from '@/components/layout';
 import { MyAssignmentCard } from '@/components/MyAssignmentCard';
 import UserNav from '@/components/UserNav';
 import { Button } from '@/components/ui/button';
@@ -37,19 +37,23 @@ export default function MyAssignments() {
     <Page>
       <UserNav />
       <MainContent>
-        <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <h1>Bài kiểm tra của tôi</h1>
-            <Subtitle>Theo dõi và hoàn thành các bài kiểm tra được giao.</Subtitle>
-          </div>
-          <Button type="button" variant="secondary" size="sm" onClick={reload} disabled={loading}>
-            <RefreshCw className={loading ? 'size-4 animate-spin' : 'size-4'} /> Làm mới
-          </Button>
-        </div>
+        <PageHeader
+          title="Bài kiểm tra của tôi"
+          description="Theo dõi và hoàn thành các bài kiểm tra được giao."
+          actions={
+            <Button type="button" variant="secondary" onClick={reload} disabled={loading}>
+              <RefreshCw className={loading ? 'size-4 animate-spin' : 'size-4'} /> Làm mới
+            </Button>
+          }
+        />
 
         {error && <AppAlert variant="error">{error}</AppAlert>}
 
-        <div className="mb-5 flex gap-2 overflow-x-auto pb-1" role="tablist">
+        <div
+          className="mb-5 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap"
+          role="tablist"
+          aria-label="Lọc bài kiểm tra"
+        >
           {filters.map((item) => {
             const count = assignments.filter((assignment) =>
               matchesFilter(assignment, item.id),
@@ -62,7 +66,7 @@ export default function MyAssignments() {
                 aria-selected={filter === item.id}
                 variant={filter === item.id ? 'default' : 'secondary'}
                 size="sm"
-                className="shrink-0"
+                className="w-full sm:w-auto"
                 onClick={() => setFilter(item.id)}
               >
                 {item.label} ({count})
@@ -78,21 +82,13 @@ export default function MyAssignments() {
             </CardContent>
           </Card>
         ) : assignments.length === 0 ? (
-          <Card>
-            <CardContent className="px-6 py-14 text-center">
-              <ClipboardList className="mx-auto mb-3 size-10 text-muted-foreground" />
-              <h2>Chưa có bài kiểm tra nào</h2>
-              <p className="mt-2 text-sm text-muted-foreground">
-                Các bài được quản trị viên giao sẽ xuất hiện tại đây.
-              </p>
-            </CardContent>
-          </Card>
+          <EmptyState
+            icon={<ClipboardList className="size-10" />}
+            title="Chưa có bài kiểm tra nào"
+            description="Các bài được quản trị viên giao sẽ xuất hiện tại đây."
+          />
         ) : filtered.length === 0 ? (
-          <Card>
-            <CardContent className="p-10 text-center text-muted-foreground">
-              Không có bài kiểm tra trong nhóm này.
-            </CardContent>
-          </Card>
+          <EmptyState title="Không có bài kiểm tra trong nhóm này" />
         ) : (
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             {filtered.map((assignment) => (

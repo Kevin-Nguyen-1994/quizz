@@ -104,6 +104,8 @@ export function MapPicker({
     <div
       className="relative w-full overflow-hidden rounded-lg border border-border"
       style={{ height }}
+      role="application"
+      aria-label="Bản đồ chọn vị trí"
     >
       <div ref={ref} className="h-full w-full" />
     </div>
@@ -160,6 +162,8 @@ export function MapReveal({
     <div
       ref={ref}
       style={{ height }}
+      role="img"
+      aria-label="Bản đồ kết quả vị trí"
       className="w-full overflow-hidden rounded-lg border border-border"
     />
   );

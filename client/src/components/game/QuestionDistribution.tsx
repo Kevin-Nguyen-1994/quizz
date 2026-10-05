@@ -82,13 +82,13 @@ export function QuestionDistribution({
   return (
     <>
       <div className="mb-1 flex flex-wrap items-center justify-between gap-3">
-        <span className="text-[22px] font-extrabold tracking-tight">Answers</span>
+        <span className="text-[22px] font-extrabold tracking-tight">Đáp án</span>
         <span className="correct-pill inline-flex items-center gap-1">
-          <Check className="size-4" /> Correct: {correctText}
+          <Check className="size-4" /> Đáp án đúng: {correctText}
         </span>
       </div>
       <div className="mb-4 text-[13px] text-muted-foreground">
-        {totalVotes} vote{totalVotes === 1 ? '' : 's'} total
+        Tổng {totalVotes} lượt chọn
       </div>
 
       <div className="flex flex-col gap-3">
@@ -113,10 +113,10 @@ export function QuestionDistribution({
                   <span>
                     <OptionText value={opt} imgClassName="option-img-sm" />
                     {correct && <Check className="ml-1.5 inline size-4 text-[#4ade80]" />}
-                    {mine && <span className="ml-1.5 text-muted-foreground">· you</span>}
+                    {mine && <span className="ml-1.5 text-muted-foreground">· bạn chọn</span>}
                   </span>
                   <span>
-                    {votes} vote{votes === 1 ? '' : 's'}
+                    {votes} lượt
                   </span>
                 </div>
                 <div className={`dist-bar${correct ? ' correct-glow' : ''}`}>

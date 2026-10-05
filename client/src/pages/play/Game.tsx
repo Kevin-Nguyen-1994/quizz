@@ -26,7 +26,7 @@ export default function Game() {
 
   const [storedSession] = useState(loadPlayerSession);
   const playerId = Number(storedSession.playerId);
-  const username = storedSession.username ?? 'Player';
+  const username = storedSession.username ?? 'Người chơi';
   const myAvatar = storedSession.avatar ?? '🎮';
 
   const [phase, setPhase] = useState<Phase>('waiting');

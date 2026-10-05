@@ -36,12 +36,12 @@ export default function PlaySessionDetail() {
       .get<PlaySessionData>(`/api/auth/play-history/${id}`)
       .then(({ ok, data: d }) => {
         if (ok && d?.session) setData(d);
-        else setError('Could not load this game.');
+        else setError('Không thể tải trò chơi này.');
       })
-      .catch(() => setError('Could not load this game.'));
+      .catch(() => setError('Không thể tải trò chơi này.'));
   }, [api, id]);
 
-  if (!data) return <PageLoading nav={<UserNav />} message={error ?? 'Loading…'} />;
+  if (!data) return <PageLoading nav={<UserNav />} message={error ?? 'Đang tải…'} />;
 
   const { session, myPlayerId, myRank, players, questions, answers } = data;
   const answerMap = new Map(answers.map((a) => [`${a.player_id}:${a.question_id}`, a]));
@@ -56,7 +56,7 @@ export default function PlaySessionDetail() {
           <Button variant="ghost" size="sm" asChild>
             <Link to="/u/my-games">
               <span className="flex items-center gap-1.5">
-                <ArrowLeft className="size-4" /> Back
+                <ArrowLeft className="size-4" /> Quay lại
               </span>
             </Link>
           </Button>
@@ -64,7 +64,7 @@ export default function PlaySessionDetail() {
             <h1>{session.quiz_title}</h1>
             <Subtitle>
               PIN <code className="font-mono text-blue-400">{session.pin}</code>
-              {session.finished_at && ` · ${new Date(session.finished_at).toLocaleString()}`}
+              {session.finished_at && ` · ${new Date(session.finished_at).toLocaleString('vi-VN')}`}
             </Subtitle>
           </div>
           <StatusBadge status={session.status} className="sm:ml-auto" />
@@ -73,23 +73,23 @@ export default function PlaySessionDetail() {
         <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
           <div className="rounded-xl border border-border bg-muted/30 p-5 text-center">
             <div className="text-3xl font-extrabold text-blue-400">{myRank ?? '—'}</div>
-            <div className="mt-1 text-sm text-muted-foreground">Your rank</div>
+            <div className="mt-1 text-sm text-muted-foreground">Hạng của bạn</div>
           </div>
           <div className="rounded-xl border border-border bg-muted/30 p-5 text-center">
             <div className="text-3xl font-extrabold text-blue-400">
-              {myPlayer?.total_score.toLocaleString() ?? 0}
+              {myPlayer?.total_score.toLocaleString('vi-VN') ?? 0}
             </div>
-            <div className="mt-1 text-sm text-muted-foreground">Your score</div>
+            <div className="mt-1 text-sm text-muted-foreground">Điểm của bạn</div>
           </div>
           <div className="rounded-xl border border-border bg-muted/30 p-5 text-center">
             <div className="text-3xl font-extrabold text-blue-400">{players.length}</div>
-            <div className="mt-1 text-sm text-muted-foreground">Players</div>
+            <div className="mt-1 text-sm text-muted-foreground">Người chơi</div>
           </div>
         </div>
 
         {session.status !== 'finished' && (
           <Button asChild className="mb-6">
-            <Link to={`/play/game/${session.id}`}>Resume game</Link>
+            <Link to={`/play/game/${session.id}`}>Tiếp tục trò chơi</Link>
           </Button>
         )}
 
@@ -97,7 +97,7 @@ export default function PlaySessionDetail() {
           <Card>
             <CardContent className="p-6">
               <h2 className="mb-4 flex items-center gap-1.5">
-                <Trophy className="size-4" /> Final leaderboard
+                <Trophy className="size-4" /> Bảng xếp hạng cuối
               </h2>
               <ul className="leaderboard" style={{ gap: 6 }}>
                 {sortedPlayers.map((p, i) => (
@@ -109,10 +109,10 @@ export default function PlaySessionDetail() {
                     <div className="lb-name">
                       {p.username}
                       {p.id === myPlayerId && (
-                        <span className="ml-1.5 text-xs text-primary">(you)</span>
+                        <span className="ml-1.5 text-xs text-primary">(bạn)</span>
                       )}
                     </div>
-                    <div className="lb-score">{p.total_score.toLocaleString()}</div>
+                    <div className="lb-score">{p.total_score.toLocaleString('vi-VN')}</div>
                   </li>
                 ))}
               </ul>
@@ -121,7 +121,7 @@ export default function PlaySessionDetail() {
 
           <Card>
             <CardContent className="p-6">
-              <h2 className="mb-4">Your answers</h2>
+              <h2 className="mb-4">Câu trả lời của bạn</h2>
               {questions.map((q, qi) => {
                 const a = answerMap.get(`${myPlayerId}:${q.id}`);
                 return (
@@ -132,14 +132,14 @@ export default function PlaySessionDetail() {
                     </div>
                     <div className="mt-1 text-sm">
                       {a == null ? (
-                        <span className="text-muted-foreground">No answer</span>
+                        <span className="text-muted-foreground">Không trả lời</span>
                       ) : a.is_correct ? (
                         <span className="inline-flex items-center gap-1 text-emerald-500">
-                          <Check className="size-4" /> Correct (+{a.score})
+                          <Check className="size-4" /> Đúng (+{a.score})
                         </span>
                       ) : (
                         <span className="inline-flex items-center gap-1 text-destructive">
-                          <X className="size-4" /> Wrong
+                          <X className="size-4" /> Sai
                         </span>
                       )}
                     </div>

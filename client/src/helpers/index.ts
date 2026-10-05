@@ -31,7 +31,7 @@ export function optionLetter(index: number): string {
  * Color-Quadrants design system — index-mapped answer colors + geometric glyphs.
  * A/B/C/D → Red ▲ · Blue ◆ · Gold ● · Green ■. Wraps for >4 options.
  */
-export const QUAD_COLORS = ['#e2455a', '#2a7de1', '#f5a623', '#1f9d57', '#a855f7', '#0ea5e9'];
+export const QUAD_COLORS = ['#b91c1c', '#1d4ed8', '#92400e', '#047857', '#7e22ce', '#0e7490'];
 export const QUAD_GLYPHS = ['▲', '◆', '●', '■', '★', '⬢'];
 /** lucide equivalents of QUAD_GLYPHS, index-matched. */
 export const QUAD_ICONS: LucideIcon[] = [Triangle, Diamond, Circle, Square, Star, Hexagon];
@@ -138,23 +138,23 @@ export function hasText(value?: string | null): value is string {
 
 /** Display label + icon for each question type (used in the lobby intro, etc). */
 export const QUESTION_TYPE_META: Record<QuestionType, { label: string; icon: LucideIcon }> = {
-  multiple_choice: { label: 'Single Choice', icon: Target },
-  multi_select: { label: 'Multiple Answers', icon: ListChecks },
-  true_false: { label: 'True / False', icon: ToggleLeft },
-  open_text: { label: 'Open Text', icon: PenLine },
-  closest_to: { label: 'Closest Number', icon: Gauge },
-  fill_blank: { label: 'Fill the Blank', icon: SquareDashed },
-  ordering: { label: 'Put in Order', icon: ArrowUpDown },
-  geo: { label: 'Locate on Map', icon: MapPin },
-  matching: { label: 'Match Pairs', icon: Link2 },
+  multiple_choice: { label: 'Một đáp án', icon: Target },
+  multi_select: { label: 'Nhiều đáp án', icon: ListChecks },
+  true_false: { label: 'Đúng / Sai', icon: ToggleLeft },
+  open_text: { label: 'Trả lời ngắn', icon: PenLine },
+  closest_to: { label: 'Số gần đúng', icon: Gauge },
+  fill_blank: { label: 'Điền chỗ trống', icon: SquareDashed },
+  ordering: { label: 'Sắp xếp', icon: ArrowUpDown },
+  geo: { label: 'Chọn trên bản đồ', icon: MapPin },
+  matching: { label: 'Nối cặp', icon: Link2 },
 };
 
 /** Format a duration in seconds as `45s`, `2m`, or `2m 30s`. */
 export function formatTime(totalSec: number): string {
   const m = Math.floor(totalSec / 60);
   const s = totalSec % 60;
-  if (m === 0) return `${s}s`;
-  return s === 0 ? `${m}m` : `${m}m ${s}s`;
+  if (m === 0) return `${s} giây`;
+  return s === 0 ? `${m} phút` : `${m} phút ${s} giây`;
 }
 
 /** Split a comma-separated tag input into a clean list. */

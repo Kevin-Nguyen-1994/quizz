@@ -22,12 +22,12 @@ export function MuteToggle({ className }: Props) {
     <button
       type="button"
       onClick={toggle}
-      aria-label={muted ? 'Unmute sound' : 'Mute sound'}
+      aria-label={muted ? 'Bật âm thanh' : 'Tắt âm thanh'}
       aria-pressed={muted}
-      title={muted ? 'Unmute' : 'Mute'}
+      title={muted ? 'Bật âm thanh' : 'Tắt âm thanh'}
       style={{ background: 'var(--surface2)', color: 'var(--text2)' }}
       className={cn(
-        'inline-flex h-9 w-9 items-center justify-center rounded-full border border-border transition-colors hover:text-foreground',
+        'inline-flex size-11 items-center justify-center rounded-full border border-border transition-colors hover:text-foreground',
         className,
       )}
     >

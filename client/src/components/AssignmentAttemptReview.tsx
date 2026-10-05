@@ -66,7 +66,7 @@ function QuestionCard({ question }: { question: AssignmentAttemptQuestionDetail 
         </div>
         <div className="grid gap-2 text-sm sm:grid-cols-2">
           <div className="rounded-lg bg-muted p-3">
-            <span className="block text-xs text-muted-foreground">Câu trả lời</span>
+            <span className="block text-xs text-muted-foreground">Câu trả lời của bạn</span>
             <span className="whitespace-pre-wrap">{question.submittedAnswer}</span>
           </div>
           <div className="rounded-lg bg-emerald-500/10 p-3">

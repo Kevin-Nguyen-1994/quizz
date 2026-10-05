@@ -33,6 +33,7 @@ export function CompactQuizList({
   onDelete,
   onPreview,
 }: CompactQuizListProps) {
+  const employeeView = basePath === '/u';
   return (
     <ul className="divide-y divide-border">
       {items.map((q) => (
@@ -40,7 +41,10 @@ export function CompactQuizList({
           <div className="min-w-0 flex-1">
             <span className="block truncate font-medium">{q.title}</span>
             <span className="block text-sm text-muted-foreground">
-              {q.question_count} question{q.question_count !== 1 ? 's' : ''} ·{' '}
+              {employeeView
+                ? `${q.question_count} câu hỏi`
+                : `${q.question_count} question${q.question_count !== 1 ? 's' : ''}`}{' '}
+              ·{' '}
               {formatDate(q.created_at)}
             </span>
           </div>
@@ -56,7 +60,7 @@ export function CompactQuizList({
                 '…'
               ) : (
                 <>
-                  <Play className="size-4" /> Start
+                  <Play className="size-4" /> {employeeView ? 'Bắt đầu' : 'Start'}
                 </>
               )}
             </Button>
@@ -67,19 +71,19 @@ export function CompactQuizList({
                 size="sm"
                 onClick={() => onPreview(q.id)}
                 disabled={previewing === q.id}
-                title="Preview how this quiz looks — no session needed"
+                title={employeeView ? 'Xem trước quiz' : 'Preview how this quiz looks — no session needed'}
               >
                 {previewing === q.id ? (
                   '…'
                 ) : (
                   <>
-                    <Eye className="size-4" /> Preview
+                    <Eye className="size-4" /> {employeeView ? 'Xem trước' : 'Preview'}
                   </>
                 )}
               </Button>
             )}
             <Button variant="secondary" size="sm" asChild>
-              <Link to={`${basePath}/quiz/${q.id}/edit`}>Edit</Link>
+              <Link to={`${basePath}/quiz/${q.id}/edit`}>{employeeView ? 'Sửa' : 'Edit'}</Link>
             </Button>
             <Button
               type="button"
@@ -87,9 +91,9 @@ export function CompactQuizList({
               size="sm"
               onClick={() => onDelete(q.id)}
               disabled={deleting === q.id}
-              title="Delete quiz"
+              title={employeeView ? 'Xóa quiz' : 'Delete quiz'}
             >
-              Delete
+              {employeeView ? 'Xóa' : 'Delete'}
             </Button>
           </div>
         </li>

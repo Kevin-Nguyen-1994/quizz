@@ -8,7 +8,7 @@ import type { FinalLeaderboardEntry, LeaderboardEntry } from '@/types';
 function YouBadge() {
   return (
     <span className="ml-1.5 rounded-full bg-primary/15 px-1.5 py-0.5 text-[0.65rem] font-bold uppercase tracking-wide text-primary">
-      You
+      Bạn
     </span>
   );
 }
@@ -70,7 +70,7 @@ export function LeaderboardList({
                   <X className="size-4" />
                 </span>
               )}
-            <div className="lb-score">{e.totalScore.toLocaleString()}</div>
+            <div className="lb-score">{e.totalScore.toLocaleString('vi-VN')}</div>
             {renderActions?.(e)}
           </li>
         );
@@ -149,7 +149,7 @@ export function FinalLeaderboard({ entries, highlightUsername, footer }: FinalPr
               {e.username}
               {highlightUsername && e.username === highlightUsername && <YouBadge />}
             </div>
-            <div className="lb-score">{e.totalScore.toLocaleString()}</div>
+            <div className="lb-score">{e.totalScore.toLocaleString('vi-VN')}</div>
           </li>
         ))}
       </ul>

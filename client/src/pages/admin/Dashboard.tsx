@@ -20,7 +20,7 @@ import type { AppConfig, GameSettings, ImportQuestion, Quiz, Session, ThemeId } 
 import { PreGameSettingsModal } from './components/PreGameSettingsModal';
 
 export default function Dashboard() {
-  const { isSuperAdmin } = useAuth();
+  const { isSuperAdmin, user } = useAuth();
   const api = useAuthFetch();
   const navigate = useNavigate();
   const basePath = useCreatorBase();
@@ -179,7 +179,7 @@ export default function Dashboard() {
                 '…'
               ) : (
                 <span className="flex items-center gap-1.5">
-                  <Play className="size-4" /> Start
+                  <Play className="size-4" /> {basePath === '/u' ? 'Bắt đầu' : 'Start'}
                 </span>
               )}
             </Button>
@@ -189,20 +189,24 @@ export default function Dashboard() {
               size="sm"
               onClick={() => openPreview(q.id)}
               disabled={previewing === q.id}
-              title="Preview how this quiz looks — no session needed"
+              title={
+                basePath === '/u'
+                  ? 'Xem trước quiz mà không cần tạo phiên'
+                  : 'Preview how this quiz looks — no session needed'
+              }
             >
               {previewing === q.id ? (
                 '…'
               ) : (
                 <span className="flex items-center gap-1.5">
-                  <Eye className="size-4" /> Preview
+                  <Eye className="size-4" /> {basePath === '/u' ? 'Xem trước' : 'Preview'}
                 </span>
               )}
             </Button>
             <Button variant="secondary" size="sm" asChild>
               <Link to={`${basePath}/quiz/${q.id}/edit`}>
                 <span className="flex items-center gap-1.5">
-                  <Pencil className="size-4" /> Edit
+                  <Pencil className="size-4" /> {basePath === '/u' ? 'Sửa' : 'Edit'}
                 </span>
               </Link>
             </Button>
@@ -212,6 +216,7 @@ export default function Dashboard() {
               size="sm"
               onClick={() => deleteQuiz(q.id)}
               disabled={deleting === q.id}
+              aria-label={basePath === '/u' ? `Xóa quiz ${q.title}` : `Delete quiz ${q.title}`}
             >
               <Trash2 className="size-4" />
             </Button>
@@ -227,7 +232,20 @@ export default function Dashboard() {
     <Page>
       <CreatorNav />
       <MainContent>
-        {basePath === '/u' && <PendingAssignmentsBlock />}
+        {basePath === '/u' && (
+          <>
+            <div className="mb-6 rounded-2xl border border-border bg-card px-5 py-5 sm:px-6">
+              <p className="text-sm font-semibold text-primary">Trang cá nhân</p>
+              <h1 className="mt-1 break-words">
+                Xin chào, {user?.playDisplayName || user?.username || 'bạn'}
+              </h1>
+              <Subtitle className="mt-1">
+                Các bài kiểm tra cần hoàn thành được ưu tiên hiển thị bên dưới.
+              </Subtitle>
+            </div>
+            <PendingAssignmentsBlock />
+          </>
+        )}
         {activeSessions.length > 0 && (
           <Card className="mb-6 border-blue-500/30 bg-blue-500/[0.05]">
             <CardContent className="flex flex-col gap-3 p-5">
@@ -236,7 +254,9 @@ export default function Dashboard() {
                   <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-70" />
                   <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-400" />
                 </span>
-                {activeSessions.length} open session{activeSessions.length > 1 ? 's' : ''}
+                {basePath === '/u'
+                  ? `${activeSessions.length} phiên Live Game đang mở`
+                  : `${activeSessions.length} open session${activeSessions.length > 1 ? 's' : ''}`}
               </span>
               <div className="flex flex-col gap-2.5">
                 {activeSessions.map((s) => (
@@ -259,7 +279,8 @@ export default function Dashboard() {
                         onClick={() => navigate(`${basePath}/game/${s.id}`)}
                       >
                         <span className="flex items-center gap-1.5">
-                          Resume <ArrowRight className="size-4" />
+                          {basePath === '/u' ? 'Tiếp tục' : 'Resume'}{' '}
+                          <ArrowRight className="size-4" />
                         </span>
                       </Button>
                       <Button
@@ -283,9 +304,13 @@ export default function Dashboard() {
 
         <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
           <div>
-            <h1>{showGroupedByUser ? 'All Quizzes' : 'My Quizzes'}</h1>
+            <h1>
+              {showGroupedByUser ? 'All Quizzes' : basePath === '/u' ? 'Quiz của tôi' : 'My Quizzes'}
+            </h1>
             <Subtitle>
-              {quizzes.length} quiz{quizzes.length !== 1 ? 'zes' : ''} total
+              {basePath === '/u'
+                ? `${quizzes.length} quiz đã tạo`
+                : `${quizzes.length} quiz${quizzes.length !== 1 ? 'zes' : ''} total`}
               {showGroupedByUser && quizGroups.length > 0
                 ? ` · ${quizGroups.length} user${quizGroups.length !== 1 ? 's' : ''}`
                 : ''}
@@ -294,7 +319,7 @@ export default function Dashboard() {
           <Button size="lg" asChild>
             <Link to={`${basePath}/quiz/new`}>
               <span className="flex items-center gap-1.5">
-                <Plus className="size-4" /> Create Quiz
+                  <Plus className="size-4" /> {basePath === '/u' ? 'Tạo quiz' : 'Create Quiz'}
               </span>
             </Link>
           </Button>
@@ -304,10 +329,16 @@ export default function Dashboard() {
           <Card>
             <CardContent className="px-8 py-16 text-center">
               <FileText className="mx-auto mb-3 size-10 text-muted-foreground" />
-              <h2>No quizzes yet</h2>
-              <Subtitle className="mt-2 mb-6">Create your first quiz to get started</Subtitle>
+              <h2>{basePath === '/u' ? 'Bạn chưa tạo quiz nào' : 'No quizzes yet'}</h2>
+              <Subtitle className="mt-2 mb-6">
+                {basePath === '/u'
+                  ? 'Bạn có thể tạo quiz để tổ chức một phiên Live Game.'
+                  : 'Create your first quiz to get started'}
+              </Subtitle>
               <Button size="lg" asChild>
-                <Link to={`${basePath}/quiz/new`}>Create Quiz</Link>
+                <Link to={`${basePath}/quiz/new`}>
+                  {basePath === '/u' ? 'Tạo quiz' : 'Create Quiz'}
+                </Link>
               </Button>
             </CardContent>
           </Card>

@@ -996,7 +996,7 @@
 }
 
 .option-quad {
-  --quad-color: #e2455a;
+  --quad-color: #b91c1c;
   display: flex;
   align-items: center;
   gap: 16px;
@@ -1015,16 +1015,16 @@
     opacity 0.2s,
     filter 0.2s;
   background: var(--quad-color);
-  box-shadow: 0 6px 0 rgba(0, 0, 0, 0.3);
+  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.28);
   animation: optIn 0.4s both;
 }
 .option-quad:hover:not(:disabled):not(.correct):not(.wrong):not(.dim) {
   transform: translateY(-2px);
-  box-shadow: 0 9px 0 rgba(0, 0, 0, 0.32);
+  box-shadow: 0 5px 0 rgba(0, 0, 0, 0.3);
 }
 .option-quad:active:not(:disabled) {
-  transform: translateY(3px);
-  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.3);
+  transform: translateY(1px);
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.28);
 }
 .option-quad:disabled {
   cursor: default;
@@ -1032,6 +1032,7 @@
 .option-quad.selected {
   outline: 3px solid #fff;
   outline-offset: 2px;
+  box-shadow: 0 0 0 5px rgba(255, 255, 255, 0.2);
 }
 .option-quad.correct {
   border: 3px solid var(--success);

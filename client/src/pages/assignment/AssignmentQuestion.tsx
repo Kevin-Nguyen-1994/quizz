@@ -77,10 +77,10 @@ export function AssignmentQuestion({
       return (
         <div className="space-y-4">
           <QuadOptionGrid
-            options={question.options}
+            options={isTrueFalse ? ['Đúng', 'Sai'] : question.options}
             selectedIndex={selectedIndex}
             disabled={disabled}
-            colorFor={isTrueFalse ? (index) => (index === 0 ? '#1f9d57' : '#e2455a') : undefined}
+            colorFor={isTrueFalse ? (index) => (index === 0 ? '#047857' : '#b91c1c') : undefined}
             badgeFor={
               isTrueFalse
                 ? (index) => (index === 0 ? <Check className="size-5" /> : <X className="size-5" />)
@@ -205,7 +205,7 @@ export function AssignmentQuestion({
                         ),
                       )
                     }
-                    className="mx-1 inline-block w-32 rounded-md border border-border bg-background px-2 py-1 text-center"
+                    className="mx-1 my-1 inline-block min-h-11 w-[min(8rem,70vw)] rounded-md border border-border bg-background px-2 py-2 text-center"
                   />
                 )}
               </span>
@@ -251,7 +251,7 @@ export function AssignmentQuestion({
                   aria-label="Kéo hoặc dùng phím mũi tên để sắp xếp"
                   disabled={disabled}
                   {...reorder.handleProps(position)}
-                  className="cursor-grab text-muted-foreground"
+                  className="flex size-11 shrink-0 cursor-grab items-center justify-center rounded-lg text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   <GripVertical className="size-5" />
                 </button>
@@ -301,8 +301,11 @@ export function AssignmentQuestion({
         <p className="text-center text-sm text-muted-foreground">
           Chọn một mục bên trái, sau đó chọn mục tương ứng bên phải.
         </p>
-        <div className="grid grid-cols-2 gap-2 sm:gap-3">
-          <div className="flex flex-col gap-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-3">
+          <fieldset className="flex min-w-0 flex-col gap-2">
+            <legend className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Chọn nội dung
+            </legend>
             {question.options.map((left, index) => (
               <button
                 // biome-ignore lint/suspicious/noArrayIndexKey: matching labels may repeat and positions are the answer identity
@@ -311,7 +314,7 @@ export function AssignmentQuestion({
                 disabled={disabled}
                 onClick={() => setSelectedLeft((current) => (current === index ? null : index))}
                 className={cn(
-                  'rounded-lg border p-3 text-left text-sm',
+                  'min-h-12 rounded-lg border p-3 text-left text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                   selectedLeft === index
                     ? 'border-primary ring-2 ring-primary'
                     : links[index] !== null
@@ -322,8 +325,11 @@ export function AssignmentQuestion({
                 <OptionText value={left} imgClassName="option-img-sm" />
               </button>
             ))}
-          </div>
-          <div className="flex flex-col gap-2">
+          </fieldset>
+          <fieldset className="flex min-w-0 flex-col gap-2">
+            <legend className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Ghép với
+            </legend>
             {(question.rightOptions ?? []).map((right, slot) => (
               <button
                 // biome-ignore lint/suspicious/noArrayIndexKey: matching labels may repeat and positions are the answer identity
@@ -332,7 +338,7 @@ export function AssignmentQuestion({
                 disabled={disabled}
                 onClick={() => tapRight(slot)}
                 className={cn(
-                  'rounded-lg border p-3 text-left text-sm',
+                  'min-h-12 rounded-lg border p-3 text-left text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                   links.includes(slot)
                     ? 'border-primary bg-primary/15'
                     : 'border-border bg-muted/40',
@@ -341,7 +347,7 @@ export function AssignmentQuestion({
                 <OptionText value={right} imgClassName="option-img-sm" />
               </button>
             ))}
-          </div>
+          </fieldset>
         </div>
         <Button
           className="w-full"
@@ -358,12 +364,17 @@ export function AssignmentQuestion({
   return (
     <div className="mx-auto w-full max-w-3xl px-4 py-5 sm:py-8">
       <div className="mb-4">
-        <h1 className="mb-2 truncate text-lg sm:text-xl">{assignmentTitle}</h1>
+        <p className="text-xs font-semibold uppercase tracking-wide text-primary">Bài kiểm tra</p>
+        <h1 className="mb-2 mt-1 break-words text-lg leading-snug sm:text-xl">
+          {assignmentTitle}
+        </h1>
         <div className="mb-2 flex items-center justify-between gap-3 text-sm text-muted-foreground">
           <span>
             Câu {question.questionIndex + 1}/{question.totalQuestions}
           </span>
-          <span>{submitting ? 'Đang gửi…' : 'Tự động chuyển khi hết giờ'}</span>
+          <span className="text-right">
+            {submitting ? 'Đang gửi…' : `Còn ${timeLeft} giây`}
+          </span>
         </div>
         <TimerBar timeLeft={timeLeft} totalSec={question.timeSec} />
       </div>

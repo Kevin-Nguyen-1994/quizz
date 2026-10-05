@@ -12,7 +12,7 @@ export default function UserNav() {
     <CreatorNavBar
       basePath="/u"
       loginPath="/login"
-      playLabel="Live Game ↗"
+      playLabel="Tham gia Live Game ↗"
       userNavigation
       assignmentCount={pendingCount}
     />

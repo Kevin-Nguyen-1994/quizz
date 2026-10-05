@@ -25,19 +25,19 @@ export function AnsweredScreen({
             {wasPassJoker ? (
               <>
                 <SkipForward className="answer-icon mx-auto size-12" />
-                <div className="answer-label">Question Skipped</div>
+                <div className="answer-label">Đã bỏ qua câu hỏi</div>
               </>
             ) : (
               <>
                 <Lock className="answer-icon mx-auto size-12" />
-                <div className="answer-label">Answer locked in!</div>
+                <div className="answer-label">Đã ghi nhận câu trả lời</div>
               </>
             )}
 
             {totalPlayers > 0 && (
               <div className="mt-6">
                 <div className="answer-counter mb-2 text-[1.1rem]">
-                  {answeredCount} / {totalPlayers} answered
+                  {answeredCount} / {totalPlayers} người đã trả lời
                 </div>
                 <div className="answer-bar mx-auto max-w-[220px]">
                   <div className="answer-bar-fill" style={{ width: `${answerPct}%` }} />
@@ -46,7 +46,7 @@ export function AnsweredScreen({
             )}
 
             <p className="mt-4 text-sm text-muted-foreground">
-              Waiting for other players
+              Đang chờ người chơi khác
               <span className="dots">
                 <span>.</span>
                 <span>.</span>

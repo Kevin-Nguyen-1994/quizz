@@ -14,17 +14,17 @@ export function CountdownScreen({ seconds }: Props) {
     return () => clearTimeout(id);
   }, [count]);
 
-  const label = count > 0 ? String(count) : 'GO!';
+  const label = count > 0 ? String(count) : 'BẮT ĐẦU!';
 
   return (
     <PageCenter className="gap-2.5">
       <div className="mono-label" style={{ letterSpacing: '0.24em', color: 'var(--text2)' }}>
-        Get ready…
+        Sẵn sàng…
       </div>
       <div className="countdown-number" key={label}>
         {label}
       </div>
-      <div className="text-base text-[#64748b]">First question coming up</div>
+      <div className="text-base text-muted-foreground">Câu hỏi đầu tiên sắp bắt đầu</div>
     </PageCenter>
   );
 }

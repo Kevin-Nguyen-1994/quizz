@@ -133,7 +133,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         body: JSON.stringify({ identifier, password }),
       });
       const data = await res.json();
-      if (!res.ok) return { ok: false, error: (data.error as string) ?? 'Đăng nhập thất bại' };
+      if (!res.ok) {
+        const message = data.error as string | undefined;
+        const error =
+          message === 'Invalid credentials'
+            ? 'Tên đăng nhập hoặc mật khẩu không đúng.'
+            : message === 'This account has been banned'
+              ? 'Tài khoản này đã bị khóa. Vui lòng liên hệ quản trị viên.'
+              : 'Đăng nhập thất bại. Vui lòng thử lại.';
+        return { ok: false, error };
+      }
       return applyToken(data.token as string);
     },
     [applyToken],

@@ -134,7 +134,7 @@ export function Podium({
                   className={`font-extrabold ${isFirst ? 'text-[0.88rem]' : 'text-[0.8rem]'}`}
                   style={{ color }}
                 >
-                  {entry.totalScore.toLocaleString()} pts
+                  {entry.totalScore.toLocaleString('vi-VN')} điểm
                 </div>
               </div>
             ) : (

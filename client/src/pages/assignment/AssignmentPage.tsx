@@ -277,7 +277,7 @@ export default function AssignmentPage() {
             <CardContent className="p-6 text-center sm:p-8">
               <AssignmentStatusBadge status={attempt.attempt.status} />
               <h1 className="mt-4">
-                {completed ? 'Đã hoàn thành bài kiểm tra' : 'Lượt làm đã kết thúc'}
+                {completed ? 'Hoàn thành bài kiểm tra' : 'Lượt làm đã kết thúc'}
               </h1>
               <p className="mt-2 text-muted-foreground">{attempt.assignment.title}</p>
               <div className="mt-6 grid grid-cols-2 gap-3 text-left">
@@ -302,7 +302,7 @@ export default function AssignmentPage() {
               </div>
               {attempt.reviewAvailable && attempt.attempt.totalScore !== undefined ? (
                 <div className="mt-4 rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-4">
-                  <span className="block text-sm text-muted-foreground">Kết quả</span>
+                  <span className="block text-sm text-muted-foreground">Điểm của bạn</span>
                   <strong className="text-2xl">{attempt.attempt.totalScore} điểm</strong>
                   <span className="mt-1 block text-sm">
                     {attempt.attempt.correctCount} câu đúng
@@ -321,12 +321,12 @@ export default function AssignmentPage() {
                   disabled={reviewLoading}
                   onClick={loadReview}
                 >
-                  {reviewLoading ? 'Đang tải…' : 'Xem chi tiết đáp án'}
+                  {reviewLoading ? 'Đang tải…' : 'Xem lại bài'}
                 </Button>
               )}
               <Button variant="ghost" className="mt-5" asChild>
-                <Link to="/u">
-                  <ArrowLeft className="size-4" /> Về trang cá nhân
+                <Link to="/u/assignments">
+                  <ArrowLeft className="size-4" /> Về Bài kiểm tra của tôi
                 </Link>
               </Button>
             </CardContent>
@@ -338,7 +338,7 @@ export default function AssignmentPage() {
           )}
           {review && (
             <div className="mt-6 text-left">
-              <h2 className="mb-3 text-xl">Chi tiết đáp án</h2>
+              <h2 className="mb-3 text-xl">Xem lại bài</h2>
               <AssignmentAttemptReview detail={review} />
             </div>
           )}
@@ -362,6 +362,10 @@ export default function AssignmentPage() {
                 </div>
                 <AssignmentStatusBadge status={lookup.status} />
               </div>
+              <p className="mt-4 text-sm text-muted-foreground">
+                Mỗi câu có thời gian riêng. Câu trả lời sẽ được gửi ngay khi bạn xác nhận và bài sẽ
+                tự hoàn thành sau câu cuối.
+              </p>
               <div className="mt-6 space-y-3 rounded-lg bg-muted p-4 text-sm">
                 <div className="flex justify-between gap-3">
                   <span className="text-muted-foreground">Số câu hỏi</span>

@@ -26,7 +26,7 @@ export function WaitingScreen({
   sessionId,
   playerId,
 }: Props) {
-  const title = intro ? intro.title : reconnecting ? 'Welcome back!' : 'Get ready!';
+  const title = intro ? intro.title : reconnecting ? 'Chào mừng bạn trở lại!' : 'Sẵn sàng!';
 
   const [cooling, setCooling] = useState(false);
   const cooldownTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -45,7 +45,7 @@ export function WaitingScreen({
           intro={intro}
           title={title}
           layout="grid"
-          typesHeading="What to expect"
+          typesHeading="Nội dung trò chơi"
           footer={
             /* Pinned to the bottom of the right column */
             <div className="mt-auto pt-6">
@@ -59,7 +59,7 @@ export function WaitingScreen({
                 <div className="min-w-0 flex-1">
                   <p className="truncate font-bold">{username}</p>
                   <p className="text-sm text-muted-foreground">
-                    {reconnecting ? 'Resuming your game' : 'Waiting for the host to start'}
+                    {reconnecting ? 'Đang kết nối lại' : 'Đang chờ quản trị viên bắt đầu'}
                     <span className="dots">
                       <span>.</span>
                       <span>.</span>
@@ -71,7 +71,7 @@ export function WaitingScreen({
               </div>
               <div className="mt-4">
                 <p className="mb-2 text-center text-xs text-muted-foreground">
-                  Send a reaction
+                  Gửi biểu cảm
                 </p>
                 <div className="reaction-bar">
                   {REACTIONS.map((emoji) => (
@@ -81,7 +81,7 @@ export function WaitingScreen({
                       className="reaction-btn"
                       disabled={cooling}
                       onClick={() => sendReaction(emoji)}
-                      aria-label={`React with ${emoji}`}
+                      aria-label={`Gửi biểu cảm ${emoji}`}
                     >
                       {emoji}
                     </button>

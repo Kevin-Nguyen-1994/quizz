@@ -44,7 +44,7 @@ export default function UserLogin() {
               </span>
             )}
           </AppLogo>
-          <Subtitle className="mt-2">Đăng nhập hệ thống đào tạo nội bộ</Subtitle>
+          <Subtitle className="mt-2">Đào tạo &amp; Kiểm tra nội bộ</Subtitle>
         </div>
 
         {error && <AppAlert variant="error">{error}</AppAlert>}

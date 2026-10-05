@@ -8,6 +8,14 @@ import { Card, CardContent } from '@/components/ui/card';
 import UserNav from '@/components/UserNav';
 import { useAuth } from '@/context/AuthContext';
 
+function passwordError(message?: string): string {
+  if (message === 'Current password incorrect') return 'Mật khẩu hiện tại không đúng.';
+  if (message === 'New password must be at least 6 characters')
+    return 'Mật khẩu mới phải có ít nhất 6 ký tự.';
+  if (message === 'User not found') return 'Không tìm thấy tài khoản.';
+  return 'Không thể đổi mật khẩu. Vui lòng thử lại.';
+}
+
 export default function UserSettings() {
   const { token, user, updatePlayProfile } = useAuth();
   const [playName, setPlayName] = useState('');
@@ -17,6 +25,7 @@ export default function UserSettings() {
   const [profileSaving, setProfileSaving] = useState(false);
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [saving, setSaving] = useState(false);
@@ -33,7 +42,7 @@ export default function UserSettings() {
     setProfileSuccess('');
     const cleanName = playName.trim();
     if (!cleanName) {
-      setProfileError('Display name is required');
+      setProfileError('Vui lòng nhập tên hiển thị.');
       return;
     }
     setProfileSaving(true);
@@ -48,18 +57,26 @@ export default function UserSettings() {
     const data = await res.json();
     setProfileSaving(false);
     if (!res.ok) {
-      setProfileError((data.error as string) ?? 'Could not save play profile');
+      setProfileError(
+        data.error === 'Display name is required'
+          ? 'Vui lòng nhập tên hiển thị.'
+          : 'Không thể lưu hồ sơ Live Game.',
+      );
       return;
     }
     updatePlayProfile(data.playDisplayName as string, (data.playAvatar as string | null) ?? '');
     if (playAvatar) saveAvatar(playAvatar);
-    setProfileSuccess('Play profile saved');
+    setProfileSuccess('Đã lưu hồ sơ Live Game.');
   }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError('');
     setSuccess('');
+    if (newPassword !== confirmPassword) {
+      setError('Mật khẩu xác nhận không khớp.');
+      return;
+    }
     setSaving(true);
     const res = await fetch('/api/auth/change-password', {
       method: 'POST',
@@ -72,26 +89,27 @@ export default function UserSettings() {
     const data = await res.json();
     setSaving(false);
     if (!res.ok) {
-      setError(data.error ?? 'Password change failed');
+      setError(passwordError(data.error));
       return;
     }
-    setSuccess('Password updated successfully');
+    setSuccess('Đã cập nhật mật khẩu.');
     setCurrentPassword('');
     setNewPassword('');
+    setConfirmPassword('');
   }
 
   return (
     <Page>
       <UserNav />
       <MainContent className="max-w-[520px]">
-        <h1>Account Settings</h1>
-        <Subtitle className="mb-6">Manage your quiz creator account</Subtitle>
+        <h1>Cài đặt tài khoản</h1>
+        <Subtitle className="mb-6">Quản lý thông tin dùng trong TiL Quiz</Subtitle>
 
         <Card className="mb-6">
           <CardContent className="p-6">
-            <h2 className="mb-4">Account</h2>
+            <h2 className="mb-4">Tài khoản</h2>
             <p>
-              <span className="text-muted-foreground">Name:</span> {user?.username}
+              <span className="text-muted-foreground">Tên:</span> {user?.username}
             </p>
             <p className="mt-2">
               <span className="text-muted-foreground">Tên đăng nhập:</span> {user?.loginName}
@@ -106,16 +124,17 @@ export default function UserSettings() {
 
         <Card className="mb-6">
           <CardContent className="p-6">
-            <h2 className="mb-1">Play profile</h2>
+            <h2 className="mb-1">Hồ sơ Live Game</h2>
             <p className="mb-4 text-sm text-muted-foreground">
-              Default name and avatar when you join a game. You can still change them each time.
+              Tên và ảnh đại diện mặc định khi tham gia trò chơi. Bạn vẫn có thể thay đổi trước khi
+              vào game.
             </p>
             {profileError && <AppAlert variant="error">{profileError}</AppAlert>}
             {profileSuccess && <AppAlert variant="success">{profileSuccess}</AppAlert>}
             <form onSubmit={handlePlayProfileSubmit}>
               <Input
                 id="playName"
-                label="Display name in games"
+                label="Tên hiển thị"
                 type="text"
                 maxLength={50}
                 required
@@ -123,11 +142,11 @@ export default function UserSettings() {
                 onChange={(e) => setPlayName(e.target.value)}
               />
               <div className="mb-4">
-                <p className="mb-2 text-sm font-medium">Avatar</p>
+                <p className="mb-2 text-sm font-medium">Ảnh đại diện</p>
                 <AvatarPicker value={playAvatar} onChange={setPlayAvatar} />
               </div>
               <Button type="submit" disabled={profileSaving} variant="default">
-                {profileSaving ? 'Saving…' : 'Save play profile'}
+                {profileSaving ? 'Đang lưu…' : 'Lưu thay đổi'}
               </Button>
             </form>
           </CardContent>
@@ -135,13 +154,13 @@ export default function UserSettings() {
 
         <Card>
           <CardContent className="p-6">
-            <h2 className="mb-4">Change password</h2>
+            <h2 className="mb-4">Đổi mật khẩu</h2>
             {error && <AppAlert variant="error">{error}</AppAlert>}
             {success && <AppAlert variant="success">{success}</AppAlert>}
             <form onSubmit={handleSubmit}>
               <Input
                 id="currentPassword"
-                label="Current password"
+                label="Mật khẩu hiện tại"
                 type="password"
                 autoComplete="current-password"
                 required
@@ -150,7 +169,7 @@ export default function UserSettings() {
               />
               <Input
                 id="newPassword"
-                label="New password"
+                label="Mật khẩu mới"
                 type="password"
                 autoComplete="new-password"
                 required
@@ -158,8 +177,18 @@ export default function UserSettings() {
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
               />
+              <Input
+                id="confirmPassword"
+                label="Xác nhận mật khẩu mới"
+                type="password"
+                autoComplete="new-password"
+                required
+                minLength={6}
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+              />
               <Button type="submit" disabled={saving} variant="default">
-                {saving ? 'Saving…' : 'Update password'}
+                {saving ? 'Đang lưu…' : 'Cập nhật mật khẩu'}
               </Button>
             </form>
           </CardContent>

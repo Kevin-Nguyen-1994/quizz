@@ -106,16 +106,16 @@ export function AvatarPicker({ value, onChange }: AvatarPickerProps) {
               marginBottom: 8,
             }}
           >
-            Your avatar
+            Ảnh đại diện của bạn
           </p>
           <Button type="button" variant="ghost" size="sm" onClick={() => fileRef.current?.click()}>
             {isImage ? (
               <>
-                <RotateCcw className="size-4" /> Change photo
+                <RotateCcw className="size-4" /> Đổi ảnh
               </>
             ) : (
               <>
-                <Upload className="size-4" /> Upload photo
+                <Upload className="size-4" /> Tải ảnh lên
               </>
             )}
           </Button>
@@ -140,7 +140,7 @@ export function AvatarPicker({ value, onChange }: AvatarPickerProps) {
           marginBottom: 10,
         }}
       >
-        {loading ? 'Loading avatars…' : 'Or pick one'}
+        {loading ? 'Đang tải ảnh đại diện…' : 'Hoặc chọn một ảnh'}
       </p>
 
       {loading && (
@@ -266,7 +266,7 @@ export function AvatarDisplay({ avatar, size = 36, style }: AvatarDisplayProps) 
       {isImage ? (
         <img
           src={avatar}
-          alt="avatar"
+          alt="Ảnh đại diện"
           style={{ width: '100%', height: '100%', objectFit: 'cover' }}
         />
       ) : (
