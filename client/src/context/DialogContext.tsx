@@ -58,10 +58,10 @@ export function DialogProvider({ children }: { children: ReactNode }) {
   const confirm = useCallback((opts: ConfirmOptions) => {
     setState({
       kind: 'confirm',
-      title: opts.title ?? 'Are you sure?',
+      title: opts.title ?? 'Bạn chắc chắn?',
       message: opts.message,
-      confirmText: opts.confirmText ?? 'Confirm',
-      cancelText: opts.cancelText ?? 'Cancel',
+      confirmText: opts.confirmText ?? 'Xác nhận',
+      cancelText: opts.cancelText ?? 'Hủy',
       variant: opts.variant ?? 'default',
     });
     setOpen(true);

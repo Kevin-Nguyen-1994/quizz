@@ -28,7 +28,7 @@ export default function CreatorNavBar({
   showMyGames = false,
   userNavigation = false,
   assignmentCount = 0,
-  playLabel = 'Play ↗',
+  playLabel = 'Chơi ngay ↗',
 }: Props) {
   const { logout } = useAuth();
   const location = useLocation();
@@ -50,13 +50,13 @@ export default function CreatorNavBar({
         { to: `${basePath}/settings`, label: 'Cài đặt' },
       ]
     : [
-        { to: basePath, label: 'Dashboard' },
-        { to: `${basePath}/quiz/new`, label: '+ New Quiz' },
-        { to: `${basePath}/history`, label: 'History' },
+        { to: basePath, label: 'Tổng quan' },
+        { to: `${basePath}/quiz/new`, label: '+ Tạo quiz' },
+        { to: `${basePath}/history`, label: 'Lịch sử' },
         ...(showAssignments ? [{ to: `${basePath}/assignments`, label: 'Bài kiểm tra' }] : []),
-        ...(showMyGames ? [{ to: `${basePath}/my-games`, label: 'My games' }] : []),
+        ...(showMyGames ? [{ to: `${basePath}/my-games`, label: 'Trò chơi của tôi' }] : []),
         ...(showUsers ? [{ to: `${basePath}/users`, label: 'Quản lý nhân viên' }] : []),
-        { to: `${basePath}/settings`, label: 'Settings' },
+        { to: `${basePath}/settings`, label: 'Cài đặt' },
       ];
 
   async function handleLogout() {
@@ -99,7 +99,7 @@ export default function CreatorNavBar({
             {playLabel}
           </a>
           <Button type="button" onClick={handleLogout} variant="ghost" size="sm">
-            Log out
+            Đăng xuất
           </Button>
         </div>
 
@@ -109,7 +109,7 @@ export default function CreatorNavBar({
           size="icon-sm"
           className="md:hidden"
           aria-expanded={menuOpen}
-          aria-label={menuOpen ? 'Close menu' : 'Open menu'}
+          aria-label={menuOpen ? 'Đóng menu' : 'Mở menu'}
           onClick={() => setMenuOpen((o) => !o)}
         >
           {menuOpen ? <X className="size-5" /> : <Menu className="size-5" />}
@@ -144,7 +144,7 @@ export default function CreatorNavBar({
               className="justify-start px-3"
               onClick={handleLogout}
             >
-              <LogOut className="size-4" /> Log out
+              <LogOut className="size-4" /> Đăng xuất
             </Button>
           </div>
         </div>

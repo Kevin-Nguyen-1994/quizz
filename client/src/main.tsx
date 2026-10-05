@@ -5,6 +5,7 @@ import App from './App';
 import { AppProvider } from './context/AppContext';
 import { AuthProvider } from './context/AuthContext';
 import { DialogProvider } from './context/DialogContext';
+import '@fontsource-variable/geist';
 import './styles/index.css';
 
 // biome-ignore lint/style/noNonNullAssertion: root element is always present in index.html

@@ -133,7 +133,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         body: JSON.stringify({ identifier, password }),
       });
       const data = await res.json();
-      if (!res.ok) return { ok: false, error: (data.error as string) ?? 'Login failed' };
+      if (!res.ok) return { ok: false, error: (data.error as string) ?? 'Đăng nhập thất bại' };
       return applyToken(data.token as string);
     },
     [applyToken],

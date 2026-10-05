@@ -1,8 +1,6 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
-@import "@fontsource-variable/geist";
-
 @custom-variant dark (&:is(.dark *));
 
 :root {
@@ -16,6 +14,10 @@
   --warn: #f59e0b;
   --text2: #94a3b8;
   --radius: 0.8rem;
+  --content-max: 72rem;
+  --control-height: 2.5rem;
+  --control-height-lg: 2.75rem;
+  --shadow-card: 0 12px 32px rgba(0, 0, 0, 0.18);
   --background: #0d0d1a;
   --foreground: #f1f5f9;
   --card: #161628;
@@ -220,6 +222,7 @@
     );
     background-repeat: no-repeat;
     background-attachment: fixed;
+    overflow-wrap: break-word;
   }
 
   #root {
@@ -232,6 +235,12 @@
 
   button {
     font-family: inherit;
+  }
+
+  img,
+  video {
+    max-width: 100%;
+    height: auto;
   }
 
   /* Consistent heading typography across every page (design-aligned) */
@@ -255,6 +264,28 @@
   h4 {
     font-size: 0.95rem;
     font-weight: 600;
+  }
+}
+
+@media (max-width: 640px) {
+  [data-slot='button'] {
+    min-height: 2.75rem;
+    min-width: 2.75rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    /* biome-ignore lint/complexity/noImportantStyles: reduced-motion preferences must override component animations */
+    scroll-behavior: auto !important;
+    /* biome-ignore lint/complexity/noImportantStyles: reduced-motion preferences must override component animations */
+    animation-duration: 0.01ms !important;
+    /* biome-ignore lint/complexity/noImportantStyles: reduced-motion preferences must override component animations */
+    animation-iteration-count: 1 !important;
+    /* biome-ignore lint/complexity/noImportantStyles: reduced-motion preferences must override component transitions */
+    transition-duration: 0.01ms !important;
   }
 }
 

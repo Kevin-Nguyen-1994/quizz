@@ -37,7 +37,11 @@ export function PageVCenter({ children, className }: { children: ReactNode; clas
 
 export function MainContent({ children, className }: { children: ReactNode; className?: string }) {
   return (
-    <div className={cn('mx-auto w-full max-w-6xl flex-1 px-4 py-5 sm:p-6', className)}>{children}</div>
+    <div
+      className={cn('mx-auto w-full max-w-[var(--content-max)] flex-1 px-4 py-5 sm:p-6', className)}
+    >
+      {children}
+    </div>
   );
 }
 
@@ -55,7 +59,9 @@ const maxWidthClass = {
 
 export function AuthCard({ children, className, maxWidth = 'md' }: AuthCardProps) {
   return (
-    <Card className={cn('w-full shadow-xl ring-foreground/10', maxWidthClass[maxWidth], className)}>
+    <Card
+      className={cn('w-full shadow-[var(--shadow-card)] ring-foreground/10', maxWidthClass[maxWidth], className)}
+    >
       <CardContent className="p-6 sm:p-8">{children}</CardContent>
     </Card>
   );
@@ -79,7 +85,7 @@ export function Subtitle({ children, className }: { children: ReactNode; classNa
 }
 
 /** Full-page loading (or error) placeholder shown under the creator nav. */
-export function PageLoading({ message = 'Loading…', nav }: { message?: string; nav?: ReactNode }) {
+export function PageLoading({ message = 'Đang tải…', nav }: { message?: string; nav?: ReactNode }) {
   return (
     <Page>
       {nav ?? <CreatorNav />}

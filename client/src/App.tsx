@@ -28,7 +28,7 @@ const Join = lazy(() => import('./pages/play/Join'));
 function Loading() {
   return (
     <PageCenter>
-      <div className="text-muted-foreground">Loading…</div>
+      <div className="text-muted-foreground">Đang tải…</div>
     </PageCenter>
   );
 }

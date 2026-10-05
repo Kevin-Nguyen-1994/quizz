@@ -7,7 +7,7 @@ export default function AdminNav() {
       loginPath="/login"
       showUsers
       showAssignments
-      playLabel="Player View ↗"
+      playLabel="Màn hình người chơi ↗"
     />
   );
 }

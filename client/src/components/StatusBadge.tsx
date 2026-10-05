@@ -9,13 +9,19 @@ const statusClass: Record<SessionStatus, string> = {
   finished: 'border-border bg-muted text-muted-foreground',
 };
 
+const statusLabel: Record<SessionStatus, string> = {
+  waiting: 'Đang chờ',
+  active: 'Đang diễn ra',
+  finished: 'Đã kết thúc',
+};
+
 export function StatusBadge({ status, className }: { status: SessionStatus; className?: string }) {
   return (
     <Badge
       variant="outline"
       className={cn('font-semibold uppercase tracking-wide', statusClass[status], className)}
     >
-      {status}
+      {statusLabel[status]}
     </Badge>
   );
 }
