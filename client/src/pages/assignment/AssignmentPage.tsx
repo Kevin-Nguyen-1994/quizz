@@ -2,9 +2,10 @@ import { ArrowLeft, Clock3, LogOut, PlayCircle, RotateCcw } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { AppAlert } from '@/components/AppAlert';
+import { BrandLogo } from '@/components/BrandLogo';
 import { AssignmentAttemptReview } from '@/components/AssignmentAttemptReview';
 import { AssignmentStatusBadge } from '@/components/AssignmentStatusBadge';
-import { AppLogo, Page } from '@/components/layout';
+import { Page } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { useApp } from '@/context/AppContext';
@@ -207,8 +208,11 @@ export default function AssignmentPage() {
 
   const header = (
     <header className="border-b border-border bg-card">
-      <div className="mx-auto flex min-h-14 max-w-5xl items-center gap-3 px-4">
-        <AppLogo className="text-xl">{appName || 'TiL Quiz'}</AppLogo>
+      <div className="mx-auto flex min-h-16 max-w-5xl items-center gap-3 px-4">
+        <BrandLogo compact productName={appName || 'TiL Quiz'} />
+        <strong className="hidden text-sm text-foreground md:inline">
+          {appName || 'TiL Quiz'}
+        </strong>
         <span className="hidden text-sm text-muted-foreground sm:inline">Bài kiểm tra cá nhân</span>
         <div className="flex-1" />
         <span className="hidden max-w-48 truncate text-sm sm:block">

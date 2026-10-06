@@ -1,4 +1,4 @@
-import { ArrowRight, Zap } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 import { type FormEvent, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { AppAlert } from '@/components/AppAlert';
@@ -157,18 +157,10 @@ export default function Join() {
   }
 
   return (
-    <PageCenter className="min-h-screen bg-background">
+    <PageCenter className="brand-motif min-h-screen bg-[linear-gradient(135deg,var(--brand-blue-50),var(--page-background)_60%,var(--brand-red-50))]">
       <AuthCard maxWidth="lg" className="max-w-[420px]">
         <div className="text-center mb-6">
-          <AppLogo>
-            {appName ? (
-              appName
-            ) : (
-              <span className="inline-flex items-center gap-1">
-                <Zap className="size-4" /> TiL Quiz
-              </span>
-            )}
-          </AppLogo>
+          <AppLogo>{appName || 'TiL Quiz'}</AppLogo>
           {appSubtitle && step === 'form' && (
             <p className="mt-2 text-base font-medium text-foreground">{appSubtitle}</p>
           )}

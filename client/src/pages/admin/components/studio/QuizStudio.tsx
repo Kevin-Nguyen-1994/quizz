@@ -47,7 +47,7 @@ const DRAFT_KEY = 'quizz:create-draft-v1';
 
 /** Preview colors for the theme swatch picker (bg + accent per theme). */
 const THEME_SWATCH: Record<ThemeId, { bg: string; accent: string }> = {
-  default: { bg: '#0d0d1a', accent: '#7c3aed' },
+  default: { bg: '#f6f8fb', accent: '#02438f' },
   neon: { bg: '#05010f', accent: '#22d3ee' },
   paper: { bg: '#f5f0e6', accent: '#b45309' },
   space: { bg: '#020617', accent: '#818cf8' },
@@ -293,7 +293,7 @@ export function QuizStudio({
       {/* Top bar */}
       <header className="z-20 flex min-h-14 shrink-0 flex-wrap items-center gap-2 border-b border-border bg-muted/40 px-3 py-2 backdrop-blur sm:gap-3 sm:px-4">
         <span className="flex shrink-0 items-center gap-1.5 text-lg font-extrabold text-foreground">
-          <Zap className="size-5 fill-violet-500 text-violet-500" />
+          <Zap className="size-5 fill-primary text-primary" />
           <span className="hidden sm:inline">TiL Quiz</span>
         </span>
         <span className="hidden h-5 w-px bg-border sm:block" />

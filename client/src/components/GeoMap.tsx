@@ -33,7 +33,7 @@ function addTiles(map: L.Map): void {
 const MAP_PIN_PATH =
   '<path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/>';
 
-/** A color-coded lucide map pin as a Leaflet divIcon (violet = guess, green = correct). */
+/** A color-coded lucide map pin as a Leaflet divIcon (THUDO blue = guess, green = correct). */
 function pin(color: string): L.DivIcon {
   return L.divIcon({
     html: `<svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="filter:drop-shadow(0 1px 2px rgba(0,0,0,.45))">${MAP_PIN_PATH}</svg>`,
@@ -43,7 +43,7 @@ function pin(color: string): L.DivIcon {
   });
 }
 
-const PIN_GUESS = '#7c3aed';
+const PIN_GUESS = '#02438f';
 const PIN_CORRECT = '#22c55e';
 
 /**
@@ -112,7 +112,7 @@ export function MapPicker({
   );
 }
 
-/** Static reveal map — correct spot (green pin), the player's guess (violet pin) and a link line. */
+/** Static reveal map — correct spot (green pin), the player's guess (THUDO blue) and a link line. */
 export function MapReveal({
   correct,
   guess,

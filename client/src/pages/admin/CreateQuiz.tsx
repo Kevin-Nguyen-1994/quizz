@@ -28,13 +28,13 @@ const COPY_TONE = {
     label: 'Sao chép mẫu',
     icon: Braces,
     className:
-      'border-violet-500/35 bg-violet-600 text-white hover:bg-violet-500 focus-visible:ring-violet-500/40',
+      'border-primary bg-primary text-white hover:bg-[var(--brand-primary-hover)] focus-visible:ring-primary/40',
   },
   prompt: {
     label: 'Sao chép hướng dẫn',
     icon: Sparkles,
     className:
-      'border-cyan-500/35 bg-cyan-600 text-white hover:bg-cyan-500 focus-visible:ring-cyan-500/40',
+      'border-[var(--brand-accent)] bg-[var(--brand-accent)] text-white hover:bg-[var(--brand-accent-hover)] focus-visible:ring-[var(--brand-accent)]/40',
   },
 } as const;
 

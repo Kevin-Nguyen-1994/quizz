@@ -46,7 +46,7 @@ export function GameQuestion({
         <Button type="button" size="sm" onClick={onFinishQuestion}>
           Kết thúc câu hỏi
         </Button>
-        <Button type="button" variant="ghost" size="sm" onClick={onEndGame}>
+        <Button type="button" variant="destructive" size="sm" onClick={onEndGame}>
           Kết thúc trò chơi
         </Button>
       </div>

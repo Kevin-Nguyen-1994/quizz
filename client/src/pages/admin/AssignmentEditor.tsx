@@ -627,9 +627,15 @@ export default function AssignmentEditor() {
                     type="button"
                     aria-pressed={targetMode === mode}
                     onClick={() => chooseMode(mode)}
-                    className={`min-h-14 rounded-lg border p-3 text-left text-sm font-semibold transition ${targetMode === mode ? 'border-primary bg-primary/10 text-foreground' : 'border-border text-muted-foreground hover:bg-muted/50'}`}
+                    className={`relative min-h-20 rounded-lg border p-4 text-left text-sm font-semibold transition ${targetMode === mode ? 'border-primary bg-primary/10 text-primary shadow-sm' : 'border-border bg-card text-muted-foreground hover:border-[var(--border-strong)] hover:bg-muted/50'}`}
                   >
                     {MODE_LABELS[mode]}
+                    {targetMode === mode && (
+                      <span
+                        className="absolute right-3 top-3 size-2 rounded-full bg-primary"
+                        aria-hidden="true"
+                      />
+                    )}
                   </button>
                 ))}
               </div>

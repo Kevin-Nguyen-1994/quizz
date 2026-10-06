@@ -1,4 +1,3 @@
-import { Zap } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { AppAlert } from '@/components/AppAlert';
 import { AppLogo, AuthCard, PageCenter, Subtitle } from '@/components/layout';
@@ -12,13 +11,7 @@ export default function UserRegister() {
     <PageCenter>
       <AuthCard>
         <div className="text-center mb-6">
-          <AppLogo>
-            {appName || (
-              <span className="inline-flex items-center gap-1.5">
-                <Zap className="size-4" /> TiL Quiz
-              </span>
-            )}
-          </AppLogo>
+          <AppLogo>{appName || 'TiL Quiz'}</AppLogo>
           <Subtitle className="mt-2">Tài khoản nhân viên do quản trị viên cấp</Subtitle>
         </div>
 

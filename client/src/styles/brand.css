@@ -1,0 +1,48 @@
+:root {
+  /* THUDO source palette */
+  --brand-blue-900: #063568;
+  --brand-blue-800: #003e7f;
+  --brand-blue-700: #02438f;
+  --brand-blue-600: #0b55ae;
+  --brand-blue-100: #e7f0fa;
+  --brand-blue-50: #f4f8fd;
+  --brand-red-700: #b8173a;
+  --brand-red-600: #e21c47;
+  --brand-red-100: #fce8ed;
+  --brand-red-50: #fff5f7;
+
+  /* Product aliases */
+  --brand-primary: var(--brand-blue-700);
+  --brand-primary-hover: var(--brand-blue-800);
+  --brand-primary-soft: var(--brand-blue-100);
+  --brand-accent: var(--brand-red-600);
+  --brand-accent-hover: var(--brand-red-700);
+  --brand-accent-soft: var(--brand-red-100);
+
+  --page-background: #f6f8fb;
+  --surface: #ffffff;
+  --surface-hover: #f4f8fd;
+  --surface-hover-foreground: #102a43;
+  --surface-subtle: #f0f4f8;
+  --border-default: #d8e1ea;
+  --border-strong: #b8c7d5;
+  --text-primary: #102a43;
+  --text-secondary: #52667a;
+  --text-muted: #7b8b9b;
+  --text-on-primary: #ffffff;
+  --interactive-accent: var(--brand-blue-100);
+  --interactive-accent-foreground: var(--brand-blue-900);
+
+  --success: #15803d;
+  --success-soft: #eaf7ee;
+  --warning: #b45309;
+  --warning-soft: #fff7e6;
+  --danger: #c6283f;
+  --danger-soft: #fce8ed;
+  --info: var(--brand-blue-700);
+  --info-soft: var(--brand-blue-100);
+
+  --focus-ring: rgba(2, 67, 143, 0.28);
+  --shadow-card: 0 1px 2px rgba(16, 42, 67, 0.05), 0 8px 24px rgba(16, 42, 67, 0.06);
+  --shadow-dialog: 0 20px 60px rgba(16, 42, 67, 0.2);
+}

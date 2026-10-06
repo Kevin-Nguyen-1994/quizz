@@ -2,6 +2,7 @@ import { Check, Layers3, Lock, Pencil, Smile, Target, Timer, Trash2, Upload } fr
 import { type ChangeEvent, useEffect, useState } from 'react';
 import { AppAlert } from '@/components/AppAlert';
 import { FormRow, MainContent, Page, PageHeader, PageLoading } from '@/components/layout';
+import { BrandLogo } from '@/components/BrandLogo';
 import { Button } from '@/components/ui/button';
 import { Input as FileInput } from '@/components/ui/input';
 import { invalidateAvatarCache } from '@/lib/avatars';
@@ -73,9 +74,8 @@ function BrandingPreview({ appName, appSubtitle }: { appName: string; appSubtitl
         Xem trước màn hình tham gia
       </p>
       <div className="py-4 text-center">
-        <div className="text-xl font-extrabold bg-gradient-to-br from-blue-600 to-blue-400 bg-clip-text text-transparent">
-          {logo}
-        </div>
+        <BrandLogo className="justify-center" productName={logo} />
+        <div className="mt-3 text-lg font-bold text-foreground">{logo}</div>
         {appSubtitle.trim() && (
           <p className="text-sm font-medium text-foreground mt-2">{appSubtitle.trim()}</p>
         )}

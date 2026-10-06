@@ -1,11 +1,14 @@
 import type { ReactNode } from 'react';
+import { BrandLogo } from '@/components/BrandLogo';
 import { Card, CardContent } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import CreatorNav from './CreatorNav';
 
 export function Page({ children, className }: { children: ReactNode; className?: string }) {
   return (
-    <div className={cn('flex min-h-0 flex-1 flex-col overflow-x-hidden', className)}>{children}</div>
+    <div className={cn('flex min-h-0 flex-1 flex-col overflow-x-hidden', className)}>
+      {children}
+    </div>
   );
 }
 
@@ -59,23 +62,17 @@ const maxWidthClass = {
 
 export function AuthCard({ children, className, maxWidth = 'md' }: AuthCardProps) {
   return (
-    <Card
-      className={cn('w-full shadow-[var(--shadow-card)] ring-foreground/10', maxWidthClass[maxWidth], className)}
-    >
+    <Card className={cn('w-full', maxWidthClass[maxWidth], className)}>
       <CardContent className="p-6 sm:p-8">{children}</CardContent>
     </Card>
   );
 }
 
-export function AppLogo({ children, className }: { children: ReactNode; className?: string }) {
+export function AppLogo({ children, className }: { children?: ReactNode; className?: string }) {
   return (
-    <div
-      className={cn(
-        'bg-gradient-to-br from-blue-600 to-blue-400 bg-clip-text text-2xl font-extrabold text-transparent',
-        className,
-      )}
-    >
-      {children}
+    <div className={cn('flex flex-col items-center', className)}>
+      <BrandLogo className="justify-center" compact />
+      {children && <strong className="mt-3 text-2xl text-foreground">{children}</strong>}
     </div>
   );
 }
@@ -98,11 +95,14 @@ export function PageHeader({
   className?: string;
 }) {
   return (
-    <header className={cn('mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between', className)}>
+    <header
+      className={cn(
+        'mb-6 flex flex-col gap-3 border-l-4 border-primary pl-4 sm:flex-row sm:items-end sm:justify-between',
+        className,
+      )}
+    >
       <div className="min-w-0">
-        {eyebrow && (
-          <p className="mb-1 text-sm font-semibold text-primary">{eyebrow}</p>
-        )}
+        {eyebrow && <p className="mb-1 text-sm font-semibold text-primary">{eyebrow}</p>}
         <h1 className="break-words">{title}</h1>
         {description && <Subtitle className="mt-1">{description}</Subtitle>}
       </div>
@@ -127,9 +127,13 @@ export function EmptyState({
   return (
     <Card className={className}>
       <CardContent className="px-6 py-12 text-center sm:py-14">
-        {icon && <div className="mx-auto mb-3 flex justify-center text-muted-foreground">{icon}</div>}
+        {icon && (
+          <div className="mx-auto mb-3 flex justify-center text-muted-foreground">{icon}</div>
+        )}
         <h2>{title}</h2>
-        {description && <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">{description}</p>}
+        {description && (
+          <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">{description}</p>
+        )}
         {action && <div className="mt-5 flex justify-center">{action}</div>}
       </CardContent>
     </Card>

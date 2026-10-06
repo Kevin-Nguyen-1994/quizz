@@ -1,13 +1,14 @@
-import { LogOut, Menu, Play, X, Zap } from 'lucide-react';
+import { LogOut, Menu, Play, X } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
+import { BrandLogo } from '@/components/BrandLogo';
 import { cn } from '@/lib/utils';
 import { useApp } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
 
 const navBtn =
-  'rounded-lg px-3 py-1.5 text-sm font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground';
+  'rounded-lg px-3 py-1.5 text-sm font-medium text-muted-foreground transition hover:bg-[var(--interactive-accent)] hover:text-[var(--interactive-accent-foreground)] focus-visible:bg-[var(--interactive-accent)] focus-visible:text-[var(--interactive-accent-foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40';
 
 interface Props {
   basePath: string;
@@ -71,21 +72,13 @@ export default function CreatorNavBar({
 
   return (
     <nav className="sticky top-0 z-50 border-b border-border bg-card">
-      <div className="flex min-h-14 items-center gap-2 px-3 sm:px-4">
+      <div className="mx-auto flex min-h-16 w-full max-w-[var(--content-max)] items-center gap-2 px-3 sm:px-4">
         <Link
           to={basePath}
-          className="mr-1 flex min-w-0 items-center gap-1.5 text-lg font-extrabold sm:mr-3 sm:text-xl"
+          className="mr-1 flex min-w-0 items-center sm:mr-3"
+          aria-label={`${appName || 'TiL Quiz'} – Trang chủ`}
         >
-          <Zap className="size-5 shrink-0 fill-blue-500 text-blue-500" />
-          {appName ? (
-            <span className="truncate bg-gradient-to-br from-blue-600 to-blue-400 bg-clip-text text-transparent">
-              {appName}
-            </span>
-          ) : (
-            <span className="bg-gradient-to-br from-blue-600 to-blue-400 bg-clip-text text-transparent">
-              TiL Quiz
-            </span>
-          )}
+          <BrandLogo compact productName={appName || 'TiL Quiz'} />
         </Link>
 
         <div className="hidden flex-wrap items-center gap-1 md:flex">

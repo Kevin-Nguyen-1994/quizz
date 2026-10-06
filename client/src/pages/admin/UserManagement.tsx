@@ -367,7 +367,7 @@ export default function UserManagement() {
                       'shrink-0 font-semibold uppercase',
                       u.is_banned
                         ? 'border-border bg-muted text-muted-foreground'
-                        : 'border-emerald-500/30 bg-emerald-500/15 text-emerald-300',
+                        : 'border-emerald-600/25 bg-emerald-50 text-emerald-700',
                     )}
                   >
                     {u.is_banned ? 'Đã khóa' : 'Hoạt động'}
@@ -413,7 +413,7 @@ export default function UserManagement() {
                               'font-semibold uppercase',
                               u.is_banned
                                 ? 'border-border bg-muted text-muted-foreground'
-                                : 'border-emerald-500/30 bg-emerald-500/15 text-emerald-300',
+                                : 'border-emerald-600/25 bg-emerald-50 text-emerald-700',
                             )}
                           >
                             {u.is_banned ? 'Đã khóa' : 'Hoạt động'}

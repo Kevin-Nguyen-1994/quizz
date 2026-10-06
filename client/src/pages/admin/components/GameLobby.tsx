@@ -66,9 +66,7 @@ export function GameLobby({
       ) : (
         <div className="mb-6">
           <h1>{quizTitle}</h1>
-          <p className="text-sm text-muted-foreground">
-            {questionCount} câu hỏi
-          </p>
+          <p className="text-sm text-muted-foreground">{questionCount} câu hỏi</p>
         </div>
       )}
 
@@ -155,7 +153,7 @@ export function GameLobby({
           size="lg"
           onClick={onStart}
           disabled={players.length === 0}
-          className="mt-8 rounded-2xl border-none bg-gradient-to-br from-blue-400 to-blue-600 px-8 py-[15px] text-[17px] font-bold text-white shadow-[0_10px_30px_-8px_#3b82f6aa] hover:opacity-95"
+          className="mt-8 px-8 py-[15px] text-[17px] font-bold"
         >
           Bắt đầu trò chơi →
         </Button>
