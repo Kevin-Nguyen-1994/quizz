@@ -1,4 +1,4 @@
-import { ArrowRight, Check, GripVertical, X } from 'lucide-react';
+import { ArrowDown, ArrowRight, ArrowUp, Check, GripVertical, X } from 'lucide-react';
 import { useState } from 'react';
 import { type LatLng, MapPicker } from '@/components/GeoMap';
 import { QuadOptionGrid } from '@/components/game/QuadOptionGrid';
@@ -43,10 +43,9 @@ export function AssignmentQuestion({
   const [selectedLeft, setSelectedLeft] = useState<number | null>(null);
   const [links, setLinks] = useState<Array<number | null>>(() => question.options.map(() => null));
   const disabled = submitting || timeLeft <= 0;
-  const reorder = usePointerReorder(
-    (from, to) => setOrder((current) => arrayMove(current, from, to)),
-    disabled,
-  );
+  const moveOrder = (from: number, to: number) =>
+    setOrder((current) => arrayMove(current, from, to));
+  const reorder = usePointerReorder(moveOrder, disabled);
 
   const submit = (payload: Omit<AssignmentAnswerSubmission, 'questionId'>) => {
     if (!disabled) onSubmit({ questionId: question.questionId, ...payload });
@@ -242,7 +241,7 @@ export function AssignmentQuestion({
                 key={optionIndex}
                 style={reorder.dragStyle(position)}
                 className={cn(
-                  'flex items-center gap-2 rounded-lg border border-border bg-muted/40 p-3',
+                  'flex min-w-0 items-center gap-2 rounded-lg border border-border bg-muted/40 p-3',
                   reorder.dragPos === position && 'z-20 scale-[1.02] border-primary shadow-xl',
                 )}
               >
@@ -251,7 +250,7 @@ export function AssignmentQuestion({
                   aria-label="Kéo hoặc dùng phím mũi tên để sắp xếp"
                   disabled={disabled}
                   {...reorder.handleProps(position)}
-                  className="flex size-11 shrink-0 cursor-grab items-center justify-center rounded-lg text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  className="flex size-11 shrink-0 cursor-grab touch-none select-none items-center justify-center rounded-lg text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:cursor-grabbing"
                 >
                   <GripVertical className="size-5" />
                 </button>
@@ -261,7 +260,29 @@ export function AssignmentQuestion({
                 >
                   {position + 1}
                 </span>
-                <OptionText value={question.options[optionIndex]} imgClassName="option-img-sm" />
+                <span className="min-w-0 flex-1 break-words">
+                  <OptionText value={question.options[optionIndex]} imgClassName="option-img-sm" />
+                </span>
+                <span className="flex shrink-0 flex-col gap-1 sm:flex-row">
+                  <button
+                    type="button"
+                    aria-label={`Di chuyển mục ở vị trí ${position + 1} lên`}
+                    disabled={disabled || position === 0}
+                    onClick={() => moveOrder(position, position - 1)}
+                    className="flex size-11 items-center justify-center rounded-lg border border-border bg-background text-foreground transition hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-35 sm:size-9"
+                  >
+                    <ArrowUp className="size-4" aria-hidden />
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={`Di chuyển mục ở vị trí ${position + 1} xuống`}
+                    disabled={disabled || position === order.length - 1}
+                    onClick={() => moveOrder(position, position + 1)}
+                    className="flex size-11 items-center justify-center rounded-lg border border-border bg-background text-foreground transition hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-35 sm:size-9"
+                  >
+                    <ArrowDown className="size-4" aria-hidden />
+                  </button>
+                </span>
               </div>
             ))}
           </div>

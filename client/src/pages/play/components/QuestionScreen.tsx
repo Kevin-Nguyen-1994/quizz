@@ -1,4 +1,12 @@
-import { ArrowRight, Check, GripVertical, SkipForward, X } from 'lucide-react';
+import {
+  ArrowDown,
+  ArrowRight,
+  ArrowUp,
+  Check,
+  GripVertical,
+  SkipForward,
+  X,
+} from 'lucide-react';
 import { useState } from 'react';
 import { type LatLng, MapPicker } from '@/components/GeoMap';
 import { QuadOptionGrid } from '@/components/game/QuadOptionGrid';
@@ -102,10 +110,9 @@ export function QuestionScreen({
   );
   const [selectedLeft, setSelectedLeft] = useState<number | null>(null);
   const [links, setLinks] = useState<Array<number | null>>(() => question.options.map(() => null));
-  const reorder = usePointerReorder(
-    (from, to) => setOrder((prev) => arrayMove(prev, from, to)),
-    localSubmitted,
-  );
+  const moveOrder = (from: number, to: number) =>
+    setOrder((current) => arrayMove(current, from, to));
+  const reorder = usePointerReorder(moveOrder, localSubmitted);
 
   // Reset ephemeral answer state when a new question arrives — the React
   // "reset state on prop change" pattern (runs during render, no effect needed).
@@ -507,7 +514,7 @@ export function QuestionScreen({
                   key={optIdx}
                   style={reorder.dragStyle(pos)}
                   className={cn(
-                    'flex items-center gap-2 rounded-lg border bg-[var(--surface2)] p-3',
+                    'flex min-w-0 items-center gap-2 rounded-lg border bg-[var(--surface2)] p-3',
                     reorder.dragPos === pos
                       ? 'scale-[1.02] cursor-grabbing border-primary shadow-2xl ring-2 ring-primary'
                       : 'border-border transition-transform',
@@ -529,8 +536,28 @@ export function QuestionScreen({
                   >
                     {pos + 1}
                   </span>
-                  <span className="flex-1">
+                  <span className="min-w-0 flex-1 break-words">
                     <OptionText value={question.options[optIdx]} imgClassName="option-img-sm" />
+                  </span>
+                  <span className="flex shrink-0 flex-col gap-1 sm:flex-row">
+                    <button
+                      type="button"
+                      aria-label={`Di chuyển mục ở vị trí ${pos + 1} lên`}
+                      disabled={localSubmitted || pos === 0}
+                      onClick={() => moveOrder(pos, pos - 1)}
+                      className="flex size-11 items-center justify-center rounded-lg border border-border bg-background text-foreground transition hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-35 sm:size-9"
+                    >
+                      <ArrowUp className="size-4" aria-hidden />
+                    </button>
+                    <button
+                      type="button"
+                      aria-label={`Di chuyển mục ở vị trí ${pos + 1} xuống`}
+                      disabled={localSubmitted || pos === order.length - 1}
+                      onClick={() => moveOrder(pos, pos + 1)}
+                      className="flex size-11 items-center justify-center rounded-lg border border-border bg-background text-foreground transition hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-35 sm:size-9"
+                    >
+                      <ArrowDown className="size-4" aria-hidden />
+                    </button>
                   </span>
                 </div>
               ))}

@@ -50,6 +50,7 @@ export function usePointerReorder(onMove: (from: number, to: number) => void, di
 
   function move(e: ReactPointerEvent) {
     if (dragPos === null || !listRef.current) return;
+    e.preventDefault();
     const rows = Array.from(listRef.current.children) as HTMLElement[];
     if (rows.length === 0) return;
     const y = e.clientY;
@@ -94,9 +95,14 @@ export function usePointerReorder(onMove: (from: number, to: number) => void, di
       onPointerMove: move,
       onPointerUp: end,
       onPointerCancel: end,
+      onLostPointerCapture: end,
     },
     handleProps: (pos: number) => ({
       onPointerDown: (e: ReactPointerEvent) => start(e, pos),
+      // Touch-action must be known at pointer-down time. Applying it only after
+      // drag state changes is too late: mobile browsers may already claim the
+      // gesture for page scrolling and cancel the pointer sequence.
+      style: { touchAction: 'none' } as CSSProperties,
       // Keyboard path — pointer drag is unusable for keyboard/switch-access
       // users, so the handle also moves its row with the arrow keys.
       onKeyDown: (e: ReactKeyboardEvent) => {
