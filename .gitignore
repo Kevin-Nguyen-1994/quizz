@@ -9,6 +9,9 @@ avatars/
 AGENTS.md
 CLAUDE.md
 client/.DS_Store
+client/vite.config.js
+client/vite.config.d.ts
+*.tsbuildinfo
 server/.DS_Store
 .DS_Store
 
@@ -16,3 +19,9 @@ docs
 
 # Runtime data (config with secrets, sqlite db)
 data/
+logs/
+artifacts/
+deployments/
+client/.dist-deploy-*/
+client/.dist-previous-*/
+client/.dist-failed-*/

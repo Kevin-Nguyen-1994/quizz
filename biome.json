@@ -1,7 +1,16 @@
 {
   "$schema": "https://biomejs.dev/schemas/2.4.3/schema.json",
   "files": {
-    "includes": ["client/src/**", "server/src/**", "!**/dist", "!**/node_modules"]
+    "includes": [
+      "biome.json",
+      "package.json",
+      "client/src/**",
+      "client/vite.config.ts",
+      "server/src/**",
+      "server/scripts/**/*.mjs",
+      "!**/dist",
+      "!**/node_modules"
+    ]
   },
   "linter": {
     "enabled": true,

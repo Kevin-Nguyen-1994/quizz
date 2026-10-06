@@ -1,9 +1,15 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
-import path from 'path';
+import path from 'node:path';
 
 export default defineConfig({
   plugins: [react()],
+  build: {
+    // Production serves client/dist. Builds go to staging so compiling alone
+    // can never replace the live frontend; ops/deploy-frontend.ps1 promotes it.
+    outDir: path.resolve(__dirname, '../artifacts/client-dist'),
+    emptyOutDir: true,
+  },
   resolve: {
     alias: { '@': path.resolve(__dirname, 'src') },
   },
