@@ -1,5 +1,5 @@
 import { ArrowLeft, Search, Users } from 'lucide-react';
-import { type FormEvent, useEffect, useMemo, useState } from 'react';
+import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { AppAlert } from '@/components/AppAlert';
 import AdminNav from '@/components/AdminNav';
@@ -7,7 +7,6 @@ import { MainContent, Page, PageHeader } from '@/components/layout';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -78,7 +77,7 @@ export default function AssignmentEditor() {
   const [quizId, setQuizId] = useState('');
   const [opensAt, setOpensAt] = useState(toLocalInput(Date.now()));
   const [deadline, setDeadline] = useState(toLocalInput(Date.now() + 7 * 24 * 60 * 60 * 1000));
-  const [maxAttempts, setMaxAttempts] = useState(1);
+  const [maxAttempts, setMaxAttempts] = useState('1');
   const [shuffleQuestions, setShuffleQuestions] = useState(true);
   const [shuffleOptions, setShuffleOptions] = useState(true);
   const [assignmentKind, setAssignmentKind] = useState<AssignmentKind>('general');
@@ -94,6 +93,11 @@ export default function AssignmentEditor() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const errorRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (error) errorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, [error]);
 
   useEffect(() => {
     let cancelled = false;
@@ -127,7 +131,7 @@ export default function AssignmentEditor() {
           setQuizId(String(assignment.quiz_id ?? ''));
           setOpensAt(toLocalInput(assignment.opens_at_ms));
           setDeadline(assignment.deadline_at_ms ? toLocalInput(assignment.deadline_at_ms) : '');
-          setMaxAttempts(assignment.max_attempts);
+          setMaxAttempts(String(assignment.max_attempts));
           setShuffleQuestions(assignment.shuffle_questions === 1);
           setShuffleOptions(assignment.shuffle_options === 1);
           setAssignmentKind(assignment.assignment_kind);
@@ -258,6 +262,11 @@ export default function AssignmentEditor() {
       return 'Thời gian mở không hợp lệ.';
     if (deadline && new Date(deadline).getTime() <= new Date(opensAt).getTime())
       return 'Hạn hoàn thành phải sau thời gian mở.';
+    const parsedMaxAttempts = Number(maxAttempts);
+    if (!/^\d+$/.test(maxAttempts) || !Number.isInteger(parsedMaxAttempts))
+      return 'Số lượt làm phải là số nguyên từ 1 đến 20.';
+    if (parsedMaxAttempts < 1 || parsedMaxAttempts > 20)
+      return 'Số lượt làm phải từ 1 đến 20.';
     if (targetMode === 'manual' && selectedUsers.length === 0)
       return 'Vui lòng chọn ít nhất một nhân viên.';
     if (targetMode !== 'manual' && !targetLevelId) return 'Vui lòng chọn bậc hiện tại.';
@@ -296,7 +305,7 @@ export default function AssignmentEditor() {
       audienceMode: 'members',
       opensAtMs: new Date(opensAt).getTime(),
       deadlineAtMs: deadline ? new Date(deadline).getTime() : null,
-      maxAttempts,
+      maxAttempts: Number(maxAttempts),
       shuffleQuestions,
       shuffleOptions,
       assignmentKind,
@@ -504,7 +513,11 @@ export default function AssignmentEditor() {
           title={assignmentId ? 'Chỉnh sửa bài kiểm tra' : 'Tạo bài kiểm tra'}
           description="Thiết lập nội dung, thời gian và đối tượng nhân viên tham gia."
         />
-        {error && <AppAlert variant="error">{error}</AppAlert>}
+        {error && (
+          <div ref={errorRef}>
+            <AppAlert variant="error">{error}</AppAlert>
+          </div>
+        )}
         <form onSubmit={handleSave} className="space-y-5">
           <Card>
             <CardContent className="grid gap-4 p-5 sm:grid-cols-2">
@@ -565,8 +578,10 @@ export default function AssignmentEditor() {
                   type="number"
                   min={1}
                   max={20}
+                  step={1}
+                  inputMode="numeric"
                   value={maxAttempts}
-                  onChange={(event) => setMaxAttempts(Math.max(1, Number(event.target.value) || 1))}
+                  onChange={(event) => setMaxAttempts(event.target.value)}
                 />
               </div>
               <div className="space-y-2">
@@ -742,11 +757,14 @@ export default function AssignmentEditor() {
                         htmlFor={`target-user-${user.id}`}
                         className={`flex min-h-14 items-center gap-3 px-4 py-3 ${disabled ? 'cursor-not-allowed opacity-55' : 'cursor-pointer hover:bg-muted/50'}`}
                       >
-                        <Checkbox
+                        <input
+                          type="checkbox"
                           id={`target-user-${user.id}`}
+                          aria-label={`${selectedUsers.includes(user.id) ? 'Bỏ chọn' : 'Chọn'} ${user.username} (${user.login_name})`}
                           checked={selectedUsers.includes(user.id)}
                           disabled={disabled}
-                          onCheckedChange={(checked) => toggleUser(user.id, checked === true)}
+                          onChange={(event) => toggleUser(user.id, event.target.checked)}
+                          className="size-5 shrink-0 cursor-pointer accent-[var(--primary)] disabled:cursor-not-allowed"
                         />
                         <span className="min-w-0 flex-1">
                           <strong className="block truncate text-sm">{user.username}</strong>
