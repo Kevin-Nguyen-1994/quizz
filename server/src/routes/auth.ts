@@ -4,11 +4,34 @@ import { db, getRankedPlayers } from '../db';
 import { getRequestUser, requireAuth, signToken } from '../middleware';
 import { hashPassword, MIN_PASSWORD_LENGTH } from '../passwords';
 import { savePlayProfile } from '../playProfile';
+import { getClientIp, LoginFailureLimiter, maskIp } from '../requestSecurity';
 import type { DbQuestion, DbSession, DbUser } from '../types';
 import { authenticateInternalUser } from '../userAccounts';
 import { isUserBanned, parseQuestionRow } from '../utils';
 
 export const authRouter = Router();
+const loginLimiter = new LoginFailureLimiter();
+const RATE_LIMIT_MESSAGE =
+  'Bạn đã thử đăng nhập quá nhiều lần. Vui lòng thử lại sau ít phút.';
+
+function setRateLimitHeaders(res: Response, remaining: number): void {
+  res.setHeader('RateLimit-Limit', String(loginLimiter.limit));
+  res.setHeader('RateLimit-Remaining', String(remaining));
+  res.setHeader('RateLimit-Policy', `${loginLimiter.limit};w=${loginLimiter.windowMs / 1000}`);
+}
+
+function rejectRateLimitedLogin(res: Response, clientIp: string): Response {
+  const status = loginLimiter.status(clientIp);
+  setRateLimitHeaders(res, 0);
+  res.setHeader('Retry-After', String(status.retryAfterSeconds));
+  if (status.shouldLog) {
+    console.warn(
+      `[security] timestamp=${new Date().toISOString()} event=login_rate_limit route=/api/auth/login client=${maskIp(clientIp)}`,
+    );
+    loginLimiter.markLogged(clientIp);
+  }
+  return res.status(429).json({ error: RATE_LIMIT_MESSAGE });
+}
 
 function signUserToken(user: { id: number; username: string }): string {
   return signToken({ id: user.id, role: 'user', username: user.username });
@@ -41,6 +64,11 @@ authRouter.post('/register', (_req: Request, res: Response) => {
 // ─── Login ────────────────────────────────────────────────────────────────────
 
 authRouter.post('/login', async (req: Request, res: Response) => {
+  const clientIp = getClientIp(req);
+  const initialLimit = loginLimiter.status(clientIp);
+  setRateLimitHeaders(res, initialLimit.remaining);
+  if (initialLimit.blocked) return rejectRateLimitedLogin(res, clientIp);
+
   const body = (req.body ?? {}) as {
     identifier?: string;
     loginName?: string;
@@ -53,11 +81,15 @@ authRouter.post('/login', async (req: Request, res: Response) => {
   try {
     const adminToken = await trySuperAdminLogin(identifier, password);
     if (adminToken) {
+      loginLimiter.clear(clientIp);
+      setRateLimitHeaders(res, loginLimiter.limit);
       return res.json({ token: adminToken });
     }
 
     const result = await authenticateInternalUser(db, identifier, password);
     if (!result.ok && result.reason === 'invalid_credentials') {
+      const limit = loginLimiter.recordFailure(clientIp);
+      setRateLimitHeaders(res, limit.remaining);
       return res.status(401).json({ error: 'Invalid credentials' });
     }
     if (!result.ok) {
@@ -65,6 +97,8 @@ authRouter.post('/login', async (req: Request, res: Response) => {
     }
     const { user } = result;
     const token = signUserToken({ id: user.id, username: user.username });
+    loginLimiter.clear(clientIp);
+    setRateLimitHeaders(res, loginLimiter.limit);
     res.json({ token });
   } catch (error) {
     console.error('Login error:', error);

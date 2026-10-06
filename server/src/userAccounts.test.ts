@@ -14,18 +14,27 @@ let databaseModule: typeof import('./db');
 let server: http.Server;
 let baseUrl = '';
 let adminToken = '';
+let userToken = '';
 let createdUserId = 0;
 let assignmentId = 0;
 
 async function request(
   pathname: string,
-  options: { method?: string; body?: unknown; admin?: boolean } = {},
+  options: {
+    method?: string;
+    body?: unknown;
+    admin?: boolean;
+    token?: string;
+    headers?: Record<string, string>;
+  } = {},
 ) {
   const response = await fetch(`${baseUrl}${pathname}`, {
     method: options.method ?? 'GET',
     headers: {
       ...(options.body === undefined ? {} : { 'Content-Type': 'application/json' }),
       ...(options.admin ? { Authorization: `Bearer ${adminToken}` } : {}),
+      ...(options.token ? { Authorization: `Bearer ${options.token}` } : {}),
+      ...options.headers,
     },
     body: options.body === undefined ? undefined : JSON.stringify(options.body),
   });
@@ -182,6 +191,43 @@ describe('internal employee accounts', () => {
       body: { identifier: 'LOG01', password: reset.data.password },
     });
     assert.equal(resetLogin.response.status, 200);
+    userToken = String(resetLogin.data.token);
+  });
+
+  it('protects employee administration from no-auth and ordinary-user tokens', async () => {
+    const noAuth = await request('/api/admin/users');
+    assert.equal(noAuth.response.status, 401);
+
+    const ordinaryUser = await request('/api/admin/users', { token: userToken });
+    assert.equal(ordinaryUser.response.status, 403);
+
+    const superAdmin = await request('/api/admin/users', { admin: true });
+    assert.equal(superAdmin.response.status, 200);
+  });
+
+  it('rate-limits repeated failed logins by trusted Cloudflare client IP', async () => {
+    const headers = { 'CF-Connecting-IP': '198.51.100.77' };
+    for (let attempt = 1; attempt <= 10; attempt += 1) {
+      const failed = await request('/api/auth/login', {
+        method: 'POST',
+        body: { identifier: 'rate-limit-test', password: 'incorrect-password' },
+        headers,
+      });
+      assert.equal(failed.response.status, 401);
+      assert.equal(failed.response.headers.get('ratelimit-remaining'), String(10 - attempt));
+    }
+
+    const blocked = await request('/api/auth/login', {
+      method: 'POST',
+      body: { identifier: 'rate-limit-test', password: 'incorrect-password' },
+      headers,
+    });
+    assert.equal(blocked.response.status, 429);
+    assert.equal(blocked.response.headers.get('retry-after'), '600');
+    assert.equal(
+      blocked.data.error,
+      'Bạn đã thử đăng nhập quá nhiều lần. Vui lòng thử lại sau ít phút.',
+    );
   });
 
   it('disables self-registration', async () => {

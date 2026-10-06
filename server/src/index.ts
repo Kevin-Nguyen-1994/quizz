@@ -5,6 +5,7 @@ import express from 'express';
 import { avatarsDir, initAvatars, listAvatars } from './avatars';
 import { config } from './config';
 import { initDb } from './db';
+import { securityHeaders } from './requestSecurity';
 import { adminRouter } from './routes/admin';
 import { assignmentAdminRouter } from './routes/assignmentAdmin';
 import { assignmentsRouter } from './routes/assignments';
@@ -17,6 +18,8 @@ import { setupSockets } from './socket/index';
 const app = express();
 const httpServer = http.createServer(app);
 
+app.disable('x-powered-by');
+app.use(securityHeaders);
 app.use(express.json({ limit: '4mb' }));
 app.use(cookieParser());
 

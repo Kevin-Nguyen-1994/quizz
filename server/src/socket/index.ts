@@ -26,7 +26,7 @@ import type {
   QuestionType,
   QuizIntro,
 } from '../types';
-import { normalizeImageUrl } from '../utils';
+import { isUserBanned, normalizeImageUrl } from '../utils';
 import {
   type ActiveSession,
   activeSessions,
@@ -48,11 +48,16 @@ async function authorizeAdmin(token: string, sessionId: number): Promise<JwtPayl
   const payload = verifyToken(token);
   if (!payload) return null;
   if (payload.role === 'super_admin') return payload;
-  const session = await db.get<DbSession>(
-    'SELECT hosted_by_user_id FROM sessions WHERE id = ?',
+  const session = await db.get<DbSession & { is_banned: number }>(
+    `SELECT s.*, u.is_banned
+     FROM sessions s
+     JOIN users u ON u.id = ?
+     WHERE s.id = ?`,
+    payload.id,
     sessionId,
   );
   if (!session) return null;
+  if (isUserBanned(session.is_banned)) return null;
   if (session.hosted_by_user_id !== payload.id) return null;
   return payload;
 }

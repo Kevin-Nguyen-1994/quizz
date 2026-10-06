@@ -136,7 +136,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!res.ok) {
         const message = data.error as string | undefined;
         const error =
-          message === 'Invalid credentials'
+          res.status === 429
+            ? 'Bạn đã thử đăng nhập quá nhiều lần. Vui lòng thử lại sau ít phút.'
+            : message === 'Invalid credentials'
             ? 'Tên đăng nhập hoặc mật khẩu không đúng.'
             : message === 'This account has been banned'
               ? 'Tài khoản này đã bị khóa. Vui lòng liên hệ quản trị viên.'
