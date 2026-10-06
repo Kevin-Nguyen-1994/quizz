@@ -118,13 +118,13 @@ export function QuestionCanvas({ q, ops, onChange }: Props) {
       {type === 'fill_blank' && (
         <div className="space-y-3">
           <p className="text-sm text-muted-foreground">
-            Write <code className="rounded bg-border px-1">___</code> (3+ underscores) in the
-            question text for each blank — {blankCount} detected. Partial credit is awarded per
-            blank.
+            Viết <code className="rounded bg-border px-1">___</code> (từ 3 dấu gạch dưới) trong
+            nội dung câu hỏi cho mỗi chỗ trống — đã phát hiện {blankCount} chỗ. Mỗi chỗ đúng được
+            tính điểm riêng.
           </p>
           {blankCount === 0 && (
             <p className="text-sm text-destructive">
-              Add ___ to the question text above to create a blank.
+              Thêm ___ vào nội dung câu hỏi phía trên để tạo chỗ trống.
             </p>
           )}
           {Array.from({ length: blankCount }, (_, bi) => (
@@ -135,7 +135,7 @@ export function QuestionCanvas({ q, ops, onChange }: Props) {
               label={`Chỗ trống ${bi + 1} — đáp án chấp nhận (phân tách bằng dấu phẩy)`}
               value={(q.blanks?.[bi] ?? []).join(', ')}
               onChange={(e) => ops.setBlankAccepted(bi, e.target.value)}
-              placeholder="Paris, City of Light"
+              placeholder="Paris, Kinh đô Ánh sáng"
             />
           ))}
         </div>
@@ -148,13 +148,13 @@ export function QuestionCanvas({ q, ops, onChange }: Props) {
       {type === 'geo' && (
         <div className="space-y-2">
           <p className="text-sm text-muted-foreground">
-            Click the map to set the correct location. Players drop a pin on a live map and score by
-            real-world distance.
+            Nhấp vào bản đồ để đặt vị trí đúng. Người chơi thả ghim trên bản đồ và được tính điểm
+            theo khoảng cách thực tế.
           </p>
           <MapPicker value={q.geo ?? null} onChange={(p) => onChange('geo', p)} height={340} />
           {q.geo && (
             <p className="text-xs text-muted-foreground">
-              Correct location: {q.geo.lat.toFixed(4)}, {q.geo.lng.toFixed(4)}
+              Vị trí đúng: {q.geo.lat.toFixed(4)}, {q.geo.lng.toFixed(4)}
             </p>
           )}
         </div>
@@ -207,7 +207,7 @@ function ChoiceTiles({
                 {isImageUrl(opt) && (
                   <img
                     src={opt}
-                    alt={`Option ${optionLetter(oi)} preview`}
+                    alt={`Xem trước đáp án ${optionLetter(oi)}`}
                     className="mb-2 max-h-[80px] max-w-full rounded-md object-contain"
                     onError={(e) => {
                       e.currentTarget.style.display = 'none';
@@ -279,7 +279,7 @@ function OrderingItems({ q, ops }: { q: ImportQuestion; ops: ReturnType<typeof q
       <p className="mb-2 text-sm font-medium text-muted-foreground">
         Các mục theo thứ tự đúng{' '}
         <span className="font-normal text-muted-foreground/70">
-          — drag to reorder; players see them shuffled and drag into order
+          — kéo để sắp xếp; người chơi sẽ thấy các mục đã trộn và kéo về đúng thứ tự
         </span>
       </p>
       <div
@@ -351,9 +351,9 @@ function MatchingPairs({ q, ops }: { q: ImportQuestion; ops: ReturnType<typeof q
   return (
     <div>
       <p className="mb-2 text-sm font-medium text-muted-foreground">
-        Pairs (2–6){' '}
+        Các cặp (2–6){' '}
         <span className="font-normal text-muted-foreground/70">
-          — players match each left item to its right item; the right column is shuffled for them
+          — người chơi nối từng mục bên trái với mục bên phải; cột bên phải được trộn thứ tự
         </span>
       </p>
       {opts.map((left, i) => (

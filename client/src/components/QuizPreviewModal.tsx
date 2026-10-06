@@ -192,7 +192,13 @@ export function QuizPreviewModal({ title, questions, onClose, theme }: Props) {
   const v = phase === 'reveal' ? verdict() : null;
 
   return (
-    <div data-theme={theme} className="fixed inset-0 z-[1100] overflow-y-auto bg-[var(--bg)]">
+    <div
+      data-theme={theme}
+      role="dialog"
+      aria-modal="true"
+      aria-label={`Xem trước bộ câu hỏi: ${title || 'Bộ câu hỏi chưa có tên'}`}
+      className="fixed inset-0 z-[1100] overflow-y-auto bg-[var(--bg)]"
+    >
       {/* Top-left preview badge */}
       <div className="fixed left-3 top-3 z-[210] flex max-w-[calc(100%-4rem)] items-center gap-2 sm:left-4 sm:top-4">
         <span className="inline-flex shrink-0 items-center gap-1 rounded-md bg-[var(--accent)] px-2 py-1.5 text-xs font-bold tracking-wide text-white shadow-lg sm:px-2.5">
@@ -220,7 +226,7 @@ export function QuizPreviewModal({ title, questions, onClose, theme }: Props) {
       <div className="fixed bottom-3 left-3 right-3 z-[210] flex flex-wrap items-center justify-center gap-1.5 rounded-2xl border border-border bg-[var(--surface)] px-2 py-2 shadow-2xl sm:bottom-5 sm:left-1/2 sm:right-auto sm:w-auto sm:-translate-x-1/2 sm:gap-2 sm:rounded-full sm:px-3">
         <Button type="button" variant="ghost" size="sm" onClick={prev} disabled={index === 0}>
           <ArrowLeft className="size-4" />
-          <span className="hidden sm:inline"> Prev</span>
+          <span className="hidden sm:inline"> Câu trước</span>
         </Button>
         <span className="px-1 text-sm font-semibold tabular-nums">
           {index + 1}/{questions.length}
@@ -229,14 +235,14 @@ export function QuizPreviewModal({ title, questions, onClose, theme }: Props) {
           <Button type="button" variant="default" size="sm" onClick={reveal}>
             <SkipForward className="size-4" />
             <span className="hidden sm:inline"> Hiện đáp án</span>
-            <span className="sm:hidden"> Reveal</span>
+            <span className="sm:hidden"> Đáp án</span>
           </Button>
         ) : (
           <Button type="button" variant="default" size="sm" onClick={next}>
             {index < questions.length - 1 ? (
               <>
                 <span className="hidden sm:inline">Câu tiếp theo </span>
-                <span className="sm:hidden">Next </span>
+                <span className="sm:hidden">Tiếp </span>
                 <ArrowRight className="size-4" />
               </>
             ) : (
@@ -304,7 +310,7 @@ export function QuizPreviewModal({ title, questions, onClose, theme }: Props) {
                     </span>
                   ) : (
                     <span className="inline-flex items-center justify-center gap-1.5">
-                      <X className="size-4" /> Incorrect
+                      <X className="size-4" /> Sai
                     </span>
                   )}
                 </div>

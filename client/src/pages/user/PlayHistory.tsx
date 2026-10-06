@@ -81,7 +81,7 @@ export default function PlayHistory() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border text-left text-muted-foreground">
-                    <th className="px-4 py-3 font-medium">Quiz</th>
+                    <th className="px-4 py-3 font-medium">Bộ câu hỏi</th>
                     <th className="px-4 py-3 font-medium">PIN</th>
                     <th className="px-4 py-3 font-medium">Hạng</th>
                     <th className="px-4 py-3 font-medium">Điểm</th>

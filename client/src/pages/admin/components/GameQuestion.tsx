@@ -102,7 +102,7 @@ export function GameQuestion({
               <p className="text-sm text-muted-foreground">
                 Câu số gần đúng — người chơi chọn một số từ{' '}
                 <strong>
-                  {question.rangeMin ?? 0} to {question.rangeMax ?? 100}
+                  {question.rangeMin ?? 0} đến {question.rangeMax ?? 100}
                 </strong>
               </p>
             </div>
@@ -110,7 +110,7 @@ export function GameQuestion({
           {question.questionType === 'open_text' && (
             <div className="rounded-xl border border-border bg-muted/50 px-4 py-3 text-center">
               <p className="text-sm text-muted-foreground">
-                Open-text question — players type their answer
+                Câu trả lời ngắn — người chơi nhập câu trả lời
               </p>
             </div>
           )}
@@ -185,8 +185,7 @@ export function GameQuestion({
           {question.questionType === 'fill_blank' && (
             <div className="rounded-xl border border-border bg-muted/50 px-4 py-3 text-center">
               <p className="text-sm text-muted-foreground">
-                Fill-in-the-blank question — players fill in {question.blankCount ?? 0} blank
-                {question.blankCount === 1 ? '' : 's'}
+                Câu điền chỗ trống — người chơi điền {question.blankCount ?? 0} chỗ trống
               </p>
             </div>
           )}

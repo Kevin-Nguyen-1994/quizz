@@ -66,7 +66,7 @@ export function QuestionMedia({ url, kind, className, autoPlay = true }: Props) 
       >
         <iframe
           src={videoSrc}
-          title="Question video"
+          title="Video câu hỏi"
           className="h-full w-full"
           allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
           allowFullScreen
@@ -105,14 +105,14 @@ export function QuestionMedia({ url, kind, className, autoPlay = true }: Props) 
     >
       <div className="flex items-center justify-between gap-3">
         <span className="flex items-center gap-1.5 text-sm font-semibold text-muted-foreground">
-          <Music className="size-4" /> Audio
+          <Music className="size-4" /> Âm thanh
         </span>
         <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={toggle}
             className="flex size-10 items-center justify-center rounded-full bg-primary text-primary-foreground transition hover:brightness-110"
-            aria-label={playing ? 'Pause' : 'Play'}
+            aria-label={playing ? 'Tạm dừng' : 'Phát'}
           >
             {playing ? (
               <Pause className="size-5 fill-current" />
@@ -124,8 +124,8 @@ export function QuestionMedia({ url, kind, className, autoPlay = true }: Props) 
             type="button"
             onClick={replay}
             className="flex size-10 items-center justify-center rounded-full bg-secondary text-secondary-foreground transition hover:brightness-125"
-            aria-label="Replay from start"
-            title="Replay from start"
+            aria-label="Phát lại từ đầu"
+            title="Phát lại từ đầu"
           >
             <RotateCcw className="size-[18px]" />
           </button>
@@ -150,7 +150,7 @@ export function QuestionMedia({ url, kind, className, autoPlay = true }: Props) 
       <iframe
         ref={iframeRef}
         src={audioSrc}
-        title="Question audio"
+        title="Âm thanh câu hỏi"
         className="pointer-events-none absolute -left-[9999px] top-0 h-[180px] w-[320px]"
         tabIndex={-1}
         allow="autoplay; encrypted-media"

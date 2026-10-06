@@ -23,7 +23,7 @@ export function OptionText({
     return (
       <img
         src={value}
-        alt="Answer option"
+        alt="Đáp án bằng hình ảnh"
         className={imgClassName}
         loading="lazy"
         onError={() => setFailedSrc(value)}

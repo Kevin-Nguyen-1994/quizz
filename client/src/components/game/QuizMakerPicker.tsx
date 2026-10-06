@@ -301,12 +301,12 @@ export function QuizMakerPicker({ players }: Props) {
       {celebrate && <Confetti count={40} spread="center" durationRange={[0.6, 2]} />}
       <CardContent className="p-6">
         <div className="mb-1 flex items-center justify-center gap-2 text-lg font-extrabold">
-          <Dices className="size-5" /> Next Quiz Maker
+          <Dices className="size-5" /> Người tạo bộ câu hỏi tiếp theo
         </div>
         <p className="mb-4 text-center text-sm text-muted-foreground">
           {phase === 'falling'
-            ? 'Dropping… last one down makes the quiz!'
-            : 'Check the players in the draw, then drop them in.'}
+            ? 'Đang thả… người về đích cuối cùng sẽ tạo bộ câu hỏi!'
+            : 'Chọn người chơi tham gia quay số, sau đó bắt đầu.'}
         </p>
 
         {phase === 'falling' ? (
@@ -372,22 +372,22 @@ export function QuizMakerPicker({ players }: Props) {
         {winnerPlayer ? (
           <div className="mb-3 rounded-xl border border-[#fbbf24]/50 bg-[rgba(251,191,36,.1)] px-4 py-3 text-center">
             <span className="inline-flex items-center gap-1.5 text-[1.05rem] font-extrabold text-[#fbbf24]">
-              <PartyPopper className="size-5" /> Landed last! {winnerPlayer.username} makes the next
-              quiz!
+              <PartyPopper className="size-5" /> {winnerPlayer.username} về đích cuối cùng và sẽ
+              tạo bộ câu hỏi tiếp theo!
             </span>
           </div>
         ) : null}
 
         <Button type="button" size="lg" className="w-full" onClick={startDrop} disabled={!canStart}>
           {phase === 'falling' ? (
-            'Falling…'
+            'Đang thả…'
           ) : winner ? (
             <>
-              Drop again <RotateCw className="size-4" />
+              Thả lại <RotateCw className="size-4" />
             </>
           ) : (
             <>
-              Drop them in ({candidates.length}) <Play className="size-4" />
+              Bắt đầu ({candidates.length}) <Play className="size-4" />
             </>
           )}
         </Button>

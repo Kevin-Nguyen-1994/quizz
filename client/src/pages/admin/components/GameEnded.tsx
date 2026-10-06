@@ -33,7 +33,7 @@ export function GameEnded({
 
       <div className="mb-6 text-center">
         <h1 className="flex items-center justify-center gap-1.5 text-[2rem]">
-          <Trophy className="size-8" /> Final Podium
+          <Trophy className="size-8" /> Bảng xếp hạng cuối
         </h1>
         <Subtitle className="mt-1">{quizTitle}</Subtitle>
       </div>
@@ -64,11 +64,11 @@ export function GameEnded({
                   className="w-full"
                   onClick={onViewDetails}
                 >
-                  View Details
+                  Xem chi tiết
                 </Button>
                 <Button type="button" className="w-full" onClick={onDashboard}>
                   <span className="flex items-center justify-center gap-1.5">
-                    <ArrowLeft className="size-4" /> Dashboard
+                    <ArrowLeft className="size-4" /> Trang quản trị
                   </span>
                 </Button>
               </div>

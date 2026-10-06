@@ -35,10 +35,17 @@ export function PreGameSettingsModal({ config, onConfirm, onCancel }: Props) {
   };
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 p-6">
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="pre-game-settings-title"
+      className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 p-6"
+    >
       <Card className="z-[201] max-h-[90vh] w-full max-w-lg overflow-y-auto">
         <CardContent className="p-6">
-          <h2 className="mb-1">Cài đặt phiên chơi</h2>
+          <h2 id="pre-game-settings-title" className="mb-1">
+            Cài đặt phiên chơi
+          </h2>
           <p className="mb-5 text-sm text-muted-foreground">
             Các cài đặt này chỉ áp dụng cho phiên chơi này và không thay đổi mặc định hệ thống.
           </p>

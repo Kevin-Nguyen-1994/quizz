@@ -57,7 +57,7 @@ export function GameLobby({
     <MainContent>
       <div className="mb-4 flex justify-end">
         <Button type="button" variant="ghost" size="sm" onClick={onDiscard}>
-          Discard
+          Hủy phiên
         </Button>
       </div>
 
@@ -67,17 +67,17 @@ export function GameLobby({
         <div className="mb-6">
           <h1>{quizTitle}</h1>
           <p className="text-sm text-muted-foreground">
-            {questionCount} question{questionCount !== 1 ? 's' : ''}
+            {questionCount} câu hỏi
           </p>
         </div>
       )}
 
       <div className="flex flex-col items-center gap-1.5 text-center">
         <div className="text-xs font-bold uppercase tracking-[0.2em] text-blue-400">
-          Join the game
+          Tham gia trò chơi
         </div>
         <div className="text-[15px] text-muted-foreground">
-          Go to <strong className="text-foreground">{joinHost}</strong> and enter this PIN
+          Truy cập <strong className="text-foreground">{joinHost}</strong> và nhập mã PIN này
         </div>
 
         <div className="pin-display mt-1">{pin}</div>
@@ -91,12 +91,12 @@ export function GameLobby({
             onClick={(e) => (e.target as HTMLInputElement).select()}
           />
           <Button type="button" variant="secondary" onClick={onCopyLink}>
-            Copy
+            Sao chép
           </Button>
         </div>
 
         <div className="mt-5 mb-3 text-sm font-semibold text-slate-300">
-          {players.length} player{players.length !== 1 ? 's' : ''} joined
+          {players.length} người chơi đã tham gia
         </div>
 
         <div className="flex max-w-[820px] flex-wrap justify-center gap-[9px]">

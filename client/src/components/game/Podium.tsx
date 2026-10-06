@@ -88,7 +88,7 @@ export function Podium({
         ? {
             role: 'button',
             tabIndex: 0,
-            title: 'Tap to skip',
+            title: 'Chạm để bỏ qua hiệu ứng',
             onClick: skip,
             onKeyDown: (e: KeyboardEvent) => {
               if (e.key === 'Enter' || e.key === ' ') skip();

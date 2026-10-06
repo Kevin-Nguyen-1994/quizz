@@ -83,7 +83,7 @@ export function GameResults({
                 <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-500/15 px-2 py-0.5 text-xs font-semibold text-blue-300">
                   {nextPreview.mediaType === 'audio' ? (
                     <>
-                      <Music className="size-4" /> Audio
+                      <Music className="size-4" /> Âm thanh
                     </>
                   ) : (
                     <>
@@ -99,7 +99,7 @@ export function GameResults({
           <Card className="mb-4 w-full max-w-4xl border-amber-500/30 bg-amber-500/[0.06]">
             <CardContent className="p-4">
               <span className="mono-label inline-flex items-center gap-1.5 text-amber-300">
-                Last question — final scores next <Flag className="size-4" />
+                Câu cuối — tiếp theo là bảng điểm chung cuộc <Flag className="size-4" />
               </span>
             </CardContent>
           </Card>
@@ -131,7 +131,7 @@ export function GameResults({
       <Card className="w-full max-w-4xl">
         <CardContent className="p-6">
           <h2 className="mb-4 flex items-center gap-1.5">
-            <Trophy className="size-4" /> Standings
+            <Trophy className="size-4" /> Bảng xếp hạng
           </h2>
           <LeaderboardList
             entries={results.leaderboard}
