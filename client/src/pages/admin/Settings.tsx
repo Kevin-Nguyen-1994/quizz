@@ -1,4 +1,4 @@
-import { Check, Lock, Pencil, Smile, Target, Timer, Trash2, Upload } from 'lucide-react';
+import { Check, Layers3, Lock, Pencil, Smile, Target, Timer, Trash2, Upload } from 'lucide-react';
 import { type ChangeEvent, useEffect, useState } from 'react';
 import { AppAlert } from '@/components/AppAlert';
 import { FormRow, MainContent, Page, PageHeader, PageLoading } from '@/components/layout';
@@ -12,6 +12,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useDialog } from '../../context/DialogContext';
 import { useAuthFetch } from '../../hooks/useAuthFetch';
 import type { AppConfig } from '../../types';
+import { EmployeeLevelCatalog } from './components/EmployeeLevelCatalog';
 import { SettingsFieldGroup, SettingsSection, SettingsToggle } from './components/SettingsSection';
 
 const NAV_SECTIONS = [
@@ -19,6 +20,7 @@ const NAV_SECTIONS = [
   { id: 'gameplay', label: 'Live Game', icon: Timer },
   { id: 'scoring', label: 'Tính điểm', icon: Target },
   { id: 'avatars', label: 'Ảnh đại diện', icon: Smile },
+  { id: 'employee-levels', label: 'Cấp bậc', icon: Layers3 },
   { id: 'security', label: 'Bảo mật', icon: Lock },
 ] as const;
 
@@ -254,7 +256,9 @@ export default function Settings() {
 
     setDeletingAvatar(url);
     setAvatarUploadMessage(null);
-    const { ok: deleted, data } = await api.delete<{ error?: string }>('/api/admin/avatars', { url });
+    const { ok: deleted, data } = await api.delete<{ error?: string }>('/api/admin/avatars', {
+      url,
+    });
     setDeletingAvatar(null);
 
     if (!deleted) {
@@ -284,24 +288,26 @@ export default function Settings() {
         <PageHeader
           title="Cài đặt"
           description="Cấu hình giao diện, Live Game, tính điểm và quyền quản trị."
-          actions={<Button type="button" onClick={save} disabled={saving} size="lg">
-            {saving ? (
-              'Đang lưu…'
-            ) : saved ? (
-              <span className="flex items-center gap-1.5">
-                <Check className="size-4" /> Đã lưu
-              </span>
-            ) : (
-              'Lưu thay đổi'
-            )}
-          </Button>}
+          actions={
+            <Button type="button" onClick={save} disabled={saving} size="lg">
+              {saving ? (
+                'Đang lưu…'
+              ) : saved ? (
+                <span className="flex items-center gap-1.5">
+                  <Check className="size-4" /> Đã lưu
+                </span>
+              ) : (
+                'Lưu thay đổi'
+              )}
+            </Button>
+          }
         />
 
         {saved && <AppAlert variant="success">Đã lưu cài đặt thành công.</AppAlert>}
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-[200px_1fr]">
           <nav
-            className="grid grid-cols-2 gap-1 sm:grid-cols-5 lg:sticky lg:top-20 lg:flex lg:flex-col lg:self-start"
+            className="grid grid-cols-2 gap-1 sm:grid-cols-3 lg:sticky lg:top-20 lg:flex lg:flex-col lg:self-start"
             aria-label="Các nhóm cài đặt"
           >
             {NAV_SECTIONS.map(({ id, label, icon: Icon }) => (
@@ -317,6 +323,14 @@ export default function Settings() {
           </nav>
 
           <div className="flex min-w-0 flex-col gap-6">
+            <SettingsSection
+              id="employee-levels"
+              icon={Layers3}
+              title="Cấp bậc nhân viên"
+              description="Quản lý danh mục bậc dùng cho nhân viên, bộ câu hỏi và bài kiểm tra."
+            >
+              <EmployeeLevelCatalog />
+            </SettingsSection>
             <SettingsSection
               id="branding"
               icon={Pencil}
@@ -476,7 +490,10 @@ export default function Settings() {
               title="Thư viện ảnh đại diện"
               description="Tải ảnh để người chơi chọn làm ảnh đại diện."
             >
-              <label htmlFor="avatar-upload" className="flex cursor-pointer flex-col items-center gap-2 rounded-xl border-2 border-dashed border-border bg-muted/20 p-8 transition hover:border-blue-500/50 hover:bg-muted/40">
+              <label
+                htmlFor="avatar-upload"
+                className="flex cursor-pointer flex-col items-center gap-2 rounded-xl border-2 border-dashed border-border bg-muted/20 p-8 transition hover:border-blue-500/50 hover:bg-muted/40"
+              >
                 <FileInput
                   id="avatar-upload"
                   type="file"
@@ -556,7 +573,9 @@ export default function Settings() {
                   </AppAlert>
 
                   {dbAdmins.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">Không có tài khoản quản trị cơ sở dữ liệu.</p>
+                    <p className="text-sm text-muted-foreground">
+                      Không có tài khoản quản trị cơ sở dữ liệu.
+                    </p>
                   ) : (
                     <div className="flex flex-col gap-4">
                       {dbAdmins.map((admin) => (
@@ -591,10 +610,14 @@ export default function Settings() {
                                   { newPassword: resetPasswords[admin.id] },
                                 );
                                 if (ok) {
-                                  await alert({ message: `Đã đặt lại mật khẩu cho ${admin.username}.` });
+                                  await alert({
+                                    message: `Đã đặt lại mật khẩu cho ${admin.username}.`,
+                                  });
                                   setResetPasswords((prev) => ({ ...prev, [admin.id]: '' }));
                                 } else {
-                                  await alert({ message: err?.error || 'Không thể đặt lại mật khẩu.' });
+                                  await alert({
+                                    message: err?.error || 'Không thể đặt lại mật khẩu.',
+                                  });
                                 }
                               } catch {
                                 await alert({ message: 'Không thể đặt lại mật khẩu.' });

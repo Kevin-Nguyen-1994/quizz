@@ -253,8 +253,8 @@ export default function AssignmentDetail() {
             </div>
             <h1>{assignment.title}</h1>
             <Subtitle className="mt-1">
-              Bộ câu hỏi: {assignment.quizTitle ?? 'Bộ câu hỏi nguồn đã xóa'} · {assignment.questionCount} câu ·
-              Tối đa {assignment.maxScore} điểm
+              Bộ câu hỏi: {assignment.quizTitle ?? 'Bộ câu hỏi nguồn đã xóa'} ·{' '}
+              {assignment.questionCount} câu · Tối đa {assignment.maxScore} điểm
             </Subtitle>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -300,6 +300,34 @@ export default function AssignmentDetail() {
 
         <Card className="mb-5">
           <CardContent className="grid gap-3 p-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
+            <div>
+              <span className="block text-muted-foreground">Loại bài</span>
+              {assignment.assignmentKind === 'promotion'
+                ? 'Thi lên bậc'
+                : assignment.assignmentKind === 'periodic'
+                  ? 'Kiểm tra định kỳ'
+                  : 'Thông thường'}
+            </div>
+            <div>
+              <span className="block text-muted-foreground">Đối tượng ban đầu</span>
+              {assignment.targetMode === 'promotion'
+                ? `${assignment.targetLevelCode ?? '—'} → ${assignment.promotionTargetLevelCode ?? '—'}`
+                : assignment.targetMode === 'current_level'
+                  ? (assignment.targetLevelCode ?? '—')
+                  : 'Chọn thủ công'}
+            </div>
+            <div>
+              <span className="block text-muted-foreground">Phương thức</span>
+              {assignment.targetMode === 'promotion'
+                ? 'Thi lên bậc'
+                : assignment.targetMode === 'current_level'
+                  ? 'Theo bậc hiện tại'
+                  : 'Chọn thủ công'}
+            </div>
+            <div>
+              <span className="block text-muted-foreground">Điều chỉnh thủ công</span>
+              {assignment.overrideCount > 0 ? `${assignment.overrideCount} ngoại lệ` : 'Không có'}
+            </div>
             <div>
               <span className="block text-muted-foreground">Thời gian mở</span>
               {dateTime(assignment.opensAtMs)}

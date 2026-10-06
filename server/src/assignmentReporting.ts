@@ -20,6 +20,7 @@ type ReportResult = 'correct' | 'incorrect' | 'no_answer';
 
 interface ReportingAssignment extends DbAssignment {
   quiz_title: string | null;
+  override_count: number;
 }
 
 export interface AttemptReportRow {
@@ -83,6 +84,13 @@ export interface AssignmentReportDto {
     reviewPolicy: DbAssignment['review_policy'];
     questionCount: number;
     maxScore: number;
+    assignmentKind: DbAssignment['assignment_kind'];
+    targetMode: DbAssignment['target_mode'];
+    targetLevelCode: string | null;
+    targetLevelName: string | null;
+    promotionTargetLevelCode: string | null;
+    promotionTargetLevelName: string | null;
+    overrideCount: number;
   };
   overview: {
     assigned: number;
@@ -170,7 +178,9 @@ async function loadOwnedReportData(
   assignmentId: number,
 ): Promise<LoadedReportData> {
   const assignment = await database.get<ReportingAssignment>(
-    `SELECT a.*, q.title as quiz_title FROM assignments a
+    `SELECT a.*, q.title as quiz_title,
+       (SELECT COUNT(*) FROM assignment_target_overrides o WHERE o.assignment_id = a.id) AS override_count
+     FROM assignments a
      LEFT JOIN quizzes q ON q.id = a.quiz_id WHERE a.id = ?`,
     [assignmentId],
   );
@@ -403,6 +413,13 @@ export function buildAssignmentReport(data: LoadedReportData): AssignmentReportD
       reviewPolicy: assignment.review_policy,
       questionCount: questions.length,
       maxScore,
+      assignmentKind: assignment.assignment_kind,
+      targetMode: assignment.target_mode,
+      targetLevelCode: assignment.target_level_code_snapshot,
+      targetLevelName: assignment.target_level_name_snapshot,
+      promotionTargetLevelCode: assignment.promotion_target_level_code_snapshot,
+      promotionTargetLevelName: assignment.promotion_target_level_name_snapshot,
+      overrideCount: assignment.override_count,
     },
     overview: {
       assigned: members.length,

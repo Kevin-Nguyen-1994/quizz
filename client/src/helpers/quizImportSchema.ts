@@ -423,6 +423,8 @@ export function importPayloadToStudioDraft(payload: ImportPayload): {
   description: string;
   coverImage: string;
   theme: ThemeId;
+  language: string;
+  recommendedLevelId: number | null;
   questions: QuestionWithKey[];
 } {
   return {
@@ -430,6 +432,8 @@ export function importPayloadToStudioDraft(payload: ImportPayload): {
     description: payload.description ?? '',
     coverImage: payload.coverImage ?? '',
     theme: THEME_IDS.includes(payload.theme as ThemeId) ? (payload.theme as ThemeId) : 'default',
+    language: payload.language ?? 'vi',
+    recommendedLevelId: payload.recommendedLevelId ?? null,
     questions: payload.questions.map((q) => withKey(normalizeQuestion(q))),
   };
 }

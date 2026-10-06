@@ -14,10 +14,24 @@ import { Input, Textarea } from '@/components/Input';
 import { MediaPicker } from '@/components/MediaPicker';
 import { QuizPreviewModal } from '@/components/QuizPreviewModal';
 import { Button } from '@/components/ui/button';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { useAuthFetch } from '@/hooks/useAuthFetch';
 import { type QuestionWithKey, validateQuizPayload, withKey } from '@/helpers';
 import { COMMON_LOCALES, DEFAULT_LOCALE, localeName } from '@/helpers/locale';
 import { cn } from '@/lib/utils';
-import { type ImportPayload, type ImportQuestion, THEME_IDS, type ThemeId } from '@/types';
+import {
+  type EmployeeLevel,
+  type ImportPayload,
+  type ImportQuestion,
+  THEME_IDS,
+  type ThemeId,
+} from '@/types';
 import { PropertiesPanel } from './PropertiesPanel';
 import { QuestionCanvas } from './QuestionCanvas';
 import {
@@ -46,6 +60,7 @@ interface Draft {
   coverImage: string;
   theme?: ThemeId;
   language?: string;
+  recommendedLevelId?: number | null;
   questions: QuestionWithKey[];
 }
 
@@ -104,6 +119,7 @@ interface Props {
   initialCoverImage?: string;
   initialTheme?: ThemeId;
   initialLanguage?: string;
+  initialRecommendedLevelId?: number | null;
   initialQuestions?: QuestionWithKey[];
   saving: boolean;
   error: string;
@@ -121,6 +137,7 @@ export function QuizStudio({
   initialCoverImage = '',
   initialTheme = 'default',
   initialLanguage = DEFAULT_LOCALE,
+  initialRecommendedLevelId = null,
   initialQuestions,
   saving,
   error,
@@ -130,6 +147,7 @@ export function QuizStudio({
   onValidationError,
   headerExtra,
 }: Props) {
+  const api = useAuthFetch();
   // Only the create flow restores an autosaved draft; edit hydrates from the DB.
   const [draft, setDraft] = useState<Draft | null>(() => (mode === 'create' ? readDraft() : null));
   const [title, setTitle] = useState(draft?.title ?? initialTitle);
@@ -137,6 +155,10 @@ export function QuizStudio({
   const [coverImage, setCoverImage] = useState(draft?.coverImage ?? initialCoverImage);
   const [theme, setTheme] = useState<ThemeId>(draft?.theme ?? initialTheme);
   const [language, setLanguage] = useState(draft?.language ?? initialLanguage);
+  const [recommendedLevelId, setRecommendedLevelId] = useState<number | null>(
+    draft?.recommendedLevelId ?? initialRecommendedLevelId,
+  );
+  const [employeeLevels, setEmployeeLevels] = useState<EmployeeLevel[]>([]);
   const [questions, setQuestions] = useState<QuestionWithKey[]>(() =>
     (
       draft?.questions ??
@@ -165,7 +187,15 @@ export function QuizStudio({
         } else {
           localStorage.setItem(
             DRAFT_KEY,
-            JSON.stringify({ title, description, coverImage, theme, language, questions }),
+            JSON.stringify({
+              title,
+              description,
+              coverImage,
+              theme,
+              language,
+              recommendedLevelId,
+              questions,
+            }),
           );
         }
       } catch {
@@ -173,7 +203,13 @@ export function QuizStudio({
       }
     }, 400);
     return () => clearTimeout(timer);
-  }, [mode, title, description, coverImage, theme, language, questions]);
+  }, [mode, title, description, coverImage, theme, language, recommendedLevelId, questions]);
+
+  useEffect(() => {
+    api.get<{ levels?: EmployeeLevel[] }>('/api/admin/employee-levels').then(({ ok, data }) => {
+      if (ok) setEmployeeLevels((data?.levels ?? []).filter((level) => level.is_active === 1));
+    });
+  }, [api]);
 
   // Once the quiz is created, drop the draft so it doesn't reappear next time.
   useEffect(() => {
@@ -212,6 +248,7 @@ export function QuizStudio({
       coverImage: coverImage || undefined,
       theme,
       language,
+      recommendedLevelId,
       questions: prepared,
     });
   }
@@ -223,6 +260,7 @@ export function QuizStudio({
       coverImage: coverImage || undefined,
       theme,
       language,
+      recommendedLevelId,
       questions: questions.map((q) => {
         const { _key, ...base } = q;
         return stripTrailingEmptyOptions(normalizeQuestion(base));
@@ -243,6 +281,7 @@ export function QuizStudio({
     setDescription('');
     setCoverImage('');
     setLanguage(DEFAULT_LOCALE);
+    setRecommendedLevelId(null);
     setQuestions([withKey(blankQuestion())]);
     setActive(0);
   }
@@ -414,6 +453,30 @@ export function QuizStudio({
                     </option>
                   ))}
                 </datalist>
+              </div>
+              <div className="space-y-2">
+                <div className="text-sm font-medium text-foreground">Bậc khuyến nghị</div>
+                <Select
+                  value={recommendedLevelId === null ? 'none' : String(recommendedLevelId)}
+                  onValueChange={(value) =>
+                    setRecommendedLevelId(value === 'none' ? null : Number(value))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Không chỉ định</SelectItem>
+                    {employeeLevels.map((level) => (
+                      <SelectItem key={level.id} value={String(level.id)}>
+                        {level.code} — {level.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Chỉ là metadata hướng dẫn khi giao bài; không ảnh hưởng tính điểm.
+                </p>
               </div>
               <Textarea
                 noMargin

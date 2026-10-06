@@ -28,6 +28,7 @@ export default function EditQuiz() {
   const [coverImage, setCoverImage] = useState('');
   const [theme, setTheme] = useState<ThemeId>('default');
   const [language, setLanguage] = useState(DEFAULT_LOCALE);
+  const [recommendedLevelId, setRecommendedLevelId] = useState<number | null>(null);
   const [questions, setQuestions] = useState<QuestionWithKey[]>([]);
   const [translationsOpen, setTranslationsOpen] = useState(false);
 
@@ -39,6 +40,7 @@ export default function EditQuiz() {
         cover_image?: string | null;
         theme?: ThemeId | null;
         language?: string | null;
+        recommended_level_id?: number | null;
         questions: unknown[];
       }>(`/api/admin/quizzes/${id}`)
       .then(({ ok, data }) => {
@@ -52,6 +54,7 @@ export default function EditQuiz() {
         setCoverImage(data.cover_image ?? '');
         setTheme(data.theme ?? 'default');
         setLanguage(data.language ?? DEFAULT_LOCALE);
+        setRecommendedLevelId(data.recommended_level_id ?? null);
         setQuestions(
           (data.questions ?? []).map((q) =>
             mapDbQuestionToImport(q as Parameters<typeof mapDbQuestionToImport>[0]),
@@ -97,6 +100,7 @@ export default function EditQuiz() {
         initialCoverImage={coverImage}
         initialTheme={theme}
         initialLanguage={language}
+        initialRecommendedLevelId={recommendedLevelId}
         initialQuestions={questions}
         saving={saving}
         error={error}

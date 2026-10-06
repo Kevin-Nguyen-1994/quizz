@@ -24,6 +24,18 @@ export type AuthRole = 'super_admin' | 'user';
 
 export type AssignmentStatus = 'draft' | 'published' | 'closed' | 'archived';
 export type AssignmentAttemptStatus = 'in_progress' | 'completed' | 'expired';
+export type AssignmentKind = 'general' | 'periodic' | 'promotion';
+export type AssignmentTargetMode = 'manual' | 'current_level' | 'promotion';
+
+export interface EmployeeLevel {
+  id: number;
+  code: string;
+  name: string;
+  sort_order: number;
+  is_active: number;
+  created_at_ms: number;
+  updated_at_ms: number;
+}
 
 export interface AdminAssignmentListItem {
   id: number;
@@ -70,9 +82,44 @@ export interface AdminAssignmentDetail {
     created_at_ms: number;
     updated_at_ms: number;
     published_at_ms: number | null;
+    assignment_kind: AssignmentKind;
+    target_mode: AssignmentTargetMode;
+    target_level_id: number | null;
+    promotion_target_level_id: number | null;
+    target_level_code_snapshot: string | null;
+    target_level_name_snapshot: string | null;
+    promotion_target_level_code_snapshot: string | null;
+    promotion_target_level_name_snapshot: string | null;
   };
   questions: Array<{ id: number; text: string; order_index: number; time_sec: number }>;
   members: AdminAssignmentMember[];
+  targetOverrides: AssignmentTargetOverride[];
+}
+
+export interface AssignmentTargetOverride {
+  userId: number;
+  action: 'include' | 'exclude';
+}
+
+export interface AssignmentTargetMember {
+  id: number;
+  loginName: string;
+  username: string;
+  displayName: string;
+  email: string;
+  levelId: number | null;
+  levelCode: string | null;
+  levelName: string | null;
+  currentLevel: { id: number; code: string; name: string } | null;
+  source: 'rule' | 'manual' | 'override_include';
+}
+
+export interface AssignmentTargetPreview {
+  matchedCount: number;
+  finalCount: number;
+  members: AssignmentTargetMember[];
+  warnings: Array<{ code: string; message: string; userId?: number }>;
+  fingerprint: string;
 }
 
 export interface ParticipantAssignmentLookup {
@@ -234,6 +281,13 @@ export interface AssignmentReport {
     reviewPolicy: 'after_deadline' | 'after_close';
     questionCount: number;
     maxScore: number;
+    assignmentKind: AssignmentKind;
+    targetMode: AssignmentTargetMode;
+    targetLevelCode: string | null;
+    targetLevelName: string | null;
+    promotionTargetLevelCode: string | null;
+    promotionTargetLevelName: string | null;
+    overrideCount: number;
   };
   overview: {
     assigned: number;
@@ -318,6 +372,9 @@ export interface UserAccount {
   created_at: string;
   last_password_change: string | null;
   quiz_count: number;
+  employee_level_id: number | null;
+  employee_level_code: string | null;
+  employee_level_name: string | null;
 }
 
 export interface Quiz {
@@ -332,6 +389,7 @@ export interface Quiz {
   owner_kind?: 'admin' | 'user';
   owner_email?: string | null;
   owner_username?: string | null;
+  recommended_level_id?: number | null;
 }
 
 export interface Question {
@@ -529,6 +587,7 @@ export interface ImportPayload {
   theme?: ThemeId;
   /** The language the quiz is authored in (locale code, e.g. "vi"). Defaults to Vietnamese. */
   language?: string;
+  recommendedLevelId?: number | null;
   questions: ImportQuestion[];
 }
 

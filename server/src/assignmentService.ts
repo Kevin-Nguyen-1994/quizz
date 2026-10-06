@@ -851,6 +851,7 @@ export async function getAssignmentForAdmin(
   assignment: DbAssignment & { quiz_title: string | null; question_count: number };
   questions: DbAssignmentQuestion[];
   members: unknown[];
+  targetOverrides: Array<{ userId: number; action: AssignmentTargetOverrideAction }>;
 }> {
   const assignment = await requireOwnedAssignment(db, actor, assignmentId);
   const quiz = assignment.quiz_id
@@ -883,6 +884,13 @@ export async function getAssignmentForAdmin(
   const attempts = await db.all<DbAssignmentAttempt[]>(
     `SELECT * FROM assignment_attempts WHERE assignment_id = ?
      ORDER BY user_id, attempt_number DESC`,
+    [assignmentId],
+  );
+  const targetOverrides = await db.all<
+    Array<{ userId: number; action: AssignmentTargetOverrideAction }>
+  >(
+    `SELECT user_id AS userId, action FROM assignment_target_overrides
+     WHERE assignment_id = ? ORDER BY user_id`,
     [assignmentId],
   );
   const selectedAttempts = new Map<number, DbAssignmentAttempt>();
@@ -934,6 +942,7 @@ export async function getAssignmentForAdmin(
     },
     questions,
     members: membersWithProgress,
+    targetOverrides,
   };
 }
 

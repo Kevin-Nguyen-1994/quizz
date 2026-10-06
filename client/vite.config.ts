@@ -16,10 +16,13 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      '/api': { target: 'http://localhost:3000', changeOrigin: true },
-      '/avatars': { target: 'http://localhost:3000', changeOrigin: true },
+      '/api': { target: process.env.VITE_API_PROXY ?? 'http://localhost:3000', changeOrigin: true },
+      '/avatars': {
+        target: process.env.VITE_API_PROXY ?? 'http://localhost:3000',
+        changeOrigin: true,
+      },
       '/socket.io': {
-        target: 'http://localhost:3000',
+        target: process.env.VITE_API_PROXY ?? 'http://localhost:3000',
         ws: true,
         changeOrigin: true,
         // A browser tab closing its socket.io connection makes Vite's ws proxy

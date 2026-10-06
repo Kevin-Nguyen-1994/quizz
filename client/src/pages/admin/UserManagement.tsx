@@ -1,4 +1,4 @@
-import { Copy, Plus } from 'lucide-react';
+import { Copy, Plus, TrendingUp } from 'lucide-react';
 import { type FormEvent, useCallback, useEffect, useState } from 'react';
 import { AppAlert } from '@/components/AppAlert';
 import { EmptyState, MainContent, Page, PageHeader } from '@/components/layout';
@@ -14,11 +14,20 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/Input';
+import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 import AdminNav from '../../components/AdminNav';
 import { useDialog } from '../../context/DialogContext';
 import { useAuthFetch } from '../../hooks/useAuthFetch';
-import type { UserAccount } from '../../types';
+import type { EmployeeLevel, UserAccount } from '../../types';
 
 type UserActionsProps = {
   user: UserAccount;
@@ -27,13 +36,31 @@ type UserActionsProps = {
   onBan: (id: number) => void;
   onReset: (id: number) => void;
   onDelete: (id: number) => void;
+  onChangeLevel: (user: UserAccount) => void;
 };
 
 /** Employee actions shared between the mobile list and desktop table. */
-function UserActions({ user, actionId, onUnban, onBan, onReset, onDelete }: UserActionsProps) {
+function UserActions({
+  user,
+  actionId,
+  onUnban,
+  onBan,
+  onReset,
+  onDelete,
+  onChangeLevel,
+}: UserActionsProps) {
   const busy = actionId === user.id;
   return (
     <>
+      <Button
+        type="button"
+        variant="secondary"
+        size="sm"
+        disabled={busy}
+        onClick={() => onChangeLevel(user)}
+      >
+        <TrendingUp className="size-4" /> Đổi bậc
+      </Button>
       {user.is_banned ? (
         <Button
           type="button"
@@ -78,10 +105,23 @@ function UserActions({ user, actionId, onUnban, onBan, onReset, onDelete }: User
   );
 }
 
+function LevelBadge({ user }: { user: UserAccount }) {
+  return user.employee_level_id ? (
+    <Badge variant="outline" className="border-blue-500/30 bg-blue-500/10 text-blue-300">
+      {user.employee_level_code ?? user.employee_level_name ?? 'Đã phân bậc'}
+    </Badge>
+  ) : (
+    <Badge variant="outline" className="text-muted-foreground">
+      Chưa phân bậc
+    </Badge>
+  );
+}
+
 export default function UserManagement() {
   const api = useAuthFetch();
   const { confirm } = useDialog();
   const [users, setUsers] = useState<UserAccount[]>([]);
+  const [levels, setLevels] = useState<EmployeeLevel[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionId, setActionId] = useState<number | null>(null);
   const [resetPassword, setResetPassword] = useState<{
@@ -93,17 +133,27 @@ export default function UserManagement() {
   const [loginName, setLoginName] = useState('');
   const [username, setUsername] = useState('');
   const [initialPassword, setInitialPassword] = useState('');
+  const [createLevelId, setCreateLevelId] = useState('none');
+  const [levelUser, setLevelUser] = useState<UserAccount | null>(null);
+  const [nextLevelId, setNextLevelId] = useState('none');
+  const [levelReason, setLevelReason] = useState('');
+  const [changingLevel, setChangingLevel] = useState(false);
+  const [levelError, setLevelError] = useState('');
   const [error, setError] = useState('');
   const [createError, setCreateError] = useState('');
 
   const load = useCallback(async () => {
-    const { ok, data } = await api.get<{ users?: UserAccount[] }>('/api/admin/users');
-    if (!ok) {
+    const [userResult, levelResult] = await Promise.all([
+      api.get<{ users?: UserAccount[] }>('/api/admin/users'),
+      api.get<{ levels?: EmployeeLevel[] }>('/api/admin/employee-levels'),
+    ]);
+    if (!userResult.ok || !levelResult.ok) {
       setError('Không thể tải danh sách nhân viên.');
       setLoading(false);
       return;
     }
-    setUsers(data?.users ?? []);
+    setUsers(userResult.data?.users ?? []);
+    setLevels((levelResult.data?.levels ?? []).filter((level) => level.is_active === 1));
     setLoading(false);
   }, [api]);
 
@@ -185,11 +235,60 @@ export default function UserManagement() {
       setCreateError(data?.error ?? 'Không thể tạo nhân viên.');
       return;
     }
-    setUsers((current) => [data.user as UserAccount, ...current]);
+    if (createLevelId !== 'none') {
+      const levelResult = await api.patch<{ error?: string }>(
+        `/api/admin/users/${data.user.id}/level`,
+        {
+          employeeLevelId: Number(createLevelId),
+          expectedCurrentLevelId: null,
+          reason: 'Phân bậc khi tạo tài khoản',
+        },
+      );
+      if (!levelResult.ok) {
+        setError(
+          `Đã tạo nhân viên nhưng chưa gán được bậc: ${levelResult.data?.error ?? 'lỗi không xác định'}`,
+        );
+      }
+    }
     setLoginName('');
     setUsername('');
     setInitialPassword('');
+    setCreateLevelId('none');
     setCreateOpen(false);
+    await load();
+  }
+
+  function openLevelDialog(user: UserAccount) {
+    setLevelUser(user);
+    setNextLevelId(user.employee_level_id ? String(user.employee_level_id) : 'none');
+    setLevelReason('');
+    setLevelError('');
+  }
+
+  async function changeLevel() {
+    if (!levelUser) return;
+    const requestedId = nextLevelId === 'none' ? null : Number(nextLevelId);
+    setChangingLevel(true);
+    setLevelError('');
+    const result = await api.patch<{ error?: string; code?: string }>(
+      `/api/admin/users/${levelUser.id}/level`,
+      {
+        employeeLevelId: requestedId,
+        expectedCurrentLevelId: levelUser.employee_level_id,
+        reason: levelReason,
+      },
+    );
+    setChangingLevel(false);
+    if (!result.ok) {
+      setLevelError(
+        result.data?.code === 'EMPLOYEE_LEVEL_CHANGED'
+          ? 'Bậc của nhân viên đã được thay đổi bởi phiên khác. Vui lòng tải lại dữ liệu.'
+          : (result.data?.error ?? 'Không thể đổi bậc nhân viên.'),
+      );
+      return;
+    }
+    setLevelUser(null);
+    await load();
   }
 
   async function copyResetPassword() {
@@ -204,15 +303,17 @@ export default function UserManagement() {
         <PageHeader
           title="Quản lý nhân viên"
           description="Quản lý tài khoản nhân viên sử dụng TiL Quiz."
-          actions={<Button
-            type="button"
-            onClick={() => {
-              setCreateError('');
-              setCreateOpen(true);
-            }}
-          >
-            <Plus className="size-4" /> Tạo nhân viên
-          </Button>}
+          actions={
+            <Button
+              type="button"
+              onClick={() => {
+                setCreateError('');
+                setCreateOpen(true);
+              }}
+            >
+              <Plus className="size-4" /> Tạo nhân viên
+            </Button>
+          }
         />
 
         {error && <AppAlert variant="error">{error}</AppAlert>}
@@ -239,7 +340,10 @@ export default function UserManagement() {
         {loading ? (
           <p className="text-muted-foreground">Đang tải…</p>
         ) : users.length === 0 ? (
-          <EmptyState title="Chưa có nhân viên" description="Tạo tài khoản để giao bài kiểm tra và theo dõi kết quả." />
+          <EmptyState
+            title="Chưa có nhân viên"
+            description="Tạo tài khoản để giao bài kiểm tra và theo dõi kết quả."
+          />
         ) : (
           <>
             <ul className="divide-y divide-border rounded-xl border border-border md:hidden">
@@ -252,6 +356,9 @@ export default function UserManagement() {
                     </span>
                     <span className="mt-0.5 block text-xs text-muted-foreground">
                       Tạo ngày {new Date(u.created_at).toLocaleDateString('vi-VN')}
+                    </span>
+                    <span className="mt-2 block">
+                      <LevelBadge user={u} />
                     </span>
                   </div>
                   <Badge
@@ -273,6 +380,7 @@ export default function UserManagement() {
                       onBan={banUser}
                       onReset={resetUserPassword}
                       onDelete={deleteUser}
+                      onChangeLevel={openLevelDialog}
                     />
                   </div>
                 </li>
@@ -283,18 +391,21 @@ export default function UserManagement() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-border text-left text-muted-foreground">
-                      <th className="px-4 py-3 font-medium">Tên đăng nhập</th>
                       <th className="px-4 py-3 font-medium">Họ tên</th>
+                      <th className="px-4 py-3 font-medium">Tên đăng nhập</th>
+                      <th className="px-4 py-3 font-medium">Bậc</th>
                       <th className="px-4 py-3 font-medium">Trạng thái</th>
-                      <th className="px-4 py-3 font-medium">Ngày tạo</th>
                       <th className="px-4 py-3 text-right font-medium">Hành động</th>
                     </tr>
                   </thead>
                   <tbody>
                     {users.map((u) => (
                       <tr key={u.id} className="border-b border-border last:border-0">
-                        <td className="max-w-[200px] truncate px-4 py-3">{u.login_name}</td>
                         <td className="px-4 py-3">{u.username}</td>
+                        <td className="max-w-[200px] truncate px-4 py-3">{u.login_name}</td>
+                        <td className="px-4 py-3">
+                          <LevelBadge user={u} />
+                        </td>
                         <td className="px-4 py-3">
                           <Badge
                             variant="outline"
@@ -308,9 +419,6 @@ export default function UserManagement() {
                             {u.is_banned ? 'Đã khóa' : 'Hoạt động'}
                           </Badge>
                         </td>
-                        <td className="px-4 py-3 text-sm text-muted-foreground">
-                          {new Date(u.created_at).toLocaleDateString('vi-VN')}
-                        </td>
                         <td className="px-4 py-3">
                           <div className="flex justify-end gap-2">
                             <UserActions
@@ -320,6 +428,7 @@ export default function UserManagement() {
                               onBan={banUser}
                               onReset={resetUserPassword}
                               onDelete={deleteUser}
+                              onChangeLevel={openLevelDialog}
                             />
                           </div>
                         </td>
@@ -372,6 +481,22 @@ export default function UserManagement() {
                 value={initialPassword}
                 onChange={(event) => setInitialPassword(event.target.value)}
               />
+              <div className="space-y-2">
+                <Label>Bậc hiện tại</Label>
+                <Select value={createLevelId} onValueChange={setCreateLevelId}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Chưa phân bậc</SelectItem>
+                    {levels.map((level) => (
+                      <SelectItem key={level.id} value={String(level.id)}>
+                        {level.code} — {level.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </form>
             <DialogFooter>
               <Button type="button" variant="ghost" onClick={() => setCreateOpen(false)}>
@@ -379,6 +504,63 @@ export default function UserManagement() {
               </Button>
               <Button type="submit" form="create-employee-form" disabled={creating}>
                 {creating ? 'Đang tạo…' : 'Tạo nhân viên'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={levelUser !== null} onOpenChange={(open) => !open && setLevelUser(null)}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Đổi bậc nhân viên</DialogTitle>
+              <DialogDescription>
+                {levelUser
+                  ? `Chuyển ${levelUser.username} từ ${levelUser.employee_level_code ?? 'Chưa phân bậc'} sang ${nextLevelId === 'none' ? 'Chưa phân bậc' : (levels.find((level) => level.id === Number(nextLevelId))?.code ?? 'bậc mới')}?`
+                  : ''}
+              </DialogDescription>
+            </DialogHeader>
+            {levelError && <AppAlert variant="error">{levelError}</AppAlert>}
+            <div className="space-y-2">
+              <Label>Bậc mới</Label>
+              <Select value={nextLevelId} onValueChange={setNextLevelId}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Chưa phân bậc</SelectItem>
+                  {levels.map((level) => (
+                    <SelectItem key={level.id} value={String(level.id)}>
+                      {level.code} — {level.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="employee-level-reason">Lý do (không bắt buộc)</Label>
+              <Textarea
+                id="employee-level-reason"
+                value={levelReason}
+                onChange={(event) => setLevelReason(event.target.value)}
+                maxLength={500}
+                placeholder="Ví dụ: Được quản lý xác nhận nâng bậc"
+              />
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="ghost" onClick={() => setLevelUser(null)}>
+                Hủy
+              </Button>
+              <Button
+                type="button"
+                onClick={changeLevel}
+                disabled={
+                  changingLevel ||
+                  !levelUser ||
+                  (nextLevelId === 'none' ? null : Number(nextLevelId)) ===
+                    levelUser.employee_level_id
+                }
+              >
+                {changingLevel ? 'Đang lưu…' : 'Xác nhận đổi bậc'}
               </Button>
             </DialogFooter>
           </DialogContent>
