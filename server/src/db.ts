@@ -260,6 +260,7 @@ export async function initDb(): Promise<void> {
   }
 
   await migrateInternalUserIdentifiers();
+  await migrateEmployeeLevelsAndTargeting();
 
   // Migrate admin from config to database if needed
   const adminCount = await db.get('SELECT COUNT(*) as count FROM admins');
@@ -287,6 +288,149 @@ export async function initDb(): Promise<void> {
       username,
       hashedPassword,
     ]);
+  }
+}
+
+async function addColumnIfMissing(
+  table: string,
+  column: string,
+  definition: string,
+): Promise<void> {
+  const columns = await db.all<Array<{ name: string }>>(`PRAGMA table_info("${table}")`);
+  if (!columns.some((item) => item.name === column)) {
+    await db.run(`ALTER TABLE "${table}" ADD COLUMN ${definition}`);
+  }
+}
+
+/** Phase 5B additive schema. Existing employees and historical assignments stay unclassified. */
+async function migrateEmployeeLevelsAndTargeting(): Promise<void> {
+  await db.run('BEGIN IMMEDIATE');
+  try {
+    await db.exec(`
+      CREATE TABLE IF NOT EXISTS employee_levels (
+        id            INTEGER PRIMARY KEY AUTOINCREMENT,
+        code          TEXT NOT NULL COLLATE NOCASE UNIQUE CHECK(trim(code) <> ''),
+        name          TEXT NOT NULL CHECK(trim(name) <> ''),
+        sort_order    INTEGER NOT NULL DEFAULT 0,
+        is_active     INTEGER NOT NULL DEFAULT 1 CHECK(is_active IN (0, 1)),
+        created_at_ms INTEGER NOT NULL,
+        updated_at_ms INTEGER NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS employee_level_history (
+        id                         INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id                    INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        user_login_name_snapshot   TEXT NOT NULL,
+        user_display_name_snapshot TEXT NOT NULL,
+        old_level_id               INTEGER REFERENCES employee_levels(id) ON DELETE SET NULL,
+        old_level_code_snapshot    TEXT,
+        old_level_name_snapshot    TEXT,
+        new_level_id               INTEGER REFERENCES employee_levels(id) ON DELETE SET NULL,
+        new_level_code_snapshot    TEXT,
+        new_level_name_snapshot    TEXT,
+        changed_at_ms              INTEGER NOT NULL,
+        changed_by_role            TEXT NOT NULL,
+        changed_by_id              INTEGER,
+        changed_by_name_snapshot   TEXT NOT NULL,
+        reason                     TEXT
+      );
+
+      CREATE TABLE IF NOT EXISTS assignment_target_overrides (
+        assignment_id INTEGER NOT NULL REFERENCES assignments(id) ON DELETE CASCADE,
+        user_id       INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        action        TEXT NOT NULL CHECK(action IN ('include', 'exclude')),
+        created_at_ms INTEGER NOT NULL,
+        PRIMARY KEY (assignment_id, user_id)
+      );
+    `);
+
+    await addColumnIfMissing(
+      'users',
+      'employee_level_id',
+      'employee_level_id INTEGER REFERENCES employee_levels(id) ON DELETE SET NULL',
+    );
+    await addColumnIfMissing(
+      'quizzes',
+      'recommended_level_id',
+      'recommended_level_id INTEGER REFERENCES employee_levels(id) ON DELETE SET NULL',
+    );
+    await addColumnIfMissing(
+      'assignments',
+      'assignment_kind',
+      "assignment_kind TEXT NOT NULL DEFAULT 'general' CHECK(assignment_kind IN ('general', 'periodic', 'promotion'))",
+    );
+    await addColumnIfMissing(
+      'assignments',
+      'target_mode',
+      "target_mode TEXT NOT NULL DEFAULT 'manual' CHECK(target_mode IN ('manual', 'current_level', 'promotion'))",
+    );
+    await addColumnIfMissing(
+      'assignments',
+      'target_level_id',
+      'target_level_id INTEGER REFERENCES employee_levels(id) ON DELETE SET NULL',
+    );
+    await addColumnIfMissing(
+      'assignments',
+      'promotion_target_level_id',
+      'promotion_target_level_id INTEGER REFERENCES employee_levels(id) ON DELETE SET NULL',
+    );
+    for (const column of [
+      'target_level_code_snapshot',
+      'target_level_name_snapshot',
+      'promotion_target_level_code_snapshot',
+      'promotion_target_level_name_snapshot',
+    ]) {
+      await addColumnIfMissing('assignments', column, `${column} TEXT`);
+    }
+    await addColumnIfMissing(
+      'assignment_members',
+      'level_id_snapshot',
+      'level_id_snapshot INTEGER REFERENCES employee_levels(id) ON DELETE SET NULL',
+    );
+    await addColumnIfMissing(
+      'assignment_members',
+      'level_code_snapshot',
+      'level_code_snapshot TEXT',
+    );
+    await addColumnIfMissing(
+      'assignment_members',
+      'level_name_snapshot',
+      'level_name_snapshot TEXT',
+    );
+
+    const now = Date.now();
+    for (const [code, name, sortOrder] of [
+      ['CS1', 'CS1', 10],
+      ['CS2', 'CS2', 20],
+      ['CS3', 'CS3', 30],
+    ] as const) {
+      await db.run(
+        `INSERT INTO employee_levels (code, name, sort_order, is_active, created_at_ms, updated_at_ms)
+         VALUES (?, ?, ?, 1, ?, ?) ON CONFLICT(code) DO NOTHING`,
+        code,
+        name,
+        sortOrder,
+        now,
+        now,
+      );
+    }
+
+    await db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_users_employee_level
+        ON users(employee_level_id);
+      CREATE INDEX IF NOT EXISTS idx_employee_level_history_user_changed
+        ON employee_level_history(user_id, changed_at_ms DESC);
+      CREATE INDEX IF NOT EXISTS idx_quizzes_recommended_level
+        ON quizzes(recommended_level_id);
+      CREATE INDEX IF NOT EXISTS idx_assignments_target
+        ON assignments(target_mode, target_level_id);
+      CREATE INDEX IF NOT EXISTS idx_assignment_members_assignment_level
+        ON assignment_members(assignment_id, level_id_snapshot);
+    `);
+    await db.run('COMMIT');
+  } catch (error) {
+    await db.run('ROLLBACK').catch(() => undefined);
+    throw error;
   }
 }
 

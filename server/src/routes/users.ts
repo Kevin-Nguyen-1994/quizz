@@ -1,7 +1,8 @@
 import crypto from 'node:crypto';
 import { type Request, type Response, Router } from 'express';
 import { db } from '../db';
-import { requireSuperAdmin } from '../middleware';
+import { changeEmployeeLevel, EmployeeLevelError } from '../employeeLevels';
+import { getRequestUser, requireSuperAdmin } from '../middleware';
 import type { DbUser } from '../types';
 import { createInternalUser, setUserPassword, UserAccountError } from '../userAccounts';
 
@@ -23,12 +24,17 @@ usersRouter.get('/', async (_req: Request, res: Response) => {
       created_at: string;
       last_password_change: string | null;
       quiz_count: number;
+      employee_level_id: number | null;
+      employee_level_code: string | null;
+      employee_level_name: string | null;
     }>
   >(`
     SELECT u.id, COALESCE(u.login_name, u.email, 'user-' || u.id) as login_name,
       u.email, u.username, u.is_banned, u.created_at, u.last_password_change,
+      u.employee_level_id, l.code as employee_level_code, l.name as employee_level_name,
       (SELECT COUNT(*) FROM quizzes q WHERE q.owner_id = u.id AND q.owner_kind = 'user') as quiz_count
     FROM users u
+    LEFT JOIN employee_levels l ON l.id = u.employee_level_id
     ORDER BY u.created_at DESC
   `);
   res.json({ users });
@@ -49,6 +55,9 @@ usersRouter.post('/', async (req: Request, res: Response) => {
         created_at: user.created_at,
         last_password_change: user.last_password_change,
         quiz_count: 0,
+        employee_level_id: user.employee_level_id,
+        employee_level_code: null,
+        employee_level_name: null,
       },
     });
   } catch (error) {
@@ -57,6 +66,26 @@ usersRouter.post('/', async (req: Request, res: Response) => {
     }
     console.error('Create user error:', error);
     res.status(500).json({ error: 'Failed to create employee account' });
+  }
+});
+
+// ─── Current employee level ──────────────────────────────────────────────────
+
+usersRouter.patch('/:id/level', async (req: Request, res: Response) => {
+  const userId = Number(req.params.id);
+  if (!Number.isInteger(userId) || userId < 1) {
+    return res.status(400).json({ error: 'Invalid user id' });
+  }
+  const actor = getRequestUser(req);
+  if (!actor) return res.status(401).json({ error: 'Unauthorized' });
+  try {
+    const result = await changeEmployeeLevel(actor, userId, req.body ?? {});
+    res.json(result);
+  } catch (error) {
+    if (error instanceof EmployeeLevelError) {
+      return res.status(error.statusCode).json({ error: error.message, code: error.code });
+    }
+    throw error;
   }
 });
 

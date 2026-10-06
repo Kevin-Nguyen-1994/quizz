@@ -5,8 +5,10 @@ import {
   createDraftAssignment,
   getAssignmentForAdmin,
   listAssignmentsForAdmin,
+  previewAssignmentTarget,
   publishAssignment,
   setAssignmentMembers,
+  setAssignmentTargetOverrides,
   updateDraftAssignment,
 } from '../assignmentService';
 import {
@@ -43,7 +45,11 @@ function positiveParam(req: Request, name: string): number {
 
 function handleError(error: unknown, res: Response, next: NextFunction): void {
   if (error instanceof AssignmentServiceError) {
-    res.status(error.statusCode).json({ error: error.message });
+    res.status(error.statusCode).json({
+      error: error.message,
+      ...(error.code ? { code: error.code } : {}),
+      ...(error.details === undefined ? {} : { details: error.details }),
+    });
     return;
   }
   next(error);
@@ -156,11 +162,47 @@ assignmentAdminRouter.put(
   },
 );
 
+assignmentAdminRouter.put(
+  '/:id/target-overrides',
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const overrides = (req.body as { overrides?: unknown }).overrides;
+      if (!Array.isArray(overrides)) {
+        throw new AssignmentServiceError('overrides must be an array');
+      }
+      res.json({
+        overrides: await setAssignmentTargetOverrides(actor(req), assignmentId(req), overrides),
+      });
+    } catch (error) {
+      handleError(error, res, next);
+    }
+  },
+);
+
+assignmentAdminRouter.post(
+  '/:id/target-preview',
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      res.json({ preview: await previewAssignmentTarget(actor(req), assignmentId(req)) });
+    } catch (error) {
+      handleError(error, res, next);
+    }
+  },
+);
+
 assignmentAdminRouter.post(
   '/:id/publish',
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const assignment = await publishAssignment(actor(req), assignmentId(req));
+      const fingerprint = (req.body as { fingerprint?: unknown }).fingerprint;
+      if (fingerprint !== undefined && typeof fingerprint !== 'string') {
+        throw new AssignmentServiceError('fingerprint must be a string');
+      }
+      const assignment = await publishAssignment(
+        actor(req),
+        assignmentId(req),
+        fingerprint as string | undefined,
+      );
       res.json({ assignment });
     } catch (error) {
       handleError(error, res, next);

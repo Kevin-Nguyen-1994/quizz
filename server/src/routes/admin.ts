@@ -2,6 +2,7 @@ import { type Request, type Response, Router } from 'express';
 import { deleteAvatarByUrl, saveAvatarsFromDataUrls } from '../avatars';
 import { config, saveConfig, toPublicConfig } from '../config';
 import { db, getRankedPlayers } from '../db';
+import { EmployeeLevelError, requireActiveEmployeeLevel } from '../employeeLevels';
 import { getMetricsSnapshot } from '../metrics';
 import { getRequestUser, requireAuth, requireSuperAdmin } from '../middleware';
 import { hashPassword, MIN_PASSWORD_LENGTH } from '../passwords';
@@ -259,6 +260,20 @@ function normalizeLanguage(language: unknown): string {
   return typeof language === 'string' && language.trim() ? language.trim() : 'vi';
 }
 
+async function recommendedLevelId(
+  value: unknown,
+  fallback: number | null = null,
+): Promise<number | null> {
+  if (value === undefined) return fallback;
+  if (value === null) return null;
+  const levelId = Number(value);
+  if (!Number.isInteger(levelId) || levelId < 1) {
+    throw new EmployeeLevelError('recommendedLevelId is invalid');
+  }
+  await requireActiveEmployeeLevel(db, levelId);
+  return levelId;
+}
+
 adminRouter.post('/quizzes', requireAuth, async (req: Request, res: Response) => {
   const body = req.body as QuizImportPayload;
   if (!body.title || !Array.isArray(body.questions) || body.questions.length === 0) {
@@ -268,11 +283,20 @@ adminRouter.post('/quizzes', requireAuth, async (req: Request, res: Response) =>
   // Super admin owns as 'admin' (owner_id NULL); user owns as 'user' with their id.
   const ownerKind = isSuperAdmin(req) ? 'admin' : 'user';
   const ownerId = isSuperAdmin(req) ? null : currentUserId(req);
+  let levelId: number | null;
+  try {
+    levelId = await recommendedLevelId(body.recommendedLevelId);
+  } catch (error) {
+    if (error instanceof EmployeeLevelError) {
+      return res.status(error.statusCode).json({ error: error.message, code: error.code });
+    }
+    throw error;
+  }
 
   await db.run('BEGIN');
   try {
     const quizResult = await db.run(
-      'INSERT INTO quizzes (title, description, cover_image, theme, language, owner_id, owner_kind) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      'INSERT INTO quizzes (title, description, cover_image, theme, language, owner_id, owner_kind, recommended_level_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
       body.title,
       body.description ?? '',
       normalizeImageUrl(body.coverImage) ?? null,
@@ -280,6 +304,7 @@ adminRouter.post('/quizzes', requireAuth, async (req: Request, res: Response) =>
       normalizeLanguage(body.language),
       ownerId,
       ownerKind,
+      levelId,
     );
     const quizId = quizResult.lastID;
     for (let i = 0; i < body.questions.length; i++) {
@@ -304,16 +329,26 @@ adminRouter.put('/quizzes/:id', requireAuth, async (req: Request, res: Response)
   if (!(await canAccessQuiz(req, quiz))) {
     return res.status(404).json({ error: 'Not found' });
   }
+  let levelId: number | null;
+  try {
+    levelId = await recommendedLevelId(body.recommendedLevelId, quiz.recommended_level_id);
+  } catch (error) {
+    if (error instanceof EmployeeLevelError) {
+      return res.status(error.statusCode).json({ error: error.message, code: error.code });
+    }
+    throw error;
+  }
 
   await db.run('BEGIN');
   try {
     await db.run(
-      'UPDATE quizzes SET title = ?, description = ?, cover_image = ?, theme = ?, language = ? WHERE id = ?',
+      'UPDATE quizzes SET title = ?, description = ?, cover_image = ?, theme = ?, language = ?, recommended_level_id = ? WHERE id = ?',
       body.title,
       body.description ?? '',
       normalizeImageUrl(body.coverImage) ?? null,
       normalizeTheme(body.theme),
       normalizeLanguage(body.language),
+      levelId,
       req.params.id,
     );
     await db.run('DELETE FROM questions WHERE quiz_id = ?', req.params.id);

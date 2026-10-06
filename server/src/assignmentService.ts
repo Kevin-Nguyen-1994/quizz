@@ -10,11 +10,21 @@ import {
   mixAssignmentSeed,
 } from './assignmentScoring';
 import { db } from './db';
+import {
+  AssignmentTargetingError,
+  resolveAssignmentTarget,
+  type AssignmentTargetPreview,
+} from './assignmentTargeting';
+import { requireActiveEmployeeLevel } from './employeeLevels';
 import { parseLatLng } from './questionScoring';
+import { withImmediateTransaction as withAssignmentTransaction } from './transactions';
 import type {
+  AssignmentKind,
   AssignmentAudienceMode,
   AssignmentResultPolicy,
   AssignmentReviewPolicy,
+  AssignmentTargetMode,
+  AssignmentTargetOverrideAction,
   DbAssignment,
   DbAssignmentAttempt,
   DbAssignmentMember,
@@ -30,6 +40,8 @@ export class AssignmentServiceError extends Error {
   constructor(
     message: string,
     public readonly statusCode = 400,
+    public readonly code?: string,
+    public readonly details?: unknown,
   ) {
     super(message);
   }
@@ -50,6 +62,10 @@ export interface AssignmentDraftInput {
   reviewPolicy?: AssignmentReviewPolicy;
   shuffleQuestions?: boolean;
   shuffleOptions?: boolean;
+  assignmentKind?: AssignmentKind;
+  targetMode?: AssignmentTargetMode;
+  targetLevelId?: number | null;
+  promotionTargetLevelId?: number | null;
 }
 
 export interface ParticipantAttemptState {
@@ -105,6 +121,8 @@ type AssignmentActor = Pick<JwtPayload, 'id' | 'role'>;
 const AUDIENCE_MODES = new Set<AssignmentAudienceMode>(['members', 'open']);
 const RESULT_POLICIES = new Set<AssignmentResultPolicy>(['highest_score', 'latest_completed']);
 const REVIEW_POLICIES = new Set<AssignmentReviewPolicy>(['after_deadline', 'after_close']);
+const ASSIGNMENT_KINDS = new Set<AssignmentKind>(['general', 'periodic', 'promotion']);
+const TARGET_MODES = new Set<AssignmentTargetMode>(['manual', 'current_level', 'promotion']);
 const QUESTION_TYPES = new Set<QuestionType>([
   'multiple_choice',
   'true_false',
@@ -116,33 +134,6 @@ const QUESTION_TYPES = new Set<QuestionType>([
   'geo',
   'matching',
 ]);
-
-// sqlite's wrapper exposes one connection. Serialising assignment transactions
-// prevents overlapping BEGIN calls in-process; BEGIN IMMEDIATE plus constraints
-// still provides database-level protection if another process accesses the DB.
-let transactionTail: Promise<void> = Promise.resolve();
-
-async function withAssignmentTransaction<T>(work: (database: Database) => Promise<T>): Promise<T> {
-  let release = () => {};
-  const previous = transactionTail;
-  transactionTail = new Promise<void>((resolve) => {
-    release = resolve;
-  });
-  await previous;
-  try {
-    await db.run('BEGIN IMMEDIATE');
-    try {
-      const result = await work(db);
-      await db.run('COMMIT');
-      return result;
-    } catch (error) {
-      await db.run('ROLLBACK');
-      throw error;
-    }
-  } finally {
-    release();
-  }
-}
 
 function ownsAssignment(actor: AssignmentActor, assignment: DbAssignment): boolean {
   return (
@@ -212,6 +203,40 @@ function validateDraftInput(input: AssignmentDraftInput): Required<AssignmentDra
   if (!REVIEW_POLICIES.has(reviewPolicy)) {
     throw new AssignmentServiceError('reviewPolicy is invalid');
   }
+  const assignmentKind = input.assignmentKind ?? 'general';
+  const targetMode = input.targetMode ?? 'manual';
+  if (!ASSIGNMENT_KINDS.has(assignmentKind)) {
+    throw new AssignmentServiceError('assignmentKind is invalid');
+  }
+  if (!TARGET_MODES.has(targetMode)) {
+    throw new AssignmentServiceError('targetMode is invalid');
+  }
+  const targetLevelId = input.targetLevelId ?? null;
+  const promotionTargetLevelId = input.promotionTargetLevelId ?? null;
+  if (targetLevelId !== null) requireFiniteInteger(targetLevelId, 'targetLevelId', 1);
+  if (promotionTargetLevelId !== null) {
+    requireFiniteInteger(promotionTargetLevelId, 'promotionTargetLevelId', 1);
+  }
+  if (targetMode === 'manual' && (targetLevelId !== null || promotionTargetLevelId !== null)) {
+    throw new AssignmentServiceError('Manual targeting cannot have target levels');
+  }
+  if (
+    targetMode === 'current_level' &&
+    (targetLevelId === null || promotionTargetLevelId !== null)
+  ) {
+    throw new AssignmentServiceError('Current-level targeting requires exactly one target level');
+  }
+  if (
+    targetMode === 'promotion' &&
+    (targetLevelId === null ||
+      promotionTargetLevelId === null ||
+      targetLevelId === promotionTargetLevelId)
+  ) {
+    throw new AssignmentServiceError('Promotion targeting requires two different levels');
+  }
+  if (targetMode !== 'manual' && audienceMode !== 'members') {
+    throw new AssignmentServiceError('Smart targeting requires a members-only assignment');
+  }
   return {
     quizId,
     title,
@@ -223,7 +248,35 @@ function validateDraftInput(input: AssignmentDraftInput): Required<AssignmentDra
     reviewPolicy,
     shuffleQuestions: input.shuffleQuestions ?? true,
     shuffleOptions: input.shuffleOptions ?? true,
+    assignmentKind,
+    targetMode,
+    targetLevelId,
+    promotionTargetLevelId,
   };
+}
+
+async function validateSmartTargetLevels(
+  database: Database,
+  actor: AssignmentActor,
+  input: Required<AssignmentDraftInput>,
+): Promise<void> {
+  if (input.targetMode !== 'manual' && actor.role !== 'super_admin') {
+    throw new AssignmentServiceError('Smart targeting requires super administrator access', 403);
+  }
+  try {
+    if (input.targetLevelId !== null) {
+      await requireActiveEmployeeLevel(database, input.targetLevelId);
+    }
+    if (input.promotionTargetLevelId !== null) {
+      await requireActiveEmployeeLevel(database, input.promotionTargetLevelId);
+    }
+  } catch (error) {
+    if (error instanceof Error && 'statusCode' in error) {
+      const typed = error as Error & { statusCode: number; code?: string };
+      throw new AssignmentServiceError(typed.message, typed.statusCode, typed.code);
+    }
+    throw error;
+  }
 }
 
 export async function createDraftAssignment(
@@ -233,13 +286,15 @@ export async function createDraftAssignment(
   const normalized = validateDraftInput(input);
   return withAssignmentTransaction(async (database) => {
     await requireAccessibleQuiz(database, actor, normalized.quizId);
+    await validateSmartTargetLevels(database, actor, normalized);
     const now = Date.now();
     const result = await database.run(
       `INSERT INTO assignments (
         quiz_id, owner_kind, owner_id, title, audience_mode, opens_at_ms,
         deadline_at_ms, max_attempts, result_policy, review_policy,
-        shuffle_questions, shuffle_options, created_at_ms, updated_at_ms
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        shuffle_questions, shuffle_options, assignment_kind, target_mode,
+        target_level_id, promotion_target_level_id, created_at_ms, updated_at_ms
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       normalized.quizId,
       actor.role === 'super_admin' ? 'admin' : 'user',
       actor.role === 'super_admin' ? null : actor.id,
@@ -252,6 +307,10 @@ export async function createDraftAssignment(
       normalized.reviewPolicy,
       normalized.shuffleQuestions ? 1 : 0,
       normalized.shuffleOptions ? 1 : 0,
+      normalized.assignmentKind,
+      normalized.targetMode,
+      normalized.targetLevelId,
+      normalized.promotionTargetLevelId,
       now,
       now,
     );
@@ -286,12 +345,22 @@ export async function updateDraftAssignment(
           : patch.shuffleQuestions,
       shuffleOptions:
         patch.shuffleOptions === undefined ? current.shuffle_options === 1 : patch.shuffleOptions,
+      assignmentKind: patch.assignmentKind ?? current.assignment_kind,
+      targetMode: patch.targetMode ?? current.target_mode,
+      targetLevelId:
+        patch.targetLevelId === undefined ? current.target_level_id : patch.targetLevelId,
+      promotionTargetLevelId:
+        patch.promotionTargetLevelId === undefined
+          ? current.promotion_target_level_id
+          : patch.promotionTargetLevelId,
     });
     await requireAccessibleQuiz(database, actor, normalized.quizId);
+    await validateSmartTargetLevels(database, actor, normalized);
     await database.run(
       `UPDATE assignments SET quiz_id = ?, title = ?, audience_mode = ?, opens_at_ms = ?,
        deadline_at_ms = ?, max_attempts = ?, result_policy = ?, review_policy = ?,
-       shuffle_questions = ?, shuffle_options = ?, updated_at_ms = ? WHERE id = ?`,
+       shuffle_questions = ?, shuffle_options = ?, assignment_kind = ?, target_mode = ?,
+       target_level_id = ?, promotion_target_level_id = ?, updated_at_ms = ? WHERE id = ?`,
       normalized.quizId,
       normalized.title,
       normalized.audienceMode,
@@ -302,6 +371,10 @@ export async function updateDraftAssignment(
       normalized.reviewPolicy,
       normalized.shuffleQuestions ? 1 : 0,
       normalized.shuffleOptions ? 1 : 0,
+      normalized.assignmentKind,
+      normalized.targetMode,
+      normalized.targetLevelId,
+      normalized.promotionTargetLevelId,
       Date.now(),
       assignmentId,
     );
@@ -325,9 +398,19 @@ export async function setAssignmentMembers(
     if (assignment.status !== 'draft') {
       throw new AssignmentServiceError('Members can only be changed on a draft assignment', 409);
     }
-    const users: DbUser[] = [];
+    if (assignment.target_mode !== 'manual') {
+      throw new AssignmentServiceError('Use target overrides for a smart-targeted assignment', 409);
+    }
+    const users: Array<DbUser & { level_code: string | null; level_name: string | null }> = [];
     for (const userId of uniqueUserIds) {
-      const user = await database.get<DbUser>('SELECT * FROM users WHERE id = ?', [userId]);
+      const user = await database.get<
+        DbUser & { level_code: string | null; level_name: string | null }
+      >(
+        `SELECT u.*, l.code AS level_code, l.name AS level_name
+         FROM users u LEFT JOIN employee_levels l ON l.id = u.employee_level_id
+         WHERE u.id = ?`,
+        [userId],
+      );
       if (!user) throw new AssignmentServiceError(`User ${userId} not found`, 404);
       users.push(user);
     }
@@ -337,14 +420,18 @@ export async function setAssignmentMembers(
       const displayName = user.play_display_name?.trim() || user.username;
       await database.run(
         `INSERT INTO assignment_members
-          (assignment_id, user_id, login_name_snapshot, display_name_snapshot, email_snapshot, assigned_at_ms)
-         VALUES (?, ?, ?, ?, ?, ?)`,
+          (assignment_id, user_id, login_name_snapshot, display_name_snapshot, email_snapshot,
+           assigned_at_ms, level_id_snapshot, level_code_snapshot, level_name_snapshot)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         assignmentId,
         user.id,
         userLoginName(user),
         displayName,
         user.email ?? '',
         now,
+        user.employee_level_id,
+        user.level_code,
+        user.level_name,
       );
     }
     return database.all<DbAssignmentMember[]>(
@@ -352,6 +439,95 @@ export async function setAssignmentMembers(
       [assignmentId],
     );
   });
+}
+
+export interface AssignmentTargetOverrideInput {
+  userId: number;
+  action: AssignmentTargetOverrideAction;
+}
+
+export async function setAssignmentTargetOverrides(
+  actor: AssignmentActor,
+  assignmentId: number,
+  inputs: AssignmentTargetOverrideInput[],
+): Promise<AssignmentTargetOverrideInput[]> {
+  if (actor.role !== 'super_admin') {
+    throw new AssignmentServiceError('Target overrides require super administrator access', 403);
+  }
+  const seen = new Set<number>();
+  for (const input of inputs) {
+    if (!Number.isInteger(input.userId) || input.userId < 1) {
+      throw new AssignmentServiceError('An override contains an invalid userId');
+    }
+    if (input.action !== 'include' && input.action !== 'exclude') {
+      throw new AssignmentServiceError('An override contains an invalid action');
+    }
+    if (seen.has(input.userId)) {
+      throw new AssignmentServiceError(`User ${input.userId} appears more than once`);
+    }
+    seen.add(input.userId);
+  }
+  return withAssignmentTransaction(async (database) => {
+    const assignment = await requireOwnedAssignment(database, actor, assignmentId);
+    if (assignment.status !== 'draft') {
+      throw new AssignmentServiceError('Overrides can only be changed on a draft assignment', 409);
+    }
+    if (assignment.target_mode === 'manual') {
+      throw new AssignmentServiceError('Manual assignments use the member list', 409);
+    }
+    for (const input of inputs) {
+      const user = await database.get<{ id: number }>('SELECT id FROM users WHERE id = ?', [
+        input.userId,
+      ]);
+      if (!user) throw new AssignmentServiceError(`User ${input.userId} not found`, 404);
+    }
+    await database.run('DELETE FROM assignment_target_overrides WHERE assignment_id = ?', [
+      assignmentId,
+    ]);
+    const now = Date.now();
+    for (const input of inputs) {
+      await database.run(
+        `INSERT INTO assignment_target_overrides (assignment_id, user_id, action, created_at_ms)
+         VALUES (?, ?, ?, ?)`,
+        assignmentId,
+        input.userId,
+        input.action,
+        now,
+      );
+    }
+    return inputs.map((input) => ({ ...input }));
+  });
+}
+
+export async function previewAssignmentTarget(
+  actor: AssignmentActor,
+  assignmentId: number,
+): Promise<AssignmentTargetPreview> {
+  if (actor.role !== 'super_admin') {
+    throw new AssignmentServiceError('Target preview requires super administrator access', 403);
+  }
+  const assignment = await requireOwnedAssignment(db, actor, assignmentId);
+  if (assignment.status !== 'draft') {
+    throw new AssignmentServiceError('Only draft assignments can be previewed', 409);
+  }
+  if (assignment.target_mode === 'manual') {
+    throw new AssignmentServiceError('Manual assignments do not use smart target preview', 409);
+  }
+  try {
+    const resolved = await resolveAssignmentTarget(db, assignment);
+    return {
+      matchedCount: resolved.matchedCount,
+      finalCount: resolved.finalCount,
+      members: resolved.members,
+      warnings: resolved.warnings,
+      fingerprint: resolved.fingerprint,
+    };
+  } catch (error) {
+    if (error instanceof AssignmentTargetingError) {
+      throw new AssignmentServiceError(error.message, error.statusCode, error.code);
+    }
+    throw error;
+  }
 }
 
 function parseJsonArray(raw: string | null | undefined, label: string): unknown[] {
@@ -459,6 +635,7 @@ async function generateUniqueAccessCode(database: Database): Promise<string> {
 export async function publishAssignment(
   actor: AssignmentActor,
   assignmentId: number,
+  fingerprint?: string,
 ): Promise<DbAssignment> {
   return withAssignmentTransaction(async (database) => {
     const assignment = await requireOwnedAssignment(database, actor, assignmentId);
@@ -477,35 +654,121 @@ export async function publishAssignment(
     if (questions.length === 0) throw new AssignmentServiceError('Quiz has no questions');
     questions.forEach(validateSnapshotQuestion);
 
-    if (assignment.audience_mode === 'members') {
-      const memberCount = await database.get<{ count: number }>(
-        'SELECT COUNT(*) as count FROM assignment_members WHERE assignment_id = ? AND user_id IS NOT NULL',
-        [assignmentId],
-      );
-      if (!memberCount?.count) {
+    let targetLevelCode: string | null = null;
+    let targetLevelName: string | null = null;
+    let promotionTargetLevelCode: string | null = null;
+    let promotionTargetLevelName: string | null = null;
+
+    if (assignment.target_mode !== 'manual') {
+      if (actor.role !== 'super_admin') {
+        throw new AssignmentServiceError(
+          'Smart targeting requires super administrator access',
+          403,
+        );
+      }
+      let resolved: Awaited<ReturnType<typeof resolveAssignmentTarget>>;
+      try {
+        resolved = await resolveAssignmentTarget(database, assignment);
+      } catch (error) {
+        if (error instanceof AssignmentTargetingError) {
+          throw new AssignmentServiceError(error.message, error.statusCode, error.code);
+        }
+        throw error;
+      }
+      const preview: AssignmentTargetPreview = {
+        matchedCount: resolved.matchedCount,
+        finalCount: resolved.finalCount,
+        members: resolved.members,
+        warnings: resolved.warnings,
+        fingerprint: resolved.fingerprint,
+      };
+      if (!fingerprint) {
+        throw new AssignmentServiceError(
+          'A current target preview is required before publishing',
+          409,
+          'TARGET_PREVIEW_REQUIRED',
+          { preview },
+        );
+      }
+      if (fingerprint !== resolved.fingerprint) {
+        throw new AssignmentServiceError(
+          'The target audience changed after preview',
+          409,
+          'TARGET_CHANGED',
+          { preview },
+        );
+      }
+      if (assignment.audience_mode === 'members' && resolved.members.length === 0) {
         throw new AssignmentServiceError('A members-only assignment needs at least one member');
       }
-    }
+      await database.run('DELETE FROM assignment_members WHERE assignment_id = ?', [assignmentId]);
+      const assignedAt = Date.now();
+      for (const member of resolved.members) {
+        await database.run(
+          `INSERT INTO assignment_members (
+             assignment_id, user_id, login_name_snapshot, display_name_snapshot, email_snapshot,
+             assigned_at_ms, level_id_snapshot, level_code_snapshot, level_name_snapshot
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          assignmentId,
+          member.id,
+          member.loginName,
+          member.displayName,
+          member.email,
+          assignedAt,
+          member.levelId,
+          member.levelCode,
+          member.levelName,
+        );
+      }
+      targetLevelCode = resolved.targetLevel?.code ?? null;
+      targetLevelName = resolved.targetLevel?.name ?? null;
+      promotionTargetLevelCode = resolved.promotionTargetLevel?.code ?? null;
+      promotionTargetLevelName = resolved.promotionTargetLevel?.name ?? null;
+    } else {
+      if (assignment.audience_mode === 'members') {
+        const memberCount = await database.get<{ count: number }>(
+          `SELECT COUNT(*) as count FROM assignment_members
+           WHERE assignment_id = ? AND user_id IS NOT NULL`,
+          [assignmentId],
+        );
+        if (!memberCount?.count) {
+          throw new AssignmentServiceError('A members-only assignment needs at least one member');
+        }
+      }
 
-    // Refresh identity snapshots at publication time.
-    const members = await database.all<DbAssignmentMember[]>(
-      'SELECT * FROM assignment_members WHERE assignment_id = ?',
-      [assignmentId],
-    );
-    for (const member of members) {
-      if (!member.user_id)
-        throw new AssignmentServiceError('An assigned user no longer exists', 409);
-      const user = await database.get<DbUser>('SELECT * FROM users WHERE id = ?', [member.user_id]);
-      if (!user) throw new AssignmentServiceError('An assigned user no longer exists', 409);
-      await database.run(
-        `UPDATE assignment_members
-         SET login_name_snapshot = ?, display_name_snapshot = ?, email_snapshot = ?
-         WHERE id = ?`,
-        userLoginName(user),
-        user.play_display_name?.trim() || user.username,
-        user.email ?? '',
-        member.id,
+      // Legacy manual assignments keep their member flow. Identity and employee
+      // level are refreshed into immutable publication snapshots.
+      const members = await database.all<DbAssignmentMember[]>(
+        'SELECT * FROM assignment_members WHERE assignment_id = ?',
+        [assignmentId],
       );
+      for (const member of members) {
+        if (!member.user_id) {
+          throw new AssignmentServiceError('An assigned user no longer exists', 409);
+        }
+        const user = await database.get<
+          DbUser & { level_code: string | null; level_name: string | null }
+        >(
+          `SELECT u.*, l.code AS level_code, l.name AS level_name
+           FROM users u LEFT JOIN employee_levels l ON l.id = u.employee_level_id
+           WHERE u.id = ?`,
+          [member.user_id],
+        );
+        if (!user) throw new AssignmentServiceError('An assigned user no longer exists', 409);
+        await database.run(
+          `UPDATE assignment_members
+           SET login_name_snapshot = ?, display_name_snapshot = ?, email_snapshot = ?,
+               level_id_snapshot = ?, level_code_snapshot = ?, level_name_snapshot = ?
+           WHERE id = ?`,
+          userLoginName(user),
+          user.play_display_name?.trim() || user.username,
+          user.email ?? '',
+          user.employee_level_id,
+          user.level_code,
+          user.level_name,
+          member.id,
+        );
+      }
     }
 
     await database.run('DELETE FROM assignment_questions WHERE assignment_id = ?', [assignmentId]);
@@ -544,9 +807,15 @@ export async function publishAssignment(
     const accessCode = await generateUniqueAccessCode(database);
     await database.run(
       `UPDATE assignments SET status = 'published', access_code = ?, published_at_ms = ?,
+       target_level_code_snapshot = ?, target_level_name_snapshot = ?,
+       promotion_target_level_code_snapshot = ?, promotion_target_level_name_snapshot = ?,
        updated_at_ms = ? WHERE id = ?`,
       accessCode,
       now,
+      targetLevelCode,
+      targetLevelName,
+      promotionTargetLevelCode,
+      promotionTargetLevelName,
       now,
       assignmentId,
     );
@@ -1114,20 +1383,31 @@ export async function startOrResumeAttempt(
       throw new AssignmentServiceError('Assignment deadline has passed', 409);
     }
 
-    const user = await database.get<DbUser>('SELECT * FROM users WHERE id = ?', [userId]);
+    const user = await database.get<
+      DbUser & { level_code: string | null; level_name: string | null }
+    >(
+      `SELECT u.*, l.code AS level_code, l.name AS level_name
+       FROM users u LEFT JOIN employee_levels l ON l.id = u.employee_level_id
+       WHERE u.id = ?`,
+      [userId],
+    );
     if (!user) throw new AssignmentServiceError('User not found', 404);
     let member = existingMember;
     if (!member && assignment.audience_mode === 'open') {
       const result = await database.run(
         `INSERT INTO assignment_members
-          (assignment_id, user_id, login_name_snapshot, display_name_snapshot, email_snapshot, assigned_at_ms)
-         VALUES (?, ?, ?, ?, ?, ?)`,
+          (assignment_id, user_id, login_name_snapshot, display_name_snapshot, email_snapshot,
+           assigned_at_ms, level_id_snapshot, level_code_snapshot, level_name_snapshot)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         assignment.id,
         user.id,
         userLoginName(user),
         user.play_display_name?.trim() || user.username,
         user.email ?? '',
         nowMs,
+        user.employee_level_id,
+        user.level_code,
+        user.level_name,
       );
       member = (await database.get<DbAssignmentMember>(
         'SELECT * FROM assignment_members WHERE id = ?',

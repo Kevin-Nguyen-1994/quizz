@@ -91,6 +91,7 @@ export interface QuizImportPayload {
   theme?: ThemeId;
   /** The language the quiz is authored in (locale code, e.g. "vi"). Defaults to Vietnamese. */
   language?: string;
+  recommendedLevelId?: number | null;
   questions: QuizQuestion[];
 }
 
@@ -144,6 +145,7 @@ export interface DbQuiz {
   question_count?: number;
   owner_id: number | null;
   owner_kind: 'admin' | 'user';
+  recommended_level_id: number | null;
 }
 
 export interface DbQuestion {
@@ -206,6 +208,17 @@ export interface DbUser {
   last_password_change: string | null;
   play_display_name?: string | null;
   play_avatar?: string | null;
+  employee_level_id: number | null;
+}
+
+export interface DbEmployeeLevel {
+  id: number;
+  code: string;
+  name: string;
+  sort_order: number;
+  is_active: number;
+  created_at_ms: number;
+  updated_at_ms: number;
 }
 
 export interface DbAnswer {
@@ -229,6 +242,9 @@ export type AssignmentResultPolicy = 'highest_score' | 'latest_completed';
 export type AssignmentReviewPolicy = 'after_deadline' | 'after_close';
 export type AssignmentAttemptStatus = 'in_progress' | 'completed' | 'expired';
 export type AttemptAnswerStatus = 'answered' | 'timed_out';
+export type AssignmentKind = 'general' | 'periodic' | 'promotion';
+export type AssignmentTargetMode = 'manual' | 'current_level' | 'promotion';
+export type AssignmentTargetOverrideAction = 'include' | 'exclude';
 
 export interface DbAssignment {
   id: number;
@@ -249,6 +265,21 @@ export interface DbAssignment {
   created_at_ms: number;
   updated_at_ms: number;
   published_at_ms: number | null;
+  assignment_kind: AssignmentKind;
+  target_mode: AssignmentTargetMode;
+  target_level_id: number | null;
+  promotion_target_level_id: number | null;
+  target_level_code_snapshot: string | null;
+  target_level_name_snapshot: string | null;
+  promotion_target_level_code_snapshot: string | null;
+  promotion_target_level_name_snapshot: string | null;
+}
+
+export interface DbAssignmentTargetOverride {
+  assignment_id: number;
+  user_id: number;
+  action: AssignmentTargetOverrideAction;
+  created_at_ms: number;
 }
 
 /** Immutable question snapshot belonging to a published assignment. */
@@ -265,6 +296,9 @@ export interface DbAssignmentMember {
   display_name_snapshot: string;
   email_snapshot: string;
   assigned_at_ms: number;
+  level_id_snapshot: number | null;
+  level_code_snapshot: string | null;
+  level_name_snapshot: string | null;
 }
 
 export interface DbAssignmentAttempt {
