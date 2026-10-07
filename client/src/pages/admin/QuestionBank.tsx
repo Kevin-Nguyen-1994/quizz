@@ -66,6 +66,19 @@ const EMPTY: Filters = {
   isEnabled: '',
 };
 
+function createQuestionDraft(): Partial<BankQuestion> {
+  return {
+    question_type: 'multiple_choice',
+    base_score: 100,
+    time_sec: 30,
+    options: ['', ''],
+    correct_index: 0,
+    topic: '',
+    critical: 0,
+    is_enabled: 1,
+  };
+}
+
 function qs(filters: Filters, page: number) {
   const p = new URLSearchParams({
     limit: String(PAGE_SIZE),
@@ -91,27 +104,31 @@ function QuestionDialog({
   onSaved(): void;
 }) {
   const api = useAuthFetch();
-  const [q, setQ] = useState<Partial<BankQuestion>>({
-    question_type: 'multiple_choice',
-    base_score: 100,
-    time_sec: 30,
-    options: ['', ''],
-    correct_index: 0,
-    topic: '',
-    critical: 0,
-    is_enabled: 1,
-  });
-  const [loading, setLoading] = useState(id !== 'new');
+  const [q, setQ] = useState<Partial<BankQuestion>>(createQuestionDraft);
+  const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const legal = (q.source_metadata?.legal ?? {}) as Record<string, unknown>;
   useEffect(() => {
-    if (id === 'new' || id === null) return;
-    api.get<{ question: BankQuestion }>(`/api/admin/question-bank/questions/${id}`).then((r) => {
-      if (r.ok) setQ(r.data.question);
-      else setError('Không thể tải câu hỏi.');
+    setError('');
+    if (id === null) return;
+    if (id === 'new') {
+      setQ(createQuestionDraft());
       setLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setLoading(true);
+    api.get<{ question: BankQuestion }>(`/api/admin/question-bank/questions/${id}`).then((r) => {
+      if (!cancelled) {
+        if (r.ok) setQ(r.data.question);
+        else setError('Không thể tải câu hỏi.');
+        setLoading(false);
+      }
     });
+    return () => {
+      cancelled = true;
+    };
   }, [api, id]);
   const optionsText = (q.options ?? []).join('\n');
   const answer =
