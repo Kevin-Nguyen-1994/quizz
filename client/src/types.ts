@@ -461,6 +461,32 @@ export interface QuizGenerationRule {
   availableCount?: number;
 }
 
+export interface SmartMixPlan {
+  rules: QuizGenerationRule[];
+  allocations: Array<{
+    categoryId: number;
+    categoryName: string;
+    minimumLevelId: number;
+    minimumLevelCode: string;
+    questionCount: number;
+    criticalCount: number;
+    availableCount: number;
+    pointsPerQuestion: number;
+  }>;
+  totalQuestions: number;
+  totalScore: number;
+  criticalCount: number;
+  criticalMinimum: number;
+  poolCapacity: number;
+  levelCounts: Array<{
+    minimumLevelId: number;
+    minimumLevelCode: string;
+    questionCount: number;
+    percentage: number;
+  }>;
+  warnings: string[];
+}
+
 export interface QuestionSelectionPreview {
   seed: string;
   poolFingerprint: string;

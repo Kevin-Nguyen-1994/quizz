@@ -1,4 +1,4 @@
-import { ArrowLeft, Plus, Trash2 } from 'lucide-react';
+import { ArrowLeft, Plus, SlidersHorizontal, Sparkles, Trash2 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import AdminNav from '@/components/AdminNav';
 import { AppAlert } from '@/components/AppAlert';
@@ -24,6 +24,7 @@ import type {
   QuestionType,
   QuizGenerationRule,
 } from '@/types';
+import { SmartMixBuilder } from './SmartMixBuilder';
 
 const TYPES: Array<[QuestionType, string]> = [
   ['multiple_choice', 'Một đáp án'],
@@ -106,6 +107,7 @@ export function DynamicQuizEditor({
   const [saving, setSaving] = useState(false);
   const [checking, setChecking] = useState(false);
   const [error, setError] = useState('');
+  const [builderMode, setBuilderMode] = useState<'smart' | 'manual'>(quizId ? 'manual' : 'smart');
   useEffect(() => {
     Promise.all([
       api.get<{ categories: QuestionCategory[] }>('/api/admin/question-bank/categories'),
@@ -263,6 +265,39 @@ export function DynamicQuizEditor({
             </div>
           </CardContent>
         </Card>
+        <div className="mb-5 grid grid-cols-2 gap-2 rounded-xl border bg-muted/30 p-1 sm:w-fit">
+          <Button
+            type="button"
+            variant={builderMode === 'smart' ? 'default' : 'ghost'}
+            onClick={() => setBuilderMode('smart')}
+          >
+            <Sparkles className="size-4" />
+            Tự trộn đề
+          </Button>
+          <Button
+            type="button"
+            variant={builderMode === 'manual' ? 'default' : 'ghost'}
+            onClick={() => setBuilderMode('manual')}
+          >
+            <SlidersHorizontal className="size-4" />
+            Tự cấu hình
+          </Button>
+        </div>
+        {builderMode === 'smart' ? (
+          <SmartMixBuilder
+            categories={categories}
+            levels={levels}
+            recommendedLevelId={recommendedLevelId}
+            onApply={(plannedRules, targetLevelId) => {
+              setRules(plannedRules);
+              setPointsTouched(plannedRules.map(() => true));
+              setRecommendedLevelId(targetLevelId);
+              setBuilderMode('manual');
+              setError('');
+            }}
+          />
+        ) : (
+          <>
         <div className="space-y-4">
           {rules.map((r, i) => (
             <Card key={r.id ?? r.sortOrder} className={overlaps.has(i) ? 'border-destructive' : ''}>
@@ -438,13 +473,17 @@ export function DynamicQuizEditor({
             </div>
           </CardContent>
         </Card>
+          </>
+        )}
         <div className="flex justify-end gap-2">
           <Button variant="ghost" onClick={onCancel}>
             Hủy
           </Button>
-          <Button onClick={save} disabled={saving || checking || insufficient || overlaps.size > 0}>
-            {saving ? 'Đang lưu…' : 'Lưu bộ đề động'}
-          </Button>
+          {builderMode === 'manual' && (
+            <Button onClick={save} disabled={saving || checking || insufficient || overlaps.size > 0}>
+              {saving ? 'Đang lưu…' : 'Lưu bộ đề động'}
+            </Button>
+          )}
         </div>
       </MainContent>
     </Page>

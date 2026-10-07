@@ -7,6 +7,7 @@ import {
   storedQuestionValues,
 } from '../questionContent';
 import { getRequestUser, requireSuperAdmin } from '../middleware';
+import { planSmartMix, SmartMixPlanError, type SmartMixRequest } from '../smartMix';
 import { withImmediateTransaction } from '../transactions';
 import type {
   DbBankQuestion,
@@ -173,6 +174,99 @@ questionBankRouter.get('/imports', async (_req, res) => {
       'SELECT * FROM question_bank_imports ORDER BY imported_at_ms DESC, id DESC',
     ),
   });
+});
+
+questionBankRouter.post('/smart-mix/plan', async (req, res) => {
+  try {
+    const body = req.body as SmartMixRequest;
+    const categoryIds = [...new Set(body.categoryIds ?? [])];
+    const levelIds = [...new Set((body.levelMix ?? []).map((item) => item.minimumLevelId))];
+    if (
+      categoryIds.length === 0 ||
+      levelIds.length === 0 ||
+      [...categoryIds, ...levelIds].some((id) => !Number.isInteger(id) || id < 1)
+    ) {
+      throw new SmartMixPlanError(
+        'Nhóm nghiệp vụ hoặc bậc câu hỏi không hợp lệ.',
+        'SMART_MIX_INVALID',
+      );
+    }
+    const categoryPlaceholders = categoryIds.map(() => '?').join(', ');
+    const levelPlaceholders = levelIds.map(() => '?').join(', ');
+    const [categories, levels, counts] = await Promise.all([
+      db.all<Array<{ id: number; name: string; is_active: number }>>(
+        `SELECT id, name, is_active FROM question_categories
+         WHERE id IN (${categoryPlaceholders})`,
+        categoryIds,
+      ),
+      db.all<Array<{ id: number; code: string; is_active: number }>>(
+        `SELECT id, code, is_active FROM employee_levels WHERE id IN (${levelPlaceholders})`,
+        levelIds,
+      ),
+      db.all<
+        Array<{
+          category_id: number;
+          minimum_level_id: number;
+          critical: number;
+          available_count: number;
+        }>
+      >(
+        `SELECT bq.category_id, bq.minimum_level_id, bq.critical,
+                COUNT(*) AS available_count
+         FROM bank_questions bq
+         JOIN question_categories qc ON qc.id = bq.category_id
+         WHERE bq.is_enabled = 1 AND qc.is_active = 1
+           AND bq.category_id IN (${categoryPlaceholders})
+           AND bq.minimum_level_id IN (${levelPlaceholders})
+         GROUP BY bq.category_id, bq.minimum_level_id, bq.critical`,
+        [...categoryIds, ...levelIds],
+      ),
+    ]);
+    if (
+      categories.length !== categoryIds.length ||
+      categories.some((item) => item.is_active !== 1)
+    ) {
+      throw new SmartMixPlanError(
+        'Một hoặc nhiều nhóm nghiệp vụ không tồn tại hoặc đã ngừng sử dụng.',
+        'SMART_MIX_CATEGORY_INACTIVE',
+      );
+    }
+    if (levels.length !== levelIds.length || levels.some((item) => item.is_active !== 1)) {
+      throw new SmartMixPlanError(
+        'Một hoặc nhiều bậc nhân viên không tồn tại hoặc đã ngừng sử dụng.',
+        'SMART_MIX_LEVEL_INACTIVE',
+      );
+    }
+    const countMap = new Map(
+      counts.map((item) => [
+        `${item.category_id}:${item.minimum_level_id}:${item.critical}`,
+        item.available_count,
+      ]),
+    );
+    const capacities = categories.flatMap((category) =>
+      levels.flatMap((level) =>
+        [false, true].map((critical) => ({
+          categoryId: category.id,
+          categoryName: category.name,
+          minimumLevelId: level.id,
+          minimumLevelCode: level.code,
+          critical,
+          availableCount:
+            countMap.get(`${category.id}:${level.id}:${critical ? 1 : 0}`) ?? 0,
+        })),
+      ),
+    );
+    res.json({ plan: planSmartMix(body, capacities) });
+  } catch (error) {
+    if (error instanceof SmartMixPlanError) {
+      return res.status(error.statusCode).json({
+        error: error.message,
+        code: error.code,
+        details: error.details,
+      });
+    }
+    throw error;
+  }
 });
 
 questionBankRouter.get('/questions', async (req, res) => {

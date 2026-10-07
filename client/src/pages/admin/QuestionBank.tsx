@@ -1,5 +1,5 @@
-import { Eye, FilterX, Pencil, Plus, Search, ToggleLeft, ToggleRight } from 'lucide-react';
-import { type FormEvent, useCallback, useEffect, useState } from 'react';
+import { Eye, FilterX, Pencil, Plus, Search, ToggleLeft, ToggleRight, X } from 'lucide-react';
+import { type FormEvent, useCallback, useEffect, useRef, useState } from 'react';
 import AdminNav from '@/components/AdminNav';
 import { AppAlert } from '@/components/AppAlert';
 import { MainContent, Page, PageHeader } from '@/components/layout';
@@ -79,6 +79,38 @@ function createQuestionDraft(): Partial<BankQuestion> {
   };
 }
 
+function questionDraftSignature(question: Partial<BankQuestion>): string {
+  return JSON.stringify({
+    text: question.text ?? '',
+    question_type: question.question_type ?? null,
+    category_id: question.category_id ?? null,
+    topic: question.topic ?? '',
+    minimum_level_id: question.minimum_level_id ?? null,
+    difficulty: question.difficulty ?? null,
+    competency_code: question.competency_code ?? null,
+    options: question.options ?? [],
+    correct_index: question.correct_index ?? null,
+    correct_indices: question.correct_indices ?? [],
+    correct_answer: question.correct_answer ?? '',
+    blanks: question.blanks ?? [],
+    matches: question.matches ?? [],
+    range_min: question.range_min ?? null,
+    range_max: question.range_max ?? null,
+    geo: question.geo ?? null,
+    base_score: question.base_score ?? 100,
+    time_sec: question.time_sec ?? 30,
+    recommended_seconds: question.recommended_seconds ?? null,
+    explanation: question.explanation ?? '',
+    image_url: question.image_url ?? null,
+    media_url: question.media_url ?? null,
+    media_type: question.media_type ?? null,
+    tags: question.tags ?? [],
+    critical: question.critical ?? 0,
+    is_enabled: question.is_enabled ?? 1,
+    source_metadata: question.source_metadata ?? {},
+  });
+}
+
 function qs(filters: Filters, page: number) {
   const p = new URLSearchParams({
     limit: String(PAGE_SIZE),
@@ -105,24 +137,36 @@ function QuestionDialog({
 }) {
   const api = useAuthFetch();
   const [q, setQ] = useState<Partial<BankQuestion>>(createQuestionDraft);
+  const qRef = useRef(q);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const baselineRef = useRef<string | null>(null);
+  const [confirmingClose, setConfirmingClose] = useState(false);
   const legal = (q.source_metadata?.legal ?? {}) as Record<string, unknown>;
   useEffect(() => {
     setError('');
     if (id === null) return;
     if (id === 'new') {
-      setQ(createQuestionDraft());
+      const draft = createQuestionDraft();
+      qRef.current = draft;
+      setQ(draft);
+      baselineRef.current = questionDraftSignature(draft);
+      setConfirmingClose(false);
       setLoading(false);
       return;
     }
     let cancelled = false;
+    baselineRef.current = null;
+    setConfirmingClose(false);
     setLoading(true);
     api.get<{ question: BankQuestion }>(`/api/admin/question-bank/questions/${id}`).then((r) => {
       if (!cancelled) {
-        if (r.ok) setQ(r.data.question);
-        else setError('Không thể tải câu hỏi.');
+        if (r.ok) {
+          qRef.current = r.data.question;
+          setQ(r.data.question);
+          baselineRef.current = questionDraftSignature(r.data.question);
+        } else setError('Không thể tải câu hỏi.');
         setLoading(false);
       }
     });
@@ -130,6 +174,35 @@ function QuestionDialog({
       cancelled = true;
     };
   }, [api, id]);
+  function updateQuestion(
+    updater: (current: Partial<BankQuestion>) => Partial<BankQuestion>,
+  ) {
+    const next = updater(qRef.current);
+    qRef.current = next;
+    setQ(next);
+  }
+  function isDirtyNow() {
+    return (
+      baselineRef.current !== null &&
+      questionDraftSignature(qRef.current) !== baselineRef.current
+    );
+  }
+  function closeNow() {
+    const draft = createQuestionDraft();
+    qRef.current = draft;
+    setQ(draft);
+    baselineRef.current = questionDraftSignature(draft);
+    setConfirmingClose(false);
+    onClose();
+  }
+  function requestClose() {
+    if (saving) return;
+    if (isDirtyNow()) {
+      setConfirmingClose(true);
+      return;
+    }
+    closeNow();
+  }
   const optionsText = (q.options ?? []).join('\n');
   const answer =
     q.question_type === 'multi_select'
@@ -141,7 +214,7 @@ function QuestionDialog({
         : (q.correct_answer ?? '');
   function setAnswer(value: string) {
     if (q.question_type === 'multi_select')
-      setQ((x) => ({
+      updateQuestion((x) => ({
         ...x,
         correct_indices: value
           .split(',')
@@ -149,37 +222,38 @@ function QuestionDialog({
           .filter(Number.isInteger),
       }));
     else if (['multiple_choice', 'true_false', 'ordering'].includes(q.question_type ?? ''))
-      setQ((x) => ({ ...x, correct_index: Math.max(0, Number(value) - 1) }));
-    else setQ((x) => ({ ...x, correct_answer: value }));
+      updateQuestion((x) => ({ ...x, correct_index: Math.max(0, Number(value) - 1) }));
+    else updateQuestion((x) => ({ ...x, correct_answer: value }));
   }
   async function save(e: FormEvent) {
     e.preventDefault();
     setSaving(true);
     setError('');
+    const currentQuestion = qRef.current;
     const payload = {
-      ...q,
-      categoryId: q.category_id,
-      minimumLevelId: q.minimum_level_id,
-      questionType: q.question_type,
-      correctIndex: q.correct_index,
-      correctIndices: q.correct_indices ?? [],
-      baseScore: Number(q.base_score ?? 100),
-      timeSec: Number(q.time_sec ?? 30),
-      imageUrl: q.image_url || undefined,
-      correctAnswer: q.correct_answer || undefined,
-      mediaUrl: q.media_url || undefined,
-      mediaType: q.media_type || undefined,
-      rangeMin: q.range_min,
-      rangeMax: q.range_max,
-      blanks: q.blanks ?? undefined,
-      geo: q.geo ?? undefined,
-      matches: q.matches ?? undefined,
-      tags: q.tags ?? undefined,
-      recommendedSeconds: q.recommended_seconds,
-      competencyCode: q.competency_code,
-      isEnabled: q.is_enabled !== 0,
-      critical: q.critical === 1,
-      sourceMetadata: q.source_metadata ?? {},
+      ...currentQuestion,
+      categoryId: currentQuestion.category_id,
+      minimumLevelId: currentQuestion.minimum_level_id,
+      questionType: currentQuestion.question_type,
+      correctIndex: currentQuestion.correct_index,
+      correctIndices: currentQuestion.correct_indices ?? [],
+      baseScore: Number(currentQuestion.base_score ?? 100),
+      timeSec: Number(currentQuestion.time_sec ?? 30),
+      imageUrl: currentQuestion.image_url || undefined,
+      correctAnswer: currentQuestion.correct_answer || undefined,
+      mediaUrl: currentQuestion.media_url || undefined,
+      mediaType: currentQuestion.media_type || undefined,
+      rangeMin: currentQuestion.range_min,
+      rangeMax: currentQuestion.range_max,
+      blanks: currentQuestion.blanks ?? undefined,
+      geo: currentQuestion.geo ?? undefined,
+      matches: currentQuestion.matches ?? undefined,
+      tags: currentQuestion.tags ?? undefined,
+      recommendedSeconds: currentQuestion.recommended_seconds,
+      competencyCode: currentQuestion.competency_code,
+      isEnabled: currentQuestion.is_enabled !== 0,
+      critical: currentQuestion.critical === 1,
+      sourceMetadata: currentQuestion.source_metadata ?? {},
     };
     const r =
       id === 'new'
@@ -187,11 +261,36 @@ function QuestionDialog({
         : await api.put<{ error?: string }>(`/api/admin/question-bank/questions/${id}`, payload);
     setSaving(false);
     if (!r.ok) return setError(r.data?.error ?? 'Không thể lưu câu hỏi.');
+    baselineRef.current = questionDraftSignature(qRef.current);
+    setConfirmingClose(false);
     onSaved();
   }
   return (
-    <Dialog open={id !== null} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-4xl">
+    <Dialog open={id !== null}>
+      <DialogContent
+        showCloseButton={false}
+        className="sm:max-w-4xl"
+        onPointerDownOutside={(event) => event.preventDefault()}
+        onInteractOutside={(event) => event.preventDefault()}
+        onEscapeKeyDown={(event) => {
+          event.preventDefault();
+          if (isDirtyNow()) {
+            setConfirmingClose(true);
+          } else {
+            closeNow();
+          }
+        }}
+      >
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          className="absolute top-2 right-2"
+          aria-label="Đóng"
+          onClick={requestClose}
+        >
+          <X />
+        </Button>
         <DialogHeader>
           <DialogTitle>{id === 'new' ? 'Tạo câu hỏi' : 'Chi tiết câu hỏi'}</DialogTitle>
         </DialogHeader>
@@ -215,7 +314,7 @@ function QuestionDialog({
               <Textarea
                 required
                 value={q.text ?? ''}
-                onChange={(e) => setQ((x) => ({ ...x, text: e.target.value }))}
+                onChange={(e) => updateQuestion((x) => ({ ...x, text: e.target.value }))}
               />
             </div>
             <div className="space-y-2">
@@ -223,7 +322,7 @@ function QuestionDialog({
               <Select
                 value={q.question_type}
                 onValueChange={(v) =>
-                  setQ((x) => ({
+                  updateQuestion((x) => ({
                     ...x,
                     question_type: v as QuestionType,
                     options: v === 'true_false' ? ['Đúng', 'Sai'] : x.options,
@@ -246,7 +345,7 @@ function QuestionDialog({
               <Label>Chủ đề lớn</Label>
               <Select
                 value={String(q.category_id ?? '')}
-                onValueChange={(v) => setQ((x) => ({ ...x, category_id: Number(v) }))}
+                onValueChange={(v) => updateQuestion((x) => ({ ...x, category_id: Number(v) }))}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Chọn danh mục" />
@@ -267,14 +366,14 @@ function QuestionDialog({
               <Input
                 required
                 value={q.topic ?? ''}
-                onChange={(e) => setQ((x) => ({ ...x, topic: e.target.value }))}
+                onChange={(e) => updateQuestion((x) => ({ ...x, topic: e.target.value }))}
               />
             </div>
             <div className="space-y-2">
               <Label>Bậc tối thiểu</Label>
               <Select
                 value={String(q.minimum_level_id ?? '')}
-                onValueChange={(v) => setQ((x) => ({ ...x, minimum_level_id: Number(v) }))}
+                onValueChange={(v) => updateQuestion((x) => ({ ...x, minimum_level_id: Number(v) }))}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Chọn bậc" />
@@ -293,7 +392,7 @@ function QuestionDialog({
               <Select
                 value={q.difficulty ?? 'none'}
                 onValueChange={(v) =>
-                  setQ((x) => ({
+                  updateQuestion((x) => ({
                     ...x,
                     difficulty: v === 'none' ? null : (v as BankQuestion['difficulty']),
                   }))
@@ -317,7 +416,7 @@ function QuestionDialog({
               <Select
                 value={q.competency_code ?? 'none'}
                 onValueChange={(v) =>
-                  setQ((x) => ({
+                  updateQuestion((x) => ({
                     ...x,
                     competency_code: v === 'none' ? null : (v as BankQuestion['competency_code']),
                   }))
@@ -338,7 +437,9 @@ function QuestionDialog({
               <Label>Đáp án / lựa chọn (mỗi dòng một mục)</Label>
               <Textarea
                 value={optionsText}
-                onChange={(e) => setQ((x) => ({ ...x, options: e.target.value.split('\n') }))}
+                onChange={(e) =>
+                  updateQuestion((x) => ({ ...x, options: e.target.value.split('\n') }))
+                }
               />
             </div>
             {q.question_type === 'fill_blank' && (
@@ -349,7 +450,7 @@ function QuestionDialog({
                 <Textarea
                   value={(q.blanks ?? []).map((x) => x.join(', ')).join('\n')}
                   onChange={(e) =>
-                    setQ((x) => ({
+                    updateQuestion((x) => ({
                       ...x,
                       blanks: e.target.value.split('\n').map((line) =>
                         line
@@ -367,7 +468,9 @@ function QuestionDialog({
                 <Label>Vế phải tương ứng (mỗi dòng khớp một lựa chọn phía trên)</Label>
                 <Textarea
                   value={(q.matches ?? []).join('\n')}
-                  onChange={(e) => setQ((x) => ({ ...x, matches: e.target.value.split('\n') }))}
+                  onChange={(e) =>
+                    updateQuestion((x) => ({ ...x, matches: e.target.value.split('\n') }))
+                  }
                 />
               </div>
             )}
@@ -378,7 +481,9 @@ function QuestionDialog({
                   <Input
                     type="number"
                     value={q.range_min ?? ''}
-                    onChange={(e) => setQ((x) => ({ ...x, range_min: Number(e.target.value) }))}
+                    onChange={(e) =>
+                      updateQuestion((x) => ({ ...x, range_min: Number(e.target.value) }))
+                    }
                   />
                 </div>
                 <div className="space-y-2">
@@ -386,7 +491,9 @@ function QuestionDialog({
                   <Input
                     type="number"
                     value={q.range_max ?? ''}
-                    onChange={(e) => setQ((x) => ({ ...x, range_max: Number(e.target.value) }))}
+                    onChange={(e) =>
+                      updateQuestion((x) => ({ ...x, range_max: Number(e.target.value) }))
+                    }
                   />
                 </div>
               </div>
@@ -400,7 +507,7 @@ function QuestionDialog({
                     step="any"
                     value={q.geo?.lat ?? ''}
                     onChange={(e) =>
-                      setQ((x) => ({
+                      updateQuestion((x) => ({
                         ...x,
                         geo: { lat: Number(e.target.value), lng: x.geo?.lng ?? 0 },
                       }))
@@ -414,7 +521,7 @@ function QuestionDialog({
                     step="any"
                     value={q.geo?.lng ?? ''}
                     onChange={(e) =>
-                      setQ((x) => ({
+                      updateQuestion((x) => ({
                         ...x,
                         geo: { lat: x.geo?.lat ?? 0, lng: Number(e.target.value) },
                       }))
@@ -442,7 +549,9 @@ function QuestionDialog({
                   type="number"
                   min="0"
                   value={q.base_score ?? 100}
-                  onChange={(e) => setQ((x) => ({ ...x, base_score: Number(e.target.value) }))}
+                  onChange={(e) =>
+                    updateQuestion((x) => ({ ...x, base_score: Number(e.target.value) }))
+                  }
                 />
               </div>
               <div className="space-y-2">
@@ -452,7 +561,7 @@ function QuestionDialog({
                   min="1"
                   value={q.recommended_seconds ?? q.time_sec ?? 30}
                   onChange={(e) =>
-                    setQ((x) => ({
+                    updateQuestion((x) => ({
                       ...x,
                       recommended_seconds: Number(e.target.value),
                       time_sec: Number(e.target.value),
@@ -465,7 +574,9 @@ function QuestionDialog({
               <Label>Giải thích</Label>
               <Textarea
                 value={q.explanation ?? ''}
-                onChange={(e) => setQ((x) => ({ ...x, explanation: e.target.value }))}
+                onChange={(e) =>
+                  updateQuestion((x) => ({ ...x, explanation: e.target.value }))
+                }
               />
             </div>
             <label
@@ -476,7 +587,9 @@ function QuestionDialog({
               <Switch
                 id="bank-critical"
                 checked={q.critical === 1}
-                onCheckedChange={(v) => setQ((x) => ({ ...x, critical: v ? 1 : 0 }))}
+                onCheckedChange={(v) =>
+                  updateQuestion((x) => ({ ...x, critical: v ? 1 : 0 }))
+                }
               />
             </label>
             <label
@@ -487,7 +600,9 @@ function QuestionDialog({
               <Switch
                 id="bank-enabled"
                 checked={q.is_enabled !== 0}
-                onCheckedChange={(v) => setQ((x) => ({ ...x, is_enabled: v ? 1 : 0 }))}
+                onCheckedChange={(v) =>
+                  updateQuestion((x) => ({ ...x, is_enabled: v ? 1 : 0 }))
+                }
               />
             </label>
             {id !== 'new' && (
@@ -522,13 +637,38 @@ function QuestionDialog({
           </form>
         )}
         <DialogFooter>
-          <Button variant="ghost" onClick={onClose}>
+          <Button variant="ghost" onClick={requestClose}>
             Đóng
           </Button>
           <Button form="bank-form" type="submit" disabled={saving || loading}>
             {saving ? 'Đang lưu…' : 'Lưu câu hỏi'}
           </Button>
         </DialogFooter>
+        {confirmingClose && (
+          <div
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="unsaved-question-title"
+            className="absolute inset-0 z-20 grid place-items-center rounded-xl bg-slate-950/45 p-4 backdrop-blur-xs"
+          >
+            <div className="w-full max-w-md space-y-4 rounded-xl border bg-popover p-5 text-popover-foreground shadow-[var(--shadow-dialog)]">
+              <h3 id="unsaved-question-title" className="font-heading text-lg font-semibold">
+                Thoát khi chưa lưu?
+              </h3>
+              <p className="text-sm text-muted-foreground">
+                Bạn có thay đổi chưa được lưu. Bạn có chắc muốn thoát?
+              </p>
+              <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                <Button variant="ghost" onClick={() => setConfirmingClose(false)}>
+                  Tiếp tục chỉnh sửa
+                </Button>
+                <Button variant="destructive" onClick={closeNow}>
+                  Thoát không lưu
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );
