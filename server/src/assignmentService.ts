@@ -16,6 +16,11 @@ import {
   type AssignmentTargetPreview,
 } from './assignmentTargeting';
 import { requireActiveEmployeeLevel } from './employeeLevels';
+import {
+  QuestionGenerationError,
+  type ResolvedQuestionSelection,
+  verifyAssignmentQuestionPreview,
+} from './questionGeneration';
 import { parseLatLng } from './questionScoring';
 import { withImmediateTransaction as withAssignmentTransaction } from './transactions';
 import type {
@@ -117,6 +122,11 @@ export interface ParticipantAssignmentListItem {
 }
 
 type AssignmentActor = Pick<JwtPayload, 'id' | 'role'>;
+
+export interface PublishAssignmentConfirmation {
+  targetFingerprint?: string;
+  questionFingerprint?: string;
+}
 
 const AUDIENCE_MODES = new Set<AssignmentAudienceMode>(['members', 'open']);
 const RESULT_POLICIES = new Set<AssignmentResultPolicy>(['highest_score', 'latest_completed']);
@@ -635,8 +645,10 @@ async function generateUniqueAccessCode(database: Database): Promise<string> {
 export async function publishAssignment(
   actor: AssignmentActor,
   assignmentId: number,
-  fingerprint?: string,
+  confirmation: string | PublishAssignmentConfirmation = {},
 ): Promise<DbAssignment> {
+  const normalizedConfirmation =
+    typeof confirmation === 'string' ? { targetFingerprint: confirmation } : confirmation;
   return withAssignmentTransaction(async (database) => {
     const assignment = await requireOwnedAssignment(database, actor, assignmentId);
     if (assignment.status !== 'draft') {
@@ -646,11 +658,46 @@ export async function publishAssignment(
     if (assignment.deadline_at_ms !== null && assignment.deadline_at_ms <= Date.now()) {
       throw new AssignmentServiceError('Assignment deadline has already passed', 409);
     }
-    await requireAccessibleQuiz(database, actor, assignment.quiz_id);
-    const questions = await database.all<DbQuestion[]>(
-      'SELECT * FROM questions WHERE quiz_id = ? ORDER BY order_index',
-      [assignment.quiz_id],
-    );
+    const quiz = await requireAccessibleQuiz(database, actor, assignment.quiz_id);
+    let dynamicSelection: ResolvedQuestionSelection | null = null;
+    let questions: DbQuestion[];
+    if (quiz.quiz_mode === 'bank_generated') {
+      if (actor.role !== 'super_admin') {
+        throw new AssignmentServiceError(
+          'Bank-generated assignments require super administrator access',
+          403,
+        );
+      }
+      try {
+        dynamicSelection = await verifyAssignmentQuestionPreview(
+          database,
+          assignment,
+          normalizedConfirmation.questionFingerprint,
+        );
+      } catch (error) {
+        if (error instanceof QuestionGenerationError) {
+          throw new AssignmentServiceError(
+            error.message,
+            error.statusCode,
+            error.code,
+            error.details,
+          );
+        }
+        throw error;
+      }
+      questions = dynamicSelection.selected.map((item) => ({
+        ...item.question,
+        quiz_id: quiz.id,
+        order_index: item.orderIndex,
+        base_score: item.effectiveScore,
+        time_sec: item.effectiveTimeSec,
+      }));
+    } else {
+      questions = await database.all<DbQuestion[]>(
+        'SELECT * FROM questions WHERE quiz_id = ? ORDER BY order_index',
+        [assignment.quiz_id],
+      );
+    }
     if (questions.length === 0) throw new AssignmentServiceError('Quiz has no questions');
     questions.forEach(validateSnapshotQuestion);
 
@@ -682,7 +729,7 @@ export async function publishAssignment(
         warnings: resolved.warnings,
         fingerprint: resolved.fingerprint,
       };
-      if (!fingerprint) {
+      if (!normalizedConfirmation.targetFingerprint) {
         throw new AssignmentServiceError(
           'A current target preview is required before publishing',
           409,
@@ -690,7 +737,7 @@ export async function publishAssignment(
           { preview },
         );
       }
-      if (fingerprint !== resolved.fingerprint) {
+      if (normalizedConfirmation.targetFingerprint !== resolved.fingerprint) {
         throw new AssignmentServiceError(
           'The target audience changed after preview',
           409,
@@ -772,15 +819,21 @@ export async function publishAssignment(
     }
 
     await database.run('DELETE FROM assignment_questions WHERE assignment_id = ?', [assignmentId]);
-    for (const question of questions) {
+    for (let questionIndex = 0; questionIndex < questions.length; questionIndex += 1) {
+      const question = questions[questionIndex];
+      const selected = dynamicSelection?.selected[questionIndex] ?? null;
       await database.run(
         `INSERT INTO assignment_questions (
           assignment_id, source_question_id, text, options, correct_index, correct_indices,
           base_score, time_sec, order_index, image_url, explanation, range_min, range_max,
-          question_type, correct_answer, media_url, media_type, blanks, geo, matches, tags
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          question_type, correct_answer, media_url, media_type, blanks, geo, matches, tags,
+          source_bank_question_id, source_bank_question_revision, source_category_id,
+          source_category_code, source_category_name, source_topic, minimum_level_code_snapshot,
+          difficulty_snapshot, critical_snapshot, competency_snapshot, source_generation_rule_id,
+          source_metadata_snapshot
+        ) VALUES (${Array.from({ length: 33 }, () => '?').join(', ')})`,
         assignmentId,
-        question.id,
+        selected ? null : question.id,
         question.text,
         question.options,
         question.correct_index,
@@ -800,6 +853,18 @@ export async function publishAssignment(
         question.geo,
         question.matches,
         question.tags,
+        selected?.question.id ?? null,
+        selected?.question.revision ?? null,
+        selected?.question.category_id ?? null,
+        selected?.question.category_code ?? null,
+        selected?.question.category_name ?? null,
+        selected?.question.topic ?? null,
+        selected?.question.minimum_level_code ?? null,
+        selected?.question.difficulty ?? null,
+        selected?.question.critical ?? null,
+        selected?.question.competency_code ?? null,
+        selected?.rule.id ?? null,
+        selected?.question.source_metadata_json ?? null,
       );
     }
 
@@ -809,6 +874,8 @@ export async function publishAssignment(
       `UPDATE assignments SET status = 'published', access_code = ?, published_at_ms = ?,
        target_level_code_snapshot = ?, target_level_name_snapshot = ?,
        promotion_target_level_code_snapshot = ?, promotion_target_level_name_snapshot = ?,
+       generation_seed = ?, question_pool_fingerprint = ?, question_selection_fingerprint = ?,
+       quiz_blueprint_revision_snapshot = ?, question_selection_mode_snapshot = ?,
        updated_at_ms = ? WHERE id = ?`,
       accessCode,
       now,
@@ -816,6 +883,11 @@ export async function publishAssignment(
       targetLevelName,
       promotionTargetLevelCode,
       promotionTargetLevelName,
+      dynamicSelection?.seed ?? null,
+      dynamicSelection?.poolFingerprint ?? null,
+      dynamicSelection?.selectionFingerprint ?? null,
+      dynamicSelection?.blueprintRevision ?? null,
+      dynamicSelection ? 'per_assignment' : null,
       now,
       assignmentId,
     );
@@ -852,12 +924,14 @@ export async function getAssignmentForAdmin(
   questions: DbAssignmentQuestion[];
   members: unknown[];
   targetOverrides: Array<{ userId: number; action: AssignmentTargetOverrideAction }>;
+  questionPreview: unknown | null;
 }> {
   const assignment = await requireOwnedAssignment(db, actor, assignmentId);
   const quiz = assignment.quiz_id
-    ? await db.get<{ title: string }>('SELECT title FROM quizzes WHERE id = ?', [
-        assignment.quiz_id,
-      ])
+    ? await db.get<{ title: string; quiz_mode: DbQuiz['quiz_mode'] }>(
+        'SELECT title, quiz_mode FROM quizzes WHERE id = ?',
+        [assignment.quiz_id],
+      )
     : undefined;
   const questions = await db.all<DbAssignmentQuestion[]>(
     'SELECT * FROM assignment_questions WHERE assignment_id = ? ORDER BY order_index',
@@ -866,10 +940,19 @@ export async function getAssignmentForAdmin(
   const sourceQuestionCount =
     assignment.status === 'draft' && assignment.quiz_id
       ? await db.get<{ count: number }>(
-          'SELECT COUNT(*) as count FROM questions WHERE quiz_id = ?',
+          quiz?.quiz_mode === 'bank_generated'
+            ? 'SELECT COALESCE(SUM(question_count), 0) as count FROM quiz_generation_rules WHERE quiz_id = ?'
+            : 'SELECT COUNT(*) as count FROM questions WHERE quiz_id = ?',
           [assignment.quiz_id],
         )
       : undefined;
+  const questionPreview = await db.get(
+    `SELECT id, quiz_id, blueprint_revision, generation_seed, pool_fingerprint,
+            selection_fingerprint, total_questions, total_score,
+            recommended_total_seconds, created_at_ms
+     FROM assignment_question_previews WHERE assignment_id = ?`,
+    [assignmentId],
+  );
   const members = await db.all(
     `SELECT m.*,
        (SELECT COUNT(*) FROM assignment_attempts t
@@ -943,6 +1026,7 @@ export async function getAssignmentForAdmin(
     questions,
     members: membersWithProgress,
     targetOverrides,
+    questionPreview: questionPreview ?? null,
   };
 }
 

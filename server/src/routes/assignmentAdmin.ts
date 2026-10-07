@@ -18,6 +18,7 @@ import {
   getAssignmentReport,
 } from '../assignmentReporting';
 import { getRequestUser, requireAuth } from '../middleware';
+import { createAssignmentQuestionPreview, QuestionGenerationError } from '../questionGeneration';
 
 export const assignmentAdminRouter = Router();
 
@@ -45,6 +46,14 @@ function positiveParam(req: Request, name: string): number {
 
 function handleError(error: unknown, res: Response, next: NextFunction): void {
   if (error instanceof AssignmentServiceError) {
+    res.status(error.statusCode).json({
+      error: error.message,
+      ...(error.code ? { code: error.code } : {}),
+      ...(error.details === undefined ? {} : { details: error.details }),
+    });
+    return;
+  }
+  if (error instanceof QuestionGenerationError) {
     res.status(error.statusCode).json({
       error: error.message,
       ...(error.code ? { code: error.code } : {}),
@@ -191,18 +200,38 @@ assignmentAdminRouter.post(
 );
 
 assignmentAdminRouter.post(
+  '/:id/question-preview',
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      res.json({ preview: await createAssignmentQuestionPreview(actor(req), assignmentId(req)) });
+    } catch (error) {
+      handleError(error, res, next);
+    }
+  },
+);
+
+assignmentAdminRouter.post(
   '/:id/publish',
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const fingerprint = (req.body as { fingerprint?: unknown }).fingerprint;
-      if (fingerprint !== undefined && typeof fingerprint !== 'string') {
-        throw new AssignmentServiceError('fingerprint must be a string');
+      const body = req.body as {
+        fingerprint?: unknown;
+        targetFingerprint?: unknown;
+        questionFingerprint?: unknown;
+      };
+      for (const [name, value] of [
+        ['fingerprint', body.fingerprint],
+        ['targetFingerprint', body.targetFingerprint],
+        ['questionFingerprint', body.questionFingerprint],
+      ] as const) {
+        if (value !== undefined && typeof value !== 'string') {
+          throw new AssignmentServiceError(`${name} must be a string`);
+        }
       }
-      const assignment = await publishAssignment(
-        actor(req),
-        assignmentId(req),
-        fingerprint as string | undefined,
-      );
+      const assignment = await publishAssignment(actor(req), assignmentId(req), {
+        targetFingerprint: (body.targetFingerprint ?? body.fingerprint) as string | undefined,
+        questionFingerprint: body.questionFingerprint as string | undefined,
+      });
       res.json({ assignment });
     } catch (error) {
       handleError(error, res, next);

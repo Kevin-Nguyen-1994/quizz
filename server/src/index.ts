@@ -13,6 +13,7 @@ import { authRouter } from './routes/auth';
 import { employeeLevelsRouter } from './routes/employeeLevels';
 import { mediaRouter } from './routes/media';
 import { playRouter } from './routes/play';
+import { questionBankRouter } from './routes/questionBank';
 import { usersRouter } from './routes/users';
 import { setupSockets } from './socket/index';
 
@@ -39,6 +40,7 @@ app.use('/avatars', express.static(avatarsDir));
 app.get('/api/avatars', (_req, res) => res.json(listAvatars()));
 
 app.use('/api/admin/employee-levels', employeeLevelsRouter);
+app.use('/api/admin/question-bank', questionBankRouter);
 app.use('/api/admin', adminRouter);
 app.use('/api/admin/assignments', assignmentAdminRouter);
 app.use('/api/admin/users', usersRouter);

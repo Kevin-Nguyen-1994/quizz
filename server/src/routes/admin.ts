@@ -6,7 +6,15 @@ import { EmployeeLevelError, requireActiveEmployeeLevel } from '../employeeLevel
 import { getMetricsSnapshot } from '../metrics';
 import { getRequestUser, requireAuth, requireSuperAdmin } from '../middleware';
 import { hashPassword, MIN_PASSWORD_LENGTH } from '../passwords';
+import {
+  insertGenerationRules,
+  normalizeGenerationRules,
+  QuestionGenerationError,
+  validateQuestionPool,
+} from '../questionGeneration';
+import { normalizeQuestionContent, QuestionContentError } from '../questionContent';
 import { terminateSessionById } from '../socket/sessionLifecycle';
+import { withImmediateTransaction } from '../transactions';
 import type {
   DbQuestion,
   DbQuiz,
@@ -17,13 +25,7 @@ import type {
   ThemeId,
 } from '../types';
 import { THEME_IDS } from '../types';
-import {
-  normalizeImageUrl,
-  normalizeOptionalText,
-  normalizeQuestionMedia,
-  normalizeTags,
-  parseQuestionRow,
-} from '../utils';
+import { normalizeImageUrl, normalizeOptionalText, parseQuestionRow } from '../utils';
 
 export const adminRouter = Router();
 
@@ -166,33 +168,34 @@ async function canAccessQuiz(req: Request, quiz: DbQuiz): Promise<boolean> {
 
 /** Insert one quiz question row (shared by quiz create + update). */
 async function insertQuestion(
+  database: typeof db,
   quizId: number | string | undefined,
   q: QuizQuestion,
   orderIndex: number,
 ): Promise<void> {
-  const media = normalizeQuestionMedia(q.mediaType, q.mediaUrl);
-  await db.run(
+  const content = normalizeQuestionContent(q);
+  await database.run(
     'INSERT INTO questions (quiz_id, text, options, correct_index, base_score, time_sec, order_index, image_url, question_type, correct_answer, correct_indices, explanation, range_min, range_max, media_url, media_type, blanks, geo, tags, matches) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
     quizId,
-    q.text,
-    JSON.stringify(q.options),
-    q.correctIndex,
-    q.baseScore ?? config.defaultBaseScore,
-    q.timeSec ?? config.questionTimeSec,
+    content.text,
+    content.options,
+    content.correct_index,
+    content.base_score,
+    content.time_sec,
     orderIndex,
-    normalizeImageUrl(q.imageUrl) ?? null,
-    q.questionType ?? 'multiple_choice',
-    q.correctAnswer ?? null,
-    q.correctIndices ? JSON.stringify(q.correctIndices) : null,
-    normalizeOptionalText(q.explanation) ?? null,
-    q.rangeMin ?? null,
-    q.rangeMax ?? null,
-    media.mediaUrl,
-    media.mediaType,
-    q.blanks ? JSON.stringify(q.blanks) : null,
-    q.geo ? JSON.stringify(q.geo) : null,
-    normalizeTags(q.tags),
-    q.matches ? JSON.stringify(q.matches) : null,
+    content.image_url,
+    content.question_type,
+    content.correct_answer,
+    content.correct_indices,
+    content.explanation,
+    content.range_min,
+    content.range_max,
+    content.media_url,
+    content.media_type,
+    content.blanks,
+    content.geo,
+    content.tags,
+    content.matches,
   );
 }
 
@@ -244,9 +247,17 @@ adminRouter.get('/quizzes/:id', requireAuth, async (req: Request, res: Response)
     'SELECT * FROM questions WHERE quiz_id = ? ORDER BY order_index',
     req.params.id,
   );
+  const generationRules =
+    quiz.quiz_mode === 'bank_generated'
+      ? await db.all(
+          'SELECT * FROM quiz_generation_rules WHERE quiz_id = ? ORDER BY sort_order, id',
+          req.params.id,
+        )
+      : [];
   res.json({
     ...quiz,
     questions: questions.map(parseQuestionRow),
+    generationRules,
   });
 });
 
@@ -276,8 +287,21 @@ async function recommendedLevelId(
 
 adminRouter.post('/quizzes', requireAuth, async (req: Request, res: Response) => {
   const body = req.body as QuizImportPayload;
-  if (!body.title || !Array.isArray(body.questions) || body.questions.length === 0) {
-    return res.status(400).json({ error: 'title and at least one question are required' });
+  const quizMode = body.quizMode ?? 'static';
+  if (!body.title?.trim()) return res.status(400).json({ error: 'title is required' });
+  if (quizMode === 'static' && (!Array.isArray(body.questions) || body.questions.length === 0)) {
+    return res.status(400).json({ error: 'A static quiz needs at least one question' });
+  }
+  if (quizMode === 'bank_generated' && !isSuperAdmin(req)) {
+    return res
+      .status(403)
+      .json({ error: 'Bank-generated quizzes require super administrator access' });
+  }
+  if (quizMode !== 'static' && quizMode !== 'bank_generated') {
+    return res.status(400).json({ error: 'quizMode is invalid' });
+  }
+  if (body.selectionMode !== undefined && body.selectionMode !== 'per_assignment') {
+    return res.status(400).json({ error: 'Only per_assignment selection is supported' });
   }
 
   // Super admin owns as 'admin' (owner_id NULL); user owns as 'user' with their id.
@@ -293,41 +317,72 @@ adminRouter.post('/quizzes', requireAuth, async (req: Request, res: Response) =>
     throw error;
   }
 
-  await db.run('BEGIN');
   try {
-    const quizResult = await db.run(
-      'INSERT INTO quizzes (title, description, cover_image, theme, language, owner_id, owner_kind, recommended_level_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-      body.title,
-      body.description ?? '',
-      normalizeImageUrl(body.coverImage) ?? null,
-      normalizeTheme(body.theme),
-      normalizeLanguage(body.language),
-      ownerId,
-      ownerKind,
-      levelId,
-    );
-    const quizId = quizResult.lastID;
-    for (let i = 0; i < body.questions.length; i++) {
-      await insertQuestion(quizId, body.questions[i], i);
-    }
-    await db.run('COMMIT');
+    const rules =
+      quizMode === 'bank_generated' ? normalizeGenerationRules(body.generationRules) : [];
+    const quizId = await withImmediateTransaction(async (database) => {
+      const quizResult = await database.run(
+        `INSERT INTO quizzes (
+           title, description, cover_image, theme, language, owner_id, owner_kind,
+           recommended_level_id, quiz_mode, selection_mode, blueprint_revision
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'per_assignment', 1)`,
+        body.title.trim(),
+        body.description ?? '',
+        normalizeImageUrl(body.coverImage) ?? null,
+        normalizeTheme(body.theme),
+        normalizeLanguage(body.language),
+        ownerId,
+        ownerKind,
+        levelId,
+        quizMode,
+      );
+      const createdId = Number(quizResult.lastID);
+      if (quizMode === 'static') {
+        for (let index = 0; index < (body.questions ?? []).length; index += 1) {
+          await insertQuestion(database, createdId, (body.questions ?? [])[index], index);
+        }
+      } else {
+        await insertGenerationRules(database, createdId, rules);
+      }
+      return createdId;
+    });
     res.status(201).json({ id: quizId });
-  } catch (err) {
-    await db.run('ROLLBACK');
-    throw err;
+  } catch (error) {
+    if (error instanceof QuestionContentError || error instanceof QuestionGenerationError) {
+      return res
+        .status(error instanceof QuestionGenerationError ? error.statusCode : 400)
+        .json({
+          error: error.message,
+          code: error instanceof QuestionGenerationError ? error.code : undefined,
+        });
+    }
+    throw error;
   }
 });
 
 adminRouter.put('/quizzes/:id', requireAuth, async (req: Request, res: Response) => {
   const body = req.body as QuizImportPayload;
-  if (!body.title || !Array.isArray(body.questions) || body.questions.length === 0) {
-    return res.status(400).json({ error: 'title and at least one question are required' });
-  }
+  if (!body.title?.trim()) return res.status(400).json({ error: 'title is required' });
 
   const quiz = await db.get<DbQuiz>('SELECT * FROM quizzes WHERE id = ?', req.params.id);
   if (!quiz) return res.status(404).json({ error: 'Not found' });
   if (!(await canAccessQuiz(req, quiz))) {
     return res.status(404).json({ error: 'Not found' });
+  }
+  const requestedMode = body.quizMode ?? quiz.quiz_mode;
+  if (requestedMode !== quiz.quiz_mode) {
+    return res.status(409).json({ error: 'Changing quiz mode after creation is not supported' });
+  }
+  if (quiz.quiz_mode === 'bank_generated' && !isSuperAdmin(req)) {
+    return res
+      .status(403)
+      .json({ error: 'Bank-generated quizzes require super administrator access' });
+  }
+  if (
+    quiz.quiz_mode === 'static' &&
+    (!Array.isArray(body.questions) || body.questions.length === 0)
+  ) {
+    return res.status(400).json({ error: 'A static quiz needs at least one question' });
   }
   let levelId: number | null;
   try {
@@ -339,29 +394,68 @@ adminRouter.put('/quizzes/:id', requireAuth, async (req: Request, res: Response)
     throw error;
   }
 
-  await db.run('BEGIN');
   try {
-    await db.run(
-      'UPDATE quizzes SET title = ?, description = ?, cover_image = ?, theme = ?, language = ?, recommended_level_id = ? WHERE id = ?',
-      body.title,
-      body.description ?? '',
-      normalizeImageUrl(body.coverImage) ?? null,
-      normalizeTheme(body.theme),
-      normalizeLanguage(body.language),
-      levelId,
-      req.params.id,
-    );
-    await db.run('DELETE FROM questions WHERE quiz_id = ?', req.params.id);
-    for (let i = 0; i < body.questions.length; i++) {
-      await insertQuestion(req.params.id as string, body.questions[i], i);
-    }
-    await db.run('COMMIT');
+    const rules =
+      quiz.quiz_mode === 'bank_generated' ? normalizeGenerationRules(body.generationRules) : [];
+    await withImmediateTransaction(async (database) => {
+      await database.run(
+        `UPDATE quizzes SET title = ?, description = ?, cover_image = ?, theme = ?,
+         language = ?, recommended_level_id = ?,
+         blueprint_revision = blueprint_revision + ? WHERE id = ?`,
+        body.title.trim(),
+        body.description ?? '',
+        normalizeImageUrl(body.coverImage) ?? null,
+        normalizeTheme(body.theme),
+        normalizeLanguage(body.language),
+        levelId,
+        quiz.quiz_mode === 'bank_generated' ? 1 : 0,
+        req.params.id,
+      );
+      if (quiz.quiz_mode === 'static') {
+        await database.run('DELETE FROM questions WHERE quiz_id = ?', req.params.id);
+        for (let index = 0; index < (body.questions ?? []).length; index += 1) {
+          await insertQuestion(database, quiz.id, (body.questions ?? [])[index], index);
+        }
+      } else {
+        await database.run(
+          `DELETE FROM assignment_question_previews
+           WHERE assignment_id IN (SELECT id FROM assignments WHERE quiz_id = ?)`,
+          quiz.id,
+        );
+        await database.run('DELETE FROM quiz_generation_rules WHERE quiz_id = ?', req.params.id);
+        await insertGenerationRules(database, quiz.id, rules);
+      }
+    });
     res.json({ ok: true });
-  } catch (err) {
-    await db.run('ROLLBACK');
-    throw err;
+  } catch (error) {
+    if (error instanceof QuestionContentError || error instanceof QuestionGenerationError) {
+      return res
+        .status(error instanceof QuestionGenerationError ? error.statusCode : 400)
+        .json({
+          error: error.message,
+          code: error instanceof QuestionGenerationError ? error.code : undefined,
+        });
+    }
+    throw error;
   }
 });
+
+adminRouter.post(
+  '/quizzes/:id/generation/validate',
+  requireSuperAdmin,
+  async (req: Request, res: Response) => {
+    try {
+      res.json(await validateQuestionPool(Number(req.params.id)));
+    } catch (error) {
+      if (error instanceof QuestionGenerationError) {
+        return res
+          .status(error.statusCode)
+          .json({ error: error.message, code: error.code, details: error.details });
+      }
+      throw error;
+    }
+  },
+);
 
 adminRouter.delete('/quizzes/:id', requireAuth, async (req: Request, res: Response) => {
   const quiz = await db.get<DbQuiz>('SELECT * FROM quizzes WHERE id = ?', req.params.id);
@@ -479,6 +573,12 @@ adminRouter.post('/sessions', requireAuth, async (req: Request, res: Response) =
   const { quizId } = req.body as { quizId: number };
   const quiz = await db.get<DbQuiz>('SELECT * FROM quizzes WHERE id = ?', quizId);
   if (!quiz) return res.status(404).json({ error: 'Quiz not found' });
+  if (quiz.quiz_mode === 'bank_generated') {
+    return res.status(409).json({
+      error: 'Bank-generated quizzes are not available for Live Game',
+      code: 'DYNAMIC_QUIZ_LIVE_GAME_UNSUPPORTED',
+    });
+  }
   if (!(await canAccessQuiz(req, quiz))) {
     return res.status(404).json({ error: 'Quiz not found' });
   }

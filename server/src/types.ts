@@ -27,6 +27,10 @@ export interface AppConfig {
 }
 
 export type AuthRole = 'super_admin' | 'user';
+export type QuizMode = 'static' | 'bank_generated';
+export type QuestionSelectionMode = 'per_assignment' | 'per_attempt';
+export type QuestionDifficulty = 'easy' | 'medium' | 'hard';
+export type QuestionCompetency = 'must_remember' | 'know_where_to_lookup' | 'application';
 
 /** Visual/audio theme applied to a quiz's game screens. */
 export type ThemeId = 'default' | 'neon' | 'paper' | 'space' | 'retro';
@@ -92,7 +96,22 @@ export interface QuizImportPayload {
   /** The language the quiz is authored in (locale code, e.g. "vi"). Defaults to Vietnamese. */
   language?: string;
   recommendedLevelId?: number | null;
-  questions: QuizQuestion[];
+  quizMode?: QuizMode;
+  selectionMode?: QuestionSelectionMode;
+  generationRules?: QuizGenerationRuleInput[];
+  questions?: QuizQuestion[];
+}
+
+export interface QuizGenerationRuleInput {
+  categoryId?: number | null;
+  minimumLevelId?: number | null;
+  difficulty?: QuestionDifficulty | null;
+  questionType?: QuestionType | null;
+  critical?: boolean | null;
+  questionCount: number;
+  pointsOverride?: number | null;
+  recommendedSecondsOverride?: number | null;
+  sortOrder?: number;
 }
 
 /** One question's translated display text for a given locale. */
@@ -146,6 +165,55 @@ export interface DbQuiz {
   owner_id: number | null;
   owner_kind: 'admin' | 'user';
   recommended_level_id: number | null;
+  quiz_mode: QuizMode;
+  selection_mode: QuestionSelectionMode;
+  blueprint_revision: number;
+}
+
+export interface DbQuestionCategory {
+  id: number;
+  code: string;
+  name: string;
+  sort_order: number;
+  is_active: number;
+  created_at_ms: number;
+  updated_at_ms: number;
+}
+
+export interface DbBankQuestion extends Omit<DbQuestion, 'quiz_id' | 'order_index'> {
+  source_bank_id: string;
+  source_question_id: string;
+  source_bank_version: string;
+  source_content_hash: string;
+  last_import_id: number | null;
+  category_id: number;
+  topic: string;
+  minimum_level_id: number;
+  difficulty: QuestionDifficulty | null;
+  competency_code: QuestionCompetency | null;
+  critical: number;
+  recommended_seconds: number | null;
+  source_metadata_json: string;
+  is_enabled: number;
+  revision: number;
+  created_at_ms: number;
+  updated_at_ms: number;
+}
+
+export interface DbQuizGenerationRule {
+  id: number;
+  quiz_id: number;
+  category_id: number | null;
+  minimum_level_id: number | null;
+  difficulty: QuestionDifficulty | null;
+  question_type: QuestionType | null;
+  critical: number | null;
+  question_count: number;
+  points_override: number | null;
+  recommended_seconds_override: number | null;
+  sort_order: number;
+  created_at_ms: number;
+  updated_at_ms: number;
 }
 
 export interface DbQuestion {
@@ -273,6 +341,11 @@ export interface DbAssignment {
   target_level_name_snapshot: string | null;
   promotion_target_level_code_snapshot: string | null;
   promotion_target_level_name_snapshot: string | null;
+  generation_seed: string | null;
+  question_pool_fingerprint: string | null;
+  question_selection_fingerprint: string | null;
+  quiz_blueprint_revision_snapshot: number | null;
+  question_selection_mode_snapshot: QuestionSelectionMode | null;
 }
 
 export interface DbAssignmentTargetOverride {
@@ -286,6 +359,18 @@ export interface DbAssignmentTargetOverride {
 export interface DbAssignmentQuestion extends Omit<DbQuestion, 'quiz_id'> {
   assignment_id: number;
   source_question_id: number | null;
+  source_bank_question_id?: number | null;
+  source_bank_question_revision?: number | null;
+  source_category_id?: number | null;
+  source_category_code?: string | null;
+  source_category_name?: string | null;
+  source_topic?: string | null;
+  minimum_level_code_snapshot?: string | null;
+  difficulty_snapshot?: QuestionDifficulty | null;
+  critical_snapshot?: number | null;
+  competency_snapshot?: QuestionCompetency | null;
+  source_generation_rule_id?: number | null;
+  source_metadata_snapshot?: string | null;
 }
 
 export interface DbAssignmentMember {

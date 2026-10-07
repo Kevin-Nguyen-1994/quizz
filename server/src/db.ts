@@ -261,6 +261,7 @@ export async function initDb(): Promise<void> {
 
   await migrateInternalUserIdentifiers();
   await migrateEmployeeLevelsAndTargeting();
+  await migrateQuestionBank();
 
   // Migrate admin from config to database if needed
   const adminCount = await db.get('SELECT COUNT(*) as count FROM admins');
@@ -288,6 +289,223 @@ export async function initDb(): Promise<void> {
       username,
       hashedPassword,
     ]);
+  }
+}
+
+const QUESTION_CATEGORY_SEEDS = [
+  ['THU_TUC_HAI_QUAN', 'Thủ tục và khai báo hải quan', 10],
+  ['HS_PHAN_LOAI', 'HS và phân loại hàng hóa', 20],
+  ['THUE_TRI_GIA', 'Thuế và trị giá hải quan', 30],
+  ['XUAT_XU_CHUNG_TU', 'Xuất xứ và chứng từ', 40],
+  ['CHINH_SACH_CHUYEN_NGANH', 'Chính sách mặt hàng và chuyên ngành', 50],
+  ['DNCX_XNK_TAI_CHO', 'DNCX và XNK tại chỗ', 60],
+  ['GIA_CONG_SXXK', 'Gia công và SXXK', 70],
+  ['LOAI_HINH_DAC_THU', 'Loại hình và xử lý đặc thù', 80],
+  ['PHAP_LY_TUAN_THU', 'Pháp lý, tuân thủ và xử phạt', 90],
+  ['LOGISTICS_VAN_TAI', 'Logistics, vận tải và hiện trường', 100],
+  ['VAN_HANH_CS_CHAT_LUONG', 'Vận hành CS và chất lượng', 110],
+  ['AN_TOAN_KY_THUAT', 'An toàn và kiểm tra kỹ thuật', 120],
+] as const;
+
+/** Phase 7B additive Question Bank and per-assignment generation schema. */
+async function migrateQuestionBank(): Promise<void> {
+  await db.run('BEGIN IMMEDIATE');
+  try {
+    await db.exec(`
+      CREATE TABLE IF NOT EXISTS question_categories (
+        id            INTEGER PRIMARY KEY AUTOINCREMENT,
+        code          TEXT NOT NULL COLLATE NOCASE UNIQUE CHECK(trim(code) <> ''),
+        name          TEXT NOT NULL CHECK(trim(name) <> ''),
+        sort_order    INTEGER NOT NULL DEFAULT 0,
+        is_active     INTEGER NOT NULL DEFAULT 1 CHECK(is_active IN (0, 1)),
+        created_at_ms INTEGER NOT NULL,
+        updated_at_ms INTEGER NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS question_bank_imports (
+        id               INTEGER PRIMARY KEY AUTOINCREMENT,
+        bank_id          TEXT NOT NULL,
+        bank_version     TEXT NOT NULL,
+        schema_version   TEXT NOT NULL,
+        source_hash      TEXT NOT NULL,
+        source_filename  TEXT NOT NULL,
+        imported_at_ms   INTEGER NOT NULL,
+        inserted_count   INTEGER NOT NULL DEFAULT 0,
+        updated_count    INTEGER NOT NULL DEFAULT 0,
+        skipped_count    INTEGER NOT NULL DEFAULT 0,
+        conflict_count   INTEGER NOT NULL DEFAULT 0,
+        error_count      INTEGER NOT NULL DEFAULT 0,
+        summary_json     TEXT NOT NULL DEFAULT '{}',
+        UNIQUE(bank_id, bank_version, source_hash)
+      );
+
+      CREATE TABLE IF NOT EXISTS bank_questions (
+        id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+        source_bank_id        TEXT NOT NULL,
+        source_question_id    TEXT NOT NULL,
+        source_bank_version   TEXT NOT NULL,
+        source_content_hash   TEXT NOT NULL,
+        last_import_id        INTEGER REFERENCES question_bank_imports(id) ON DELETE SET NULL,
+        question_type         TEXT NOT NULL,
+        text                  TEXT NOT NULL,
+        options               TEXT NOT NULL,
+        correct_index         INTEGER NOT NULL DEFAULT 0,
+        correct_indices       TEXT,
+        correct_answer        TEXT,
+        blanks                TEXT,
+        range_min             INTEGER,
+        range_max             INTEGER,
+        geo                   TEXT,
+        matches               TEXT,
+        base_score            INTEGER NOT NULL DEFAULT 500 CHECK(base_score >= 0),
+        time_sec              INTEGER NOT NULL DEFAULT 20 CHECK(time_sec > 0),
+        image_url             TEXT,
+        media_url             TEXT,
+        media_type            TEXT,
+        explanation           TEXT,
+        tags                  TEXT,
+        category_id           INTEGER NOT NULL REFERENCES question_categories(id) ON DELETE RESTRICT,
+        topic                 TEXT NOT NULL,
+        minimum_level_id      INTEGER NOT NULL REFERENCES employee_levels(id) ON DELETE RESTRICT,
+        difficulty            TEXT CHECK(difficulty IN ('easy', 'medium', 'hard')),
+        competency_code       TEXT CHECK(competency_code IN ('must_remember', 'know_where_to_lookup', 'application')),
+        critical              INTEGER NOT NULL DEFAULT 0 CHECK(critical IN (0, 1)),
+        recommended_seconds   INTEGER CHECK(recommended_seconds > 0),
+        source_metadata_json  TEXT NOT NULL DEFAULT '{}',
+        is_enabled            INTEGER NOT NULL DEFAULT 1 CHECK(is_enabled IN (0, 1)),
+        revision              INTEGER NOT NULL DEFAULT 1 CHECK(revision > 0),
+        created_at_ms         INTEGER NOT NULL,
+        updated_at_ms         INTEGER NOT NULL,
+        UNIQUE(source_bank_id, source_question_id)
+      );
+
+      CREATE TABLE IF NOT EXISTS quiz_generation_rules (
+        id                           INTEGER PRIMARY KEY AUTOINCREMENT,
+        quiz_id                      INTEGER NOT NULL REFERENCES quizzes(id) ON DELETE CASCADE,
+        category_id                  INTEGER REFERENCES question_categories(id) ON DELETE RESTRICT,
+        minimum_level_id             INTEGER REFERENCES employee_levels(id) ON DELETE RESTRICT,
+        difficulty                   TEXT CHECK(difficulty IN ('easy', 'medium', 'hard')),
+        question_type                TEXT,
+        critical                     INTEGER CHECK(critical IN (0, 1)),
+        question_count               INTEGER NOT NULL CHECK(question_count > 0),
+        points_override              INTEGER CHECK(points_override >= 0),
+        recommended_seconds_override INTEGER CHECK(recommended_seconds_override > 0),
+        sort_order                   INTEGER NOT NULL DEFAULT 0,
+        created_at_ms                INTEGER NOT NULL,
+        updated_at_ms                INTEGER NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS assignment_question_previews (
+        id                        INTEGER PRIMARY KEY AUTOINCREMENT,
+        assignment_id             INTEGER NOT NULL UNIQUE REFERENCES assignments(id) ON DELETE CASCADE,
+        quiz_id                   INTEGER NOT NULL REFERENCES quizzes(id) ON DELETE CASCADE,
+        blueprint_revision        INTEGER NOT NULL,
+        generation_seed           TEXT NOT NULL,
+        pool_fingerprint           TEXT NOT NULL,
+        selection_fingerprint      TEXT NOT NULL,
+        total_questions            INTEGER NOT NULL,
+        total_score                INTEGER NOT NULL,
+        recommended_total_seconds  INTEGER NOT NULL,
+        created_at_ms              INTEGER NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS assignment_question_preview_items (
+        preview_id              INTEGER NOT NULL REFERENCES assignment_question_previews(id) ON DELETE CASCADE,
+        order_index             INTEGER NOT NULL,
+        rule_id                 INTEGER NOT NULL REFERENCES quiz_generation_rules(id) ON DELETE RESTRICT,
+        bank_question_id        INTEGER NOT NULL REFERENCES bank_questions(id) ON DELETE RESTRICT,
+        bank_question_revision  INTEGER NOT NULL,
+        effective_score         INTEGER NOT NULL,
+        effective_time_sec      INTEGER NOT NULL,
+        PRIMARY KEY(preview_id, order_index),
+        UNIQUE(preview_id, bank_question_id)
+      );
+    `);
+
+    await addColumnIfMissing(
+      'quizzes',
+      'quiz_mode',
+      "quiz_mode TEXT NOT NULL DEFAULT 'static' CHECK(quiz_mode IN ('static', 'bank_generated'))",
+    );
+    await addColumnIfMissing(
+      'quizzes',
+      'selection_mode',
+      "selection_mode TEXT NOT NULL DEFAULT 'per_assignment' CHECK(selection_mode IN ('per_assignment', 'per_attempt'))",
+    );
+    await addColumnIfMissing(
+      'quizzes',
+      'blueprint_revision',
+      'blueprint_revision INTEGER NOT NULL DEFAULT 1',
+    );
+
+    for (const [column, definition] of [
+      ['generation_seed', 'generation_seed TEXT'],
+      ['question_pool_fingerprint', 'question_pool_fingerprint TEXT'],
+      ['question_selection_fingerprint', 'question_selection_fingerprint TEXT'],
+      ['quiz_blueprint_revision_snapshot', 'quiz_blueprint_revision_snapshot INTEGER'],
+      ['question_selection_mode_snapshot', 'question_selection_mode_snapshot TEXT'],
+    ] as const) {
+      await addColumnIfMissing('assignments', column, definition);
+    }
+
+    for (const [column, definition] of [
+      [
+        'source_bank_question_id',
+        'source_bank_question_id INTEGER REFERENCES bank_questions(id) ON DELETE RESTRICT',
+      ],
+      ['source_bank_question_revision', 'source_bank_question_revision INTEGER'],
+      [
+        'source_category_id',
+        'source_category_id INTEGER REFERENCES question_categories(id) ON DELETE RESTRICT',
+      ],
+      ['source_category_code', 'source_category_code TEXT'],
+      ['source_category_name', 'source_category_name TEXT'],
+      ['source_topic', 'source_topic TEXT'],
+      ['minimum_level_code_snapshot', 'minimum_level_code_snapshot TEXT'],
+      ['difficulty_snapshot', 'difficulty_snapshot TEXT'],
+      ['critical_snapshot', 'critical_snapshot INTEGER'],
+      ['competency_snapshot', 'competency_snapshot TEXT'],
+      ['source_generation_rule_id', 'source_generation_rule_id INTEGER'],
+      ['source_metadata_snapshot', 'source_metadata_snapshot TEXT'],
+    ] as const) {
+      await addColumnIfMissing('assignment_questions', column, definition);
+    }
+
+    const now = Date.now();
+    for (const [code, name, sortOrder] of QUESTION_CATEGORY_SEEDS) {
+      await db.run(
+        `INSERT INTO question_categories
+           (code, name, sort_order, is_active, created_at_ms, updated_at_ms)
+         VALUES (?, ?, ?, 1, ?, ?)
+         ON CONFLICT(code) DO UPDATE SET
+           name = excluded.name,
+           sort_order = excluded.sort_order`,
+        code,
+        name,
+        sortOrder,
+        now,
+        now,
+      );
+    }
+
+    await db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_bank_questions_category_status_difficulty
+        ON bank_questions(category_id, is_enabled, difficulty, id);
+      CREATE INDEX IF NOT EXISTS idx_bank_questions_category_status_level
+        ON bank_questions(category_id, is_enabled, minimum_level_id, id);
+      CREATE INDEX IF NOT EXISTS idx_bank_questions_category_status_type
+        ON bank_questions(category_id, is_enabled, question_type, id);
+      CREATE INDEX IF NOT EXISTS idx_bank_questions_status_updated
+        ON bank_questions(is_enabled, updated_at_ms DESC);
+      CREATE INDEX IF NOT EXISTS idx_quiz_generation_rules_quiz_order
+        ON quiz_generation_rules(quiz_id, sort_order, id);
+      CREATE INDEX IF NOT EXISTS idx_assignment_questions_bank_source
+        ON assignment_questions(source_bank_question_id, source_bank_question_revision);
+    `);
+    await db.run('COMMIT');
+  } catch (error) {
+    await db.run('ROLLBACK').catch(() => undefined);
+    throw error;
   }
 }
 
