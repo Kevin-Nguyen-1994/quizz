@@ -38,11 +38,16 @@ export function CompactQuizList({
       {items.map((q) => (
         <li key={q.id} className="flex flex-wrap items-center gap-3 px-4 py-3 hover:bg-muted/30">
           <div className="min-w-0 flex-1">
-            <span className="block truncate font-medium">{q.title}</span>
+            <span className="flex flex-wrap items-center gap-2 font-medium">
+              <span className="truncate">{q.title}</span>
+              {q.quiz_mode === 'bank_generated' && (
+                <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs text-primary">
+                  Bộ đề động
+                </span>
+              )}
+            </span>
             <span className="block text-sm text-muted-foreground">
-              {`${q.question_count} câu hỏi`}{' '}
-              ·{' '}
-              {formatDate(q.created_at)}
+              {`${q.question_count} câu hỏi`} · {formatDate(q.created_at)}
             </span>
           </div>
           <div className="flex shrink-0 flex-wrap gap-2">
@@ -51,7 +56,12 @@ export function CompactQuizList({
               variant="success"
               size="sm"
               onClick={() => onStart(q.id)}
-              disabled={starting === q.id}
+              disabled={starting === q.id || q.quiz_mode === 'bank_generated'}
+              title={
+                q.quiz_mode === 'bank_generated'
+                  ? 'Bộ đề động hiện chỉ hỗ trợ Bài kiểm tra, chưa hỗ trợ Live Game.'
+                  : undefined
+              }
             >
               {starting === q.id ? (
                 '…'
@@ -61,7 +71,7 @@ export function CompactQuizList({
                 </>
               )}
             </Button>
-            {onPreview && (
+            {onPreview && q.quiz_mode !== 'bank_generated' && (
               <Button
                 type="button"
                 variant="secondary"

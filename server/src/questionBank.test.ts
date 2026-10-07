@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { after, before, describe, it } from 'node:test';
@@ -111,6 +112,79 @@ after(async () => {
 });
 
 describe('Phase 7B Question Bank and dynamic assignment generation', () => {
+  it('reports static and dynamic question counts from the quiz list API', async () => {
+    const staticQuiz = await databaseModule.db.run(
+      `INSERT INTO quizzes (title, description, owner_kind, quiz_mode)
+       VALUES ('Static count test', '', 'admin', 'static')`,
+    );
+    for (let index = 0; index < 3; index += 1) {
+      await databaseModule.db.run(
+        `INSERT INTO questions (quiz_id, text, options, correct_index, order_index)
+         VALUES (?, ?, '["A","B"]', 0, ?)`,
+        staticQuiz.lastID,
+        `Static question ${index + 1}`,
+        index,
+      );
+    }
+
+    const dynamicQuizId = await createDynamicQuiz(2);
+    await generation.insertGenerationRules(
+      databaseModule.db,
+      dynamicQuizId,
+      generation.normalizeGenerationRules([
+        {
+          categoryId,
+          minimumLevelId: cs2Id,
+          difficulty: 'hard',
+          questionCount: 3,
+        },
+      ]),
+    );
+    const emptyDynamic = await databaseModule.db.run(
+      `INSERT INTO quizzes (title, description, owner_kind, quiz_mode, selection_mode)
+       VALUES ('Empty dynamic count test', '', 'admin', 'bank_generated', 'per_assignment')`,
+    );
+
+    const [{ default: express }, { authRouter }, { adminRouter }] = await Promise.all([
+      import('express'),
+      import('./routes/auth'),
+      import('./routes/admin'),
+    ]);
+    const app = express();
+    app.use(express.json());
+    app.use('/api/auth', authRouter);
+    app.use('/api/admin', adminRouter);
+    const server = http.createServer(app);
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    try {
+      const address = server.address();
+      assert.ok(address && typeof address !== 'string');
+      const baseUrl = `http://127.0.0.1:${address.port}`;
+      const login = await fetch(`${baseUrl}/api/auth/login`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          identifier: 'admin',
+          password: 'question-bank-test-admin-password',
+        }),
+      });
+      assert.equal(login.status, 200);
+      const token = ((await login.json()) as { token: string }).token;
+      const response = await fetch(`${baseUrl}/api/admin/quizzes`, {
+        headers: { authorization: `Bearer ${token}` },
+      });
+      assert.equal(response.status, 200);
+      const quizzes = (await response.json()) as Array<{ id: number; question_count: number }>;
+      assert.equal(quizzes.find((quiz) => quiz.id === staticQuiz.lastID)?.question_count, 3);
+      assert.equal(quizzes.find((quiz) => quiz.id === dynamicQuizId)?.question_count, 5);
+      assert.equal(quizzes.find((quiz) => quiz.id === emptyDynamic.lastID)?.question_count, 0);
+    } finally {
+      await new Promise<void>((resolve, reject) =>
+        server.close((error) => (error ? reject(error) : resolve())),
+      );
+    }
+  });
+
   it('imports idempotently and reports changed source content as a conflict', async () => {
     const filename = path.join(temporaryDataDir, 'test-source-bank.json');
     const source = {

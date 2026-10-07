@@ -1,4 +1,4 @@
-import { ArrowLeft, Braces, Check, Eye, Languages, Sparkles } from 'lucide-react';
+import { ArrowLeft, Braces, Check, Eye, Languages, Sparkles, WandSparkles } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AppAlert } from '@/components/AppAlert';
@@ -16,10 +16,11 @@ import {
 } from '@/helpers/quizImportSchema';
 import { cn } from '@/lib/utils';
 import CreatorNav from '../../components/CreatorNav';
+import { useAuth } from '../../context/AuthContext';
 import { useAuthFetch } from '../../hooks/useAuthFetch';
 import { useCreatorBase } from '../../hooks/useCreatorBase';
 import type { ImportPayload, ImportQuestion, QuizTranslationPayload } from '../../types';
-
+import { DynamicQuizEditor } from './components/DynamicQuizEditor';
 import { clearCreateDraft, QuizStudio, saveCreateDraft } from './components/studio/QuizStudio';
 import { TranslationsDialog } from './components/TranslationsDialog';
 
@@ -84,6 +85,8 @@ export default function CreateQuiz() {
   const api = useAuthFetch();
   const navigate = useNavigate();
   const basePath = useCreatorBase();
+  const { isSuperAdmin } = useAuth();
+  const [quizMode, setQuizMode] = useState<'static' | 'bank_generated'>('static');
   const [mode, setMode] = useState<'studio' | 'json'>('studio');
   const [studioKey, setStudioKey] = useState(0);
   const [jsonText, setJsonText] = useState('');
@@ -103,6 +106,15 @@ export default function CreateQuiz() {
       <Check className="size-4" /> Tạo bộ câu hỏi
     </>
   );
+
+  if (quizMode === 'bank_generated') {
+    return (
+      <DynamicQuizEditor
+        onCancel={() => setQuizMode('static')}
+        onSaved={() => navigate(basePath)}
+      />
+    );
+  }
 
   async function saveQuiz(payload: ImportPayload) {
     setSaving(true);
@@ -198,6 +210,15 @@ export default function CreateQuiz() {
           onValidationError={setJsonError}
           headerExtra={
             <>
+              {isSuperAdmin && (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => setQuizMode('bank_generated')}
+                >
+                  <WandSparkles className="size-4" /> Bộ đề động
+                </Button>
+              )}
               <Button type="button" variant="ghost" onClick={() => setMode('json')}>
                 <Braces className="size-4" /> Nhập JSON
               </Button>

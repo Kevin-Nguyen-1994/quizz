@@ -7,6 +7,7 @@ export default function AdminNav() {
       loginPath="/login"
       showUsers
       showAssignments
+      showQuestionBank
       playLabel="Màn hình người chơi ↗"
     />
   );

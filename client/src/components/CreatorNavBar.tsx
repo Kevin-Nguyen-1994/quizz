@@ -1,8 +1,8 @@
 import { LogOut, Menu, Play, X } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Button } from '@/components/ui/button';
 import { BrandLogo } from '@/components/BrandLogo';
+import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useApp } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
@@ -15,6 +15,7 @@ interface Props {
   loginPath: string;
   showUsers?: boolean;
   showAssignments?: boolean;
+  showQuestionBank?: boolean;
   showMyGames?: boolean;
   userNavigation?: boolean;
   assignmentCount?: number;
@@ -26,6 +27,7 @@ export default function CreatorNavBar({
   loginPath,
   showUsers = false,
   showAssignments = false,
+  showQuestionBank = false,
   showMyGames = false,
   userNavigation = false,
   assignmentCount = 0,
@@ -58,6 +60,9 @@ export default function CreatorNavBar({
     : [
         { to: basePath, label: 'Bộ câu hỏi' },
         ...(showAssignments ? [{ to: `${basePath}/assignments`, label: 'Bài kiểm tra' }] : []),
+        ...(showQuestionBank
+          ? [{ to: `${basePath}/question-bank`, label: 'Ngân hàng câu hỏi' }]
+          : []),
         ...(showUsers ? [{ to: `${basePath}/users`, label: 'Nhân viên' }] : []),
         { to: `${basePath}/history`, label: 'Lịch sử' },
         ...(showMyGames ? [{ to: `${basePath}/my-games`, label: 'Trò chơi của tôi' }] : []),

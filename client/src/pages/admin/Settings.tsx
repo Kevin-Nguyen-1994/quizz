@@ -1,8 +1,19 @@
-import { Check, Layers3, Lock, Pencil, Smile, Target, Timer, Trash2, Upload } from 'lucide-react';
+import {
+  Check,
+  FolderTree,
+  Layers3,
+  Lock,
+  Pencil,
+  Smile,
+  Target,
+  Timer,
+  Trash2,
+  Upload,
+} from 'lucide-react';
 import { type ChangeEvent, useEffect, useState } from 'react';
 import { AppAlert } from '@/components/AppAlert';
-import { FormRow, MainContent, Page, PageHeader, PageLoading } from '@/components/layout';
 import { BrandLogo } from '@/components/BrandLogo';
+import { FormRow, MainContent, Page, PageHeader, PageLoading } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { Input as FileInput } from '@/components/ui/input';
 import { invalidateAvatarCache } from '@/lib/avatars';
@@ -14,6 +25,7 @@ import { useDialog } from '../../context/DialogContext';
 import { useAuthFetch } from '../../hooks/useAuthFetch';
 import type { AppConfig } from '../../types';
 import { EmployeeLevelCatalog } from './components/EmployeeLevelCatalog';
+import { QuestionCategoryCatalog } from './components/QuestionCategoryCatalog';
 import { SettingsFieldGroup, SettingsSection, SettingsToggle } from './components/SettingsSection';
 
 const NAV_SECTIONS = [
@@ -22,6 +34,7 @@ const NAV_SECTIONS = [
   { id: 'scoring', label: 'Tính điểm', icon: Target },
   { id: 'avatars', label: 'Ảnh đại diện', icon: Smile },
   { id: 'employee-levels', label: 'Cấp bậc', icon: Layers3 },
+  { id: 'question-categories', label: 'Danh mục câu hỏi', icon: FolderTree },
   { id: 'security', label: 'Bảo mật', icon: Lock },
 ] as const;
 
@@ -330,6 +343,14 @@ export default function Settings() {
               description="Quản lý danh mục bậc dùng cho nhân viên, bộ câu hỏi và bài kiểm tra."
             >
               <EmployeeLevelCatalog />
+            </SettingsSection>
+            <SettingsSection
+              id="question-categories"
+              icon={FolderTree}
+              title="Danh mục câu hỏi"
+              description="Quản lý nhóm chủ đề lớn dùng trong Ngân hàng câu hỏi."
+            >
+              <QuestionCategoryCatalog />
             </SettingsSection>
             <SettingsSection
               id="branding"

@@ -390,6 +390,97 @@ export interface Quiz {
   owner_email?: string | null;
   owner_username?: string | null;
   recommended_level_id?: number | null;
+  quiz_mode?: 'static' | 'bank_generated';
+  selection_mode?: 'per_assignment' | 'per_attempt';
+  blueprint_revision?: number;
+}
+
+export type QuestionDifficulty = 'easy' | 'medium' | 'hard';
+export type QuestionCompetency = 'must_remember' | 'know_where_to_lookup' | 'application';
+
+export interface QuestionCategory {
+  id: number;
+  code: string;
+  name: string;
+  sort_order: number;
+  is_active: number;
+  question_count: number;
+}
+
+export interface BankQuestionSummary {
+  id: number;
+  source_bank_id: string;
+  source_question_id: string;
+  question_type: QuestionType;
+  text: string;
+  topic: string;
+  difficulty: QuestionDifficulty | null;
+  competency_code: QuestionCompetency | null;
+  critical: number;
+  is_enabled: number;
+  revision: number;
+  category_id: number;
+  minimum_level_id: number;
+  category_code: string;
+  category_name: string;
+  minimum_level_code: string;
+}
+
+export interface BankQuestion extends BankQuestionSummary {
+  options: string[];
+  correct_index: number;
+  correct_indices: number[] | null;
+  base_score: number;
+  time_sec: number;
+  image_url: string | null;
+  explanation: string | null;
+  range_min: number | null;
+  range_max: number | null;
+  correct_answer: string | null;
+  media_url: string | null;
+  media_type: 'audio' | 'video' | null;
+  blanks: string[][] | null;
+  geo: GeoPoint | null;
+  matches: string[] | null;
+  tags: string[] | null;
+  recommended_seconds: number | null;
+  source_metadata: Record<string, unknown>;
+}
+
+export interface QuizGenerationRule {
+  id?: number;
+  categoryId: number | null;
+  minimumLevelId: number | null;
+  difficulty: QuestionDifficulty | null;
+  questionType: QuestionType | null;
+  critical: boolean | null;
+  questionCount: number;
+  pointsOverride: number | null;
+  recommendedSecondsOverride: number | null;
+  sortOrder: number;
+  availableCount?: number;
+}
+
+export interface QuestionSelectionPreview {
+  seed: string;
+  poolFingerprint: string;
+  selectionFingerprint: string;
+  blueprintRevision: number;
+  rules: Array<{
+    ruleId: number;
+    requiredCount: number;
+    availableCount: number;
+    status: 'ok' | 'insufficient';
+  }>;
+  selected: Array<{
+    orderIndex: number;
+    effectiveScore: number;
+    effectiveTimeSec: number;
+    question: BankQuestionSummary;
+  }>;
+  totalQuestions: number;
+  totalScore: number;
+  recommendedTotalSeconds: number;
 }
 
 export interface Question {

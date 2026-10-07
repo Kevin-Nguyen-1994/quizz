@@ -1,7 +1,14 @@
 import { ArrowRight, Eye, FileText, Pencil, Play, Plus, Trash2, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { EmptyState, MainContent, Page, PageHeader, PageLoading, Subtitle } from '@/components/layout';
+import {
+  EmptyState,
+  MainContent,
+  Page,
+  PageHeader,
+  PageLoading,
+  Subtitle,
+} from '@/components/layout';
 import { PendingAssignmentsBlock } from '@/components/PendingAssignmentsBlock';
 import { QuizPreviewModal } from '@/components/QuizPreviewModal';
 import { StatusBadge } from '@/components/StatusBadge';
@@ -155,7 +162,14 @@ export default function Dashboard() {
     return (
       <tr key={q.id} className="border-b border-border last:border-0">
         <td className="px-4 py-3">
-          <div className="font-semibold">{q.title}</div>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-semibold">{q.title}</span>
+            {q.quiz_mode === 'bank_generated' && (
+              <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+                Bộ đề động
+              </span>
+            )}
+          </div>
           {q.description && (
             <div className="mt-1 max-w-[360px] truncate text-sm text-muted-foreground">
               {q.description}
@@ -173,7 +187,12 @@ export default function Dashboard() {
               variant="success"
               size="sm"
               onClick={() => handleStartClick(q.id)}
-              disabled={starting === q.id}
+              disabled={starting === q.id || q.quiz_mode === 'bank_generated'}
+              title={
+                q.quiz_mode === 'bank_generated'
+                  ? 'Bộ đề động hiện chỉ hỗ trợ Bài kiểm tra, chưa hỗ trợ Live Game.'
+                  : undefined
+              }
             >
               {starting === q.id ? (
                 '…'
@@ -183,22 +202,24 @@ export default function Dashboard() {
                 </span>
               )}
             </Button>
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              onClick={() => openPreview(q.id)}
-              disabled={previewing === q.id}
-              title="Xem trước bộ câu hỏi mà không cần tạo phiên"
-            >
-              {previewing === q.id ? (
-                '…'
-              ) : (
-                <span className="flex items-center gap-1.5">
-                  <Eye className="size-4" /> Xem trước
-                </span>
-              )}
-            </Button>
+            {q.quiz_mode !== 'bank_generated' && (
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={() => openPreview(q.id)}
+                disabled={previewing === q.id}
+                title="Xem trước bộ câu hỏi mà không cần tạo phiên"
+              >
+                {previewing === q.id ? (
+                  '…'
+                ) : (
+                  <span className="flex items-center gap-1.5">
+                    <Eye className="size-4" /> Xem trước
+                  </span>
+                )}
+              </Button>
+            )}
             <Button variant="secondary" size="sm" asChild>
               <Link to={`${basePath}/quiz/${q.id}/edit`}>
                 <span className="flex items-center gap-1.5">
@@ -276,8 +297,7 @@ export default function Dashboard() {
                         onClick={() => navigate(`${basePath}/game/${s.id}`)}
                       >
                         <span className="flex items-center gap-1.5">
-                          Tiếp tục{' '}
-                          <ArrowRight className="size-4" />
+                          Tiếp tục <ArrowRight className="size-4" />
                         </span>
                       </Button>
                       <Button
@@ -302,13 +322,15 @@ export default function Dashboard() {
         <PageHeader
           title={basePath === '/u' ? 'Quiz của tôi' : 'Bộ câu hỏi'}
           description={`${quizzes.length} bộ câu hỏi${showGroupedByUser && quizGroups.length > 0 ? ` · ${quizGroups.length} chủ sở hữu` : ''}`}
-          actions={<Button size="lg" asChild>
-            <Link to={`${basePath}/quiz/new`}>
-              <span className="flex items-center gap-1.5">
-                <Plus className="size-4" /> Tạo bộ câu hỏi
-              </span>
-            </Link>
-          </Button>}
+          actions={
+            <Button size="lg" asChild>
+              <Link to={`${basePath}/quiz/new`}>
+                <span className="flex items-center gap-1.5">
+                  <Plus className="size-4" /> Tạo bộ câu hỏi
+                </span>
+              </Link>
+            </Button>
+          }
         />
 
         {quizzes.length === 0 ? (
@@ -316,11 +338,11 @@ export default function Dashboard() {
             icon={<FileText className="size-10" />}
             title="Chưa có bộ câu hỏi"
             description="Tạo bộ câu hỏi đầu tiên để tổ chức một phiên Live Game."
-            action={<Button size="lg" asChild>
-                <Link to={`${basePath}/quiz/new`}>
-                  Tạo bộ câu hỏi
-                </Link>
-              </Button>}
+            action={
+              <Button size="lg" asChild>
+                <Link to={`${basePath}/quiz/new`}>Tạo bộ câu hỏi</Link>
+              </Button>
+            }
           />
         ) : showGroupedByUser ? (
           <div className="flex flex-col gap-4">

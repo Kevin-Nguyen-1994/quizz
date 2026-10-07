@@ -6,13 +6,13 @@ import { EmployeeLevelError, requireActiveEmployeeLevel } from '../employeeLevel
 import { getMetricsSnapshot } from '../metrics';
 import { getRequestUser, requireAuth, requireSuperAdmin } from '../middleware';
 import { hashPassword, MIN_PASSWORD_LENGTH } from '../passwords';
+import { normalizeQuestionContent, QuestionContentError } from '../questionContent';
 import {
   insertGenerationRules,
   normalizeGenerationRules,
   QuestionGenerationError,
   validateQuestionPool,
 } from '../questionGeneration';
-import { normalizeQuestionContent, QuestionContentError } from '../questionContent';
 import { terminateSessionById } from '../socket/sessionLifecycle';
 import { withImmediateTransaction } from '../transactions';
 import type {
@@ -209,11 +209,17 @@ adminRouter.get('/quizzes', requireAuth, async (req, res) => {
         }
       >
     >(`
-      SELECT q.*, COUNT(qu.id) as question_count,
+      SELECT q.*, CASE WHEN q.quiz_mode = 'bank_generated'
+        THEN COALESCE(gr.question_count, 0)
+        ELSE COUNT(qu.id) END as question_count,
         (SELECT u.email FROM users u WHERE q.owner_kind = 'user' AND q.owner_id = u.id) as owner_email,
         (SELECT u.username FROM users u WHERE q.owner_kind = 'user' AND q.owner_id = u.id) as owner_username
       FROM quizzes q
       LEFT JOIN questions qu ON qu.quiz_id = q.id
+      LEFT JOIN (
+        SELECT quiz_id, SUM(question_count) AS question_count
+        FROM quiz_generation_rules GROUP BY quiz_id
+      ) gr ON gr.quiz_id = q.id
       GROUP BY q.id
       ORDER BY COALESCE(
         (SELECT u.email FROM users u WHERE q.owner_kind = 'user' AND q.owner_id = u.id),
@@ -225,9 +231,15 @@ adminRouter.get('/quizzes', requireAuth, async (req, res) => {
   const userId = currentUserId(req);
   const quizzes = await db.all<DbQuiz[]>(
     `
-      SELECT q.*, COUNT(qu.id) as question_count
+      SELECT q.*, CASE WHEN q.quiz_mode = 'bank_generated'
+        THEN COALESCE(gr.question_count, 0)
+        ELSE COUNT(qu.id) END as question_count
       FROM quizzes q
       LEFT JOIN questions qu ON qu.quiz_id = q.id
+      LEFT JOIN (
+        SELECT quiz_id, SUM(question_count) AS question_count
+        FROM quiz_generation_rules GROUP BY quiz_id
+      ) gr ON gr.quiz_id = q.id
       WHERE q.owner_kind = 'user' AND q.owner_id = ?
       GROUP BY q.id
       ORDER BY q.created_at DESC
@@ -349,12 +361,10 @@ adminRouter.post('/quizzes', requireAuth, async (req: Request, res: Response) =>
     res.status(201).json({ id: quizId });
   } catch (error) {
     if (error instanceof QuestionContentError || error instanceof QuestionGenerationError) {
-      return res
-        .status(error instanceof QuestionGenerationError ? error.statusCode : 400)
-        .json({
-          error: error.message,
-          code: error instanceof QuestionGenerationError ? error.code : undefined,
-        });
+      return res.status(error instanceof QuestionGenerationError ? error.statusCode : 400).json({
+        error: error.message,
+        code: error instanceof QuestionGenerationError ? error.code : undefined,
+      });
     }
     throw error;
   }
@@ -429,12 +439,10 @@ adminRouter.put('/quizzes/:id', requireAuth, async (req: Request, res: Response)
     res.json({ ok: true });
   } catch (error) {
     if (error instanceof QuestionContentError || error instanceof QuestionGenerationError) {
-      return res
-        .status(error instanceof QuestionGenerationError ? error.statusCode : 400)
-        .json({
-          error: error.message,
-          code: error instanceof QuestionGenerationError ? error.code : undefined,
-        });
+      return res.status(error instanceof QuestionGenerationError ? error.statusCode : 400).json({
+        error: error.message,
+        code: error instanceof QuestionGenerationError ? error.code : undefined,
+      });
     }
     throw error;
   }

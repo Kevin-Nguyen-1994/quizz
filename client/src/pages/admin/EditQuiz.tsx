@@ -9,6 +9,7 @@ import CreatorNav from '../../components/CreatorNav';
 import { useAuthFetch } from '../../hooks/useAuthFetch';
 import { useCreatorBase } from '../../hooks/useCreatorBase';
 import type { ImportPayload, ThemeId } from '../../types';
+import { DynamicQuizEditor } from './components/DynamicQuizEditor';
 import { QuizStudio } from './components/studio/QuizStudio';
 import { TranslationsDialog } from './components/TranslationsDialog';
 
@@ -31,6 +32,8 @@ export default function EditQuiz() {
   const [recommendedLevelId, setRecommendedLevelId] = useState<number | null>(null);
   const [questions, setQuestions] = useState<QuestionWithKey[]>([]);
   const [translationsOpen, setTranslationsOpen] = useState(false);
+  const [quizMode, setQuizMode] = useState<'static' | 'bank_generated'>('static');
+  const [generationRules, setGenerationRules] = useState<Record<string, unknown>[]>([]);
 
   useEffect(() => {
     api
@@ -41,6 +44,8 @@ export default function EditQuiz() {
         theme?: ThemeId | null;
         language?: string | null;
         recommended_level_id?: number | null;
+        quiz_mode?: 'static' | 'bank_generated';
+        generationRules?: Record<string, unknown>[];
         questions: unknown[];
       }>(`/api/admin/quizzes/${id}`)
       .then(({ ok, data }) => {
@@ -55,6 +60,8 @@ export default function EditQuiz() {
         setTheme(data.theme ?? 'default');
         setLanguage(data.language ?? DEFAULT_LOCALE);
         setRecommendedLevelId(data.recommended_level_id ?? null);
+        setQuizMode(data.quiz_mode ?? 'static');
+        setGenerationRules(data.generationRules ?? []);
         setQuestions(
           (data.questions ?? []).map((q) =>
             mapDbQuestionToImport(q as Parameters<typeof mapDbQuestionToImport>[0]),
@@ -90,6 +97,17 @@ export default function EditQuiz() {
         </PageCenter>
       </Page>
     );
+
+  if (quizMode === 'bank_generated') {
+    return (
+      <DynamicQuizEditor
+        quizId={id}
+        initial={{ title, description, recommendedLevelId, rules: generationRules }}
+        onCancel={() => navigate(basePath)}
+        onSaved={() => navigate(basePath)}
+      />
+    );
+  }
 
   return (
     <>

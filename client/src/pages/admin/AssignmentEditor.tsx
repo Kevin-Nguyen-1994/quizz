@@ -1,8 +1,8 @@
-import { ArrowLeft, Search, Users } from 'lucide-react';
+import { ArrowLeft, RefreshCw, Search, Sparkles, Users } from 'lucide-react';
 import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { AppAlert } from '@/components/AppAlert';
 import AdminNav from '@/components/AdminNav';
+import { AppAlert } from '@/components/AppAlert';
 import { MainContent, Page, PageHeader } from '@/components/layout';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -26,6 +26,7 @@ import type {
   AssignmentTargetOverride,
   AssignmentTargetPreview,
   EmployeeLevel,
+  QuestionSelectionPreview,
   Quiz,
   UserAccount,
 } from '@/types';
@@ -88,6 +89,8 @@ export default function AssignmentEditor() {
   const [targetOverrides, setTargetOverrides] = useState<AssignmentTargetOverride[]>([]);
   const [preview, setPreview] = useState<AssignmentTargetPreview | null>(null);
   const [fingerprint, setFingerprint] = useState<string | null>(null);
+  const [questionPreview, setQuestionPreview] = useState<QuestionSelectionPreview | null>(null);
+  const [questionFingerprint, setQuestionFingerprint] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState<'draft' | 'published' | 'closed' | 'archived'>('draft');
   const [loading, setLoading] = useState(true);
@@ -219,6 +222,11 @@ export default function AssignmentEditor() {
     setFingerprint(null);
   }
 
+  function invalidateQuestionPreview() {
+    setQuestionPreview(null);
+    setQuestionFingerprint(null);
+  }
+
   function chooseMode(mode: AssignmentTargetMode) {
     setTargetMode(mode);
     setAssignmentKind(
@@ -265,8 +273,7 @@ export default function AssignmentEditor() {
     const parsedMaxAttempts = Number(maxAttempts);
     if (!/^\d+$/.test(maxAttempts) || !Number.isInteger(parsedMaxAttempts))
       return 'Số lượt làm phải là số nguyên từ 1 đến 20.';
-    if (parsedMaxAttempts < 1 || parsedMaxAttempts > 20)
-      return 'Số lượt làm phải từ 1 đến 20.';
+    if (parsedMaxAttempts < 1 || parsedMaxAttempts > 20) return 'Số lượt làm phải từ 1 đến 20.';
     if (targetMode === 'manual' && selectedUsers.length === 0)
       return 'Vui lòng chọn ít nhất một nhân viên.';
     if (targetMode !== 'manual' && !targetLevelId) return 'Vui lòng chọn bậc hiện tại.';
@@ -380,6 +387,34 @@ export default function AssignmentEditor() {
     }
   }
 
+  async function handleQuestionPreview() {
+    setSaving(true);
+    setError('');
+    try {
+      const savedId = await saveDraft();
+      if (!savedId) return;
+      const result = await api.post<{
+        preview?: QuestionSelectionPreview;
+        error?: string;
+        code?: string;
+      }>(`/api/admin/assignments/${savedId}/question-preview`, {});
+      if (!result.ok || !result.data?.preview) {
+        setError(
+          result.data?.code === 'QUESTION_POOL_INSUFFICIENT'
+            ? 'Ngân hàng không còn đủ câu hỏi cho một hoặc nhiều nhóm điều kiện.'
+            : errorMessage(result.data, 'Không thể tạo đề xem trước.'),
+        );
+        return;
+      }
+      setQuestionPreview(result.data.preview);
+      setQuestionFingerprint(result.data.preview.selectionFingerprint);
+    } catch {
+      setError('Không thể kết nối máy chủ. Vui lòng thử lại.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function handlePublish() {
     const validation = validate();
     if (validation) {
@@ -388,6 +423,13 @@ export default function AssignmentEditor() {
     }
     if (targetMode !== 'manual' && (!preview || !fingerprint)) {
       setError('Danh sách người nhận chưa được xác nhận. Hãy xem trước trước khi phát hành.');
+      return;
+    }
+    if (
+      selectedQuiz?.quiz_mode === 'bank_generated' &&
+      (!questionPreview || !questionFingerprint)
+    ) {
+      setError('Đề xem trước chưa hợp lệ. Hãy tạo đề xem trước trước khi phát hành.');
       return;
     }
     const finalCount = targetMode === 'manual' ? selectedUsers.length : (preview?.finalCount ?? 0);
@@ -409,6 +451,19 @@ export default function AssignmentEditor() {
           </p>
           <p>Số nhân viên: {finalCount}</p>
           <p>Số câu: {selectedQuiz?.question_count ?? 0}</p>
+          {questionPreview && (
+            <>
+              <p>Điểm tối đa: {questionPreview.totalScore.toLocaleString('vi-VN')}</p>
+              <p>
+                Thời gian khuyến nghị: {Math.ceil(questionPreview.recommendedTotalSeconds / 60)}{' '}
+                phút
+              </p>
+              <p>
+                Critical:{' '}
+                {questionPreview.selected.filter((item) => item.question.critical === 1).length}
+              </p>
+            </>
+          )}
           <p>Hạn: {deadline ? new Date(deadline).toLocaleString('vi-VN') : 'Không giới hạn'}</p>
           {targetOverrides.length > 0 && (
             <p>Có {targetOverrides.length} điều chỉnh thủ công trong danh sách người nhận.</p>
@@ -428,12 +483,18 @@ export default function AssignmentEditor() {
         error?: string;
         code?: string;
         details?: { preview?: AssignmentTargetPreview };
-      }>(
-        `/api/admin/assignments/${savedId}/publish`,
-        targetMode === 'manual' ? {} : { fingerprint },
-      );
+      }>(`/api/admin/assignments/${savedId}/publish`, {
+        ...(targetMode === 'manual' ? {} : { targetFingerprint: fingerprint }),
+        ...(questionFingerprint ? { questionFingerprint } : {}),
+      });
       if (!result.ok) {
-        if (result.status === 409 && result.data?.code === 'TARGET_CHANGED') {
+        if (result.status === 409 && result.data?.code === 'QUESTION_POOL_CHANGED') {
+          setQuestionPreview(null);
+          setQuestionFingerprint(null);
+          setError(
+            'Ngân hàng câu hỏi đã thay đổi kể từ lần xem trước. Vui lòng tạo lại đề trước khi phát hành.',
+          );
+        } else if (result.status === 409 && result.data?.code === 'TARGET_CHANGED') {
           const fresh = result.data.details?.preview;
           if (fresh) {
             setPreview(fresh);
@@ -540,6 +601,7 @@ export default function AssignmentEditor() {
                   onValueChange={(value) => {
                     setQuizId(value);
                     invalidatePreview();
+                    invalidateQuestionPreview();
                   }}
                 >
                   <SelectTrigger>
@@ -626,6 +688,95 @@ export default function AssignmentEditor() {
               </label>
             </CardContent>
           </Card>
+
+          {selectedQuiz?.quiz_mode === 'bank_generated' && (
+            <Card>
+              <CardContent className="space-y-4 p-5">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h2 className="flex items-center gap-2 text-lg">
+                      <Sparkles className="size-5" />
+                      Đề xem trước
+                    </h2>
+                    <p className="text-sm text-muted-foreground">
+                      Xác nhận chính xác câu hỏi trước khi chọn và phát hành cho nhân viên.
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant={questionPreview ? 'secondary' : 'default'}
+                    onClick={handleQuestionPreview}
+                    disabled={saving}
+                  >
+                    {questionPreview ? (
+                      <>
+                        <RefreshCw className="size-4" />
+                        Tạo lại đề
+                      </>
+                    ) : (
+                      'Tạo đề xem trước'
+                    )}
+                  </Button>
+                </div>
+                {questionPreview ? (
+                  <>
+                    <div className="grid gap-3 rounded-lg bg-muted/40 p-4 sm:grid-cols-3">
+                      <div>
+                        <span className="text-xs text-muted-foreground">Số câu</span>
+                        <strong className="block text-xl">{questionPreview.totalQuestions}</strong>
+                      </div>
+                      <div>
+                        <span className="text-xs text-muted-foreground">Điểm tối đa</span>
+                        <strong className="block text-xl">
+                          {questionPreview.totalScore.toLocaleString('vi-VN')}
+                        </strong>
+                      </div>
+                      <div>
+                        <span className="text-xs text-muted-foreground">Khuyến nghị</span>
+                        <strong className="block text-xl">
+                          ~{Math.ceil(questionPreview.recommendedTotalSeconds / 60)} phút
+                        </strong>
+                      </div>
+                    </div>
+                    <div className="divide-y rounded-lg border">
+                      {questionPreview.selected.map((item, i) => (
+                        <div
+                          key={`${item.question.id}-${i}`}
+                          className="flex flex-col gap-2 p-3 sm:flex-row sm:items-start"
+                        >
+                          <span className="font-semibold text-primary">{i + 1}.</span>
+                          <div className="min-w-0 flex-1">
+                            <p className="font-medium">{item.question.text}</p>
+                            <div className="mt-1 flex flex-wrap gap-1">
+                              <Badge variant="outline">{item.question.source_question_id}</Badge>
+                              <Badge variant="outline">{item.question.category_code}</Badge>
+                              <Badge variant="outline">{item.question.minimum_level_code}</Badge>
+                              {item.question.difficulty && (
+                                <Badge variant="outline">{item.question.difficulty}</Badge>
+                              )}
+                              {item.question.critical === 1 && (
+                                <Badge variant="destructive">Critical</Badge>
+                              )}
+                            </div>
+                          </div>
+                          <span className="shrink-0 text-sm text-muted-foreground">
+                            {item.effectiveScore} điểm · {item.effectiveTimeSec}s
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                    <AppAlert variant="info">
+                      Nếu thay đổi bộ đề động, đề xem trước này sẽ hết hiệu lực và cần tạo lại.
+                    </AppAlert>
+                  </>
+                ) : (
+                  <AppAlert variant="info">
+                    Bộ đề động cần một đề xem trước hợp lệ trước khi phát hành.
+                  </AppAlert>
+                )}
+              </CardContent>
+            </Card>
+          )}
 
           <Card>
             <CardContent className="space-y-5 p-5">

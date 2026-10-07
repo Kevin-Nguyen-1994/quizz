@@ -15,6 +15,7 @@ const UserManagement = lazy(() => import('./pages/admin/UserManagement'));
 const Assignments = lazy(() => import('./pages/admin/Assignments'));
 const AssignmentEditor = lazy(() => import('./pages/admin/AssignmentEditor'));
 const AssignmentDetail = lazy(() => import('./pages/admin/AssignmentDetail'));
+const QuestionBank = lazy(() => import('./pages/admin/QuestionBank'));
 const AssignmentPage = lazy(() => import('./pages/assignment/AssignmentPage'));
 const UserLogin = lazy(() => import('./pages/auth/UserLogin'));
 const UserRegister = lazy(() => import('./pages/auth/UserRegister'));
@@ -121,6 +122,16 @@ export default function App() {
         }
       />
       {guardedCreatorRoutes('/admin', RequireSuperAdmin)}
+      <Route
+        path="/admin/question-bank"
+        element={
+          <Lazy>
+            <RequireSuperAdmin>
+              <QuestionBank />
+            </RequireSuperAdmin>
+          </Lazy>
+        }
+      />
       <Route
         path="/admin/assignments"
         element={
