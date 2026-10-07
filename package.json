@@ -10,6 +10,9 @@
   "scripts": {
     "dev": "pnpm --parallel -r dev",
     "build": "pnpm -r build",
+    "build:server": "pnpm --filter server build",
+    "deploy:backend": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File ops/deploy-backend.ps1",
+    "rollback:backend": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File ops/deploy-backend.ps1 -RollbackLatest",
     "deploy:frontend": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File ops/deploy-frontend.ps1",
     "rollback:frontend": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File ops/deploy-frontend.ps1 -RollbackLatest",
     "backup:database": "node server/scripts/backup-database.mjs",

@@ -22,6 +22,7 @@ data/
 logs/
 artifacts/
 deployments/
+runtime/
 client/.dist-deploy-*/
 client/.dist-previous-*/
 client/.dist-failed-*/

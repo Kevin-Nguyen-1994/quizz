@@ -11,6 +11,7 @@ interface Props {
 export function QuestionImage({ src, alt = 'Question', className }: Props) {
   const [failed, setFailed] = useState(false);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: changing src must reset a prior image error
   useEffect(() => {
     setFailed(false);
   }, [src]);

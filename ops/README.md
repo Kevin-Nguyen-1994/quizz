@@ -66,3 +66,51 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File ops\deploy-frontend.ps1 
 
 At least three successful frontend versions are retained. Replacing static
 files does not require a backend restart.
+
+## Backend build isolation, deploy, and rollback
+
+Normal builds never write the production backend runtime:
+
+```powershell
+pnpm build:server
+```
+
+The compiled artifact is recreated at `artifacts\server-dist`. Production is
+started from `runtime\server\index.js`, so `pnpm build` and `pnpm build:server`
+cannot change the code loaded by the Scheduled Task.
+
+Install or update the `TiL Quiz Server` SYSTEM task from an elevated
+PowerShell after a runtime has first been placed in `runtime\server`:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File ops\install-server-task.ps1
+```
+
+Deploy the staged backend from an elevated PowerShell during a maintenance
+window:
+
+```powershell
+pnpm deploy:backend
+```
+
+The deploy command refuses to continue while an Assignment attempt is in
+progress, saves the current runtime under `deployments\backend`, swaps only the
+backend files, restarts the existing task, and checks HTTP plus Socket.IO. A
+failed smoke test restores the previous backend automatically. It never
+restores or rolls back the database.
+
+Rollback to the newest retained backend version:
+
+```powershell
+pnpm rollback:backend
+```
+
+Rollback to a named version:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File ops\deploy-backend.ps1 -RollbackVersion "YYYY-MM-DD-HHMMSS-fff"
+```
+
+At least three backend versions are retained. `-ForceActiveAttempts` exists for
+an explicitly approved emergency maintenance window; do not use it for routine
+deployments.

@@ -1,6 +1,6 @@
 import path from 'node:path';
 import process from 'node:process';
-import { createRequire } from 'node:module';
+import { createRequire, Module } from 'node:module';
 
 const require = createRequire(import.meta.url);
 
@@ -22,6 +22,8 @@ function parseArgs(argv) {
 async function main() {
   const options = parseArgs(process.argv.slice(2));
   if (options.dataDir) process.env.DATA_DIR = path.resolve(options.dataDir);
+  process.env.NODE_PATH ||= path.resolve(import.meta.dirname, '..', 'node_modules');
+  Module._initPaths();
   const database = require('../../artifacts/server-dist/db.js');
   const importer = require('../../artifacts/server-dist/questionBankImport.js');
   await database.initDb();

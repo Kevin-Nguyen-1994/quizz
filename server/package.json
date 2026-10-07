@@ -4,8 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "tsx watch --env-file=../.env src/index.ts",
-    "build": "tsc",
-    "start": "node dist/index.js",
+    "build": "node scripts/build-server.mjs",
+    "start": "node ../runtime/server/index.js",
     "typecheck": "tsc --noEmit",
     "lint": "biome lint src",
     "test": "tsx --test src/*.test.ts",
