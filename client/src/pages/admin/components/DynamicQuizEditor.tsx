@@ -1,5 +1,5 @@
 import { ArrowLeft, Plus, SlidersHorizontal, Sparkles, Trash2 } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import AdminNav from '@/components/AdminNav';
 import { AppAlert } from '@/components/AppAlert';
 import { MainContent, Page, PageHeader } from '@/components/layout';
@@ -79,6 +79,7 @@ export function DynamicQuizEditor({
   initial,
   onCancel,
   onSaved,
+  modeSelector,
 }: {
   quizId?: string;
   initial?: {
@@ -89,6 +90,7 @@ export function DynamicQuizEditor({
   };
   onCancel(): void;
   onSaved(id: number): void;
+  modeSelector?: ReactNode;
 }) {
   const api = useAuthFetch();
   const [title, setTitle] = useState(initial?.title ?? '');
@@ -240,6 +242,7 @@ export function DynamicQuizEditor({
           title={quizId ? 'Chỉnh sửa bộ đề động' : 'Tạo bộ đề động'}
           description="Hệ thống chọn câu tự động theo các điều kiện đã cấu hình."
         />
+        {modeSelector && <div className="mb-5">{modeSelector}</div>}
         {error && <AppAlert variant="error">{error}</AppAlert>}
         <Card className="mb-5">
           <CardContent className="grid gap-4 p-5 md:grid-cols-2">

@@ -363,30 +363,32 @@ export function QuizStudio({
           )}
           {headerExtra}
           {allowQuestionBank && (
-            <>
+            <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
               <Button
                 type="button"
                 variant="secondary"
                 size="sm"
+                className="h-auto min-h-9 w-full justify-start whitespace-normal text-left sm:w-auto"
                 aria-label="Thêm từ Ngân hàng câu hỏi"
                 title="Thêm từ Ngân hàng câu hỏi"
                 onClick={() => setBankPickerMode('manual')}
               >
                 <Database className="size-4" />
-                <span className="hidden xl:inline">Thêm từ Ngân hàng</span>
+                <span>Thêm từ Ngân hàng câu hỏi</span>
               </Button>
               <Button
                 type="button"
                 variant="secondary"
                 size="sm"
+                className="h-auto min-h-9 w-full justify-start whitespace-normal text-left sm:w-auto"
                 aria-label="Chọn ngẫu nhiên từ Ngân hàng câu hỏi"
                 title="Chọn ngẫu nhiên từ Ngân hàng câu hỏi"
                 onClick={() => setBankPickerMode('random')}
               >
                 <Dices className="size-4" />
-                <span className="hidden xl:inline">Chọn ngẫu nhiên</span>
+                <span>Chọn ngẫu nhiên từ Ngân hàng</span>
               </Button>
-            </>
+            </div>
           )}
           <Button type="button" variant="ghost" size="sm" onClick={onCancel}>
             Thoát

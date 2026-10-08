@@ -1,4 +1,4 @@
-import { ArrowLeft, Braces, Check, Eye, Languages, Sparkles, WandSparkles } from 'lucide-react';
+import { ArrowLeft, Braces, Check, Eye, Languages, Sparkles } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AppAlert } from '@/components/AppAlert';
@@ -107,9 +107,38 @@ export default function CreateQuiz() {
     </>
   );
 
+  const modeSelector = (
+    <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+      <span className="w-full text-xs font-semibold text-muted-foreground sm:w-auto">
+        Loại bộ đề
+      </span>
+      <div className="grid w-full grid-cols-2 gap-1 rounded-lg border border-border bg-muted/50 p-1 sm:w-auto">
+        <Button
+          type="button"
+          size="sm"
+          variant={quizMode === 'static' ? 'default' : 'ghost'}
+          aria-pressed={quizMode === 'static'}
+          onClick={() => setQuizMode('static')}
+        >
+          Bộ đề cố định
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant={quizMode === 'bank_generated' ? 'default' : 'ghost'}
+          aria-pressed={quizMode === 'bank_generated'}
+          onClick={() => setQuizMode('bank_generated')}
+        >
+          Bộ đề động
+        </Button>
+      </div>
+    </div>
+  );
+
   if (quizMode === 'bank_generated') {
     return (
       <DynamicQuizEditor
+        modeSelector={modeSelector}
         onCancel={() => setQuizMode('static')}
         onSaved={() => navigate(basePath)}
       />
@@ -211,15 +240,7 @@ export default function CreateQuiz() {
           allowQuestionBank={isSuperAdmin}
           headerExtra={
             <>
-              {isSuperAdmin && (
-                <Button
-                  type="button"
-                  variant="secondary"
-                  onClick={() => setQuizMode('bank_generated')}
-                >
-                  <WandSparkles className="size-4" /> Bộ đề động
-                </Button>
-              )}
+              {isSuperAdmin && modeSelector}
               <Button type="button" variant="ghost" onClick={() => setMode('json')}>
                 <Braces className="size-4" /> Nhập JSON
               </Button>
