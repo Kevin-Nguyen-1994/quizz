@@ -8,10 +8,10 @@ import {
   PencilLine,
   Search,
   SlidersHorizontal,
-  Zap,
 } from 'lucide-react';
 import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import { AppAlert } from '@/components/AppAlert';
+import { BrandLogo } from '@/components/BrandLogo';
 import { Input, Textarea } from '@/components/Input';
 import { MediaPicker } from '@/components/MediaPicker';
 import { QuizPreviewModal } from '@/components/QuizPreviewModal';
@@ -331,10 +331,7 @@ export function QuizStudio({
     <div data-theme={theme} className="flex h-dvh flex-col overflow-hidden bg-background">
       {/* Top bar */}
       <header className="z-20 flex min-h-14 shrink-0 flex-wrap items-center gap-2 border-b border-border bg-muted/40 px-3 py-2 backdrop-blur sm:gap-3 sm:px-4">
-        <span className="flex shrink-0 items-center gap-1.5 text-lg font-extrabold text-foreground">
-          <Zap className="size-5 fill-primary text-primary" />
-          <span className="hidden sm:inline">TiL Quiz</span>
-        </span>
+        <BrandLogo compact className="shrink-0 [&_img]:w-[96px]" />
         <span className="hidden h-5 w-px bg-border sm:block" />
         <input
           value={title}

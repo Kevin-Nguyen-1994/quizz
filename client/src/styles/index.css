@@ -1100,20 +1100,17 @@
   grid-template-columns: repeat(2, 1fr);
   gap: 16px;
 }
-@media (max-width: 560px) {
-  .quad-grid {
-    grid-template-columns: 1fr;
-    gap: 10px;
-  }
-  .option-quad {
-    padding: 14px 16px;
-    min-height: 64px;
-    gap: 12px;
-    font-size: 15px;
-    border-radius: 15px;
-  }
+.quad-grid-stacked {
+  grid-template-columns: minmax(0, 1fr);
 }
-
+.quad-grid-stacked .option-quad {
+  min-height: 76px;
+  padding-block: 18px;
+}
+.quad-grid-stacked .quad-label {
+  overflow-wrap: anywhere;
+  line-height: 1.45;
+}
 .option-quad {
   --quad-color: #b91c1c;
   display: flex;
@@ -1186,7 +1183,25 @@
 }
 .quad-label {
   flex: 1;
+  min-width: 0;
   line-height: 1.2;
+  white-space: normal;
+}
+@media (max-width: 560px) {
+  .quad-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+  }
+  .option-quad {
+    min-height: 64px;
+    gap: 12px;
+    border-radius: 15px;
+    padding: 14px 16px;
+    font-size: 15px;
+  }
+  .quad-grid-stacked .option-quad {
+    padding-block: 16px;
+  }
 }
 .quad-check {
   font-size: 22px;

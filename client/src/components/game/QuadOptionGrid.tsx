@@ -1,7 +1,7 @@
 import type { CSSProperties, ReactNode } from 'react';
 import { QuadGlyph } from '@/components/game/QuadGlyph';
 import { OptionText } from '@/components/OptionText';
-import { quadColor } from '@/helpers';
+import { isImageUrl, quadColor } from '@/helpers';
 import { cn } from '@/lib/utils';
 
 interface Props {
@@ -32,6 +32,19 @@ interface Props {
   labelClassName?: string;
 }
 
+const LONG_OPTION_THRESHOLD = 64;
+
+/**
+ * Long business answers are easier to scan in a single column. Keep this
+ * deterministic so Assignment, Live Game and quiz preview always agree.
+ */
+export function shouldStackAnswerOptions(options: string[]) {
+  return options.some((option) => {
+    const imageCandidate: string | null = option;
+    return !isImageUrl(imageCandidate) && option.trim().length > LONG_OPTION_THRESHOLD;
+  });
+}
+
 /**
  * The colored 2×2 answer grid (`quad-grid` / `option-quad`) shared by the host
  * question view and the player multiple-choice / multi-select / true-false
@@ -55,8 +68,10 @@ export function QuadOptionGrid({
   optionClassName,
   labelClassName,
 }: Props) {
+  const stackOptions = shouldStackAnswerOptions(options);
+
   return (
-    <div className={cn('quad-grid', className)}>
+    <div className={cn('quad-grid', stackOptions && 'quad-grid-stacked', className)}>
       {options.map((opt, i) => {
         const eliminated = eliminatedIndices.includes(i);
         const selected = selectedIndex === i || selectedIndices.includes(i);
