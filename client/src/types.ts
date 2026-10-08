@@ -502,6 +502,7 @@ export interface QuestionSelectionPreview {
     orderIndex: number;
     effectiveScore: number;
     effectiveTimeSec: number;
+    effectiveTimeSource: 'auto' | 'question_override' | 'rule_override';
     question: BankQuestionSummary;
   }>;
   totalQuestions: number;

@@ -760,7 +760,10 @@ export default function AssignmentEditor() {
                             </div>
                           </div>
                           <span className="shrink-0 text-sm text-muted-foreground">
-                            {item.effectiveScore} điểm · {item.effectiveTimeSec}s
+                            {item.effectiveScore} điểm ·{' '}
+                            {item.effectiveTimeSource === 'auto'
+                              ? `Thời gian tự động: ${item.effectiveTimeSec} giây`
+                              : `Thời gian cố định: ${item.effectiveTimeSec} giây`}
                           </span>
                         </div>
                       ))}

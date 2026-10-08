@@ -318,6 +318,11 @@ describe('Phase 7B Question Bank and dynamic assignment generation', () => {
     });
     const target = await assignmentService.previewAssignmentTarget(admin, assignment.id);
     const questionPreview = await generation.createAssignmentQuestionPreview(admin, assignment.id);
+    assert(
+      questionPreview.selected.every(
+        (item) => item.effectiveTimeSec === 25 && item.effectiveTimeSource === 'auto',
+      ),
+    );
     const published = await assignmentService.publishAssignment(admin, assignment.id, {
       targetFingerprint: target.fingerprint,
       questionFingerprint: questionPreview.selectionFingerprint,
@@ -330,6 +335,7 @@ describe('Phase 7B Question Bank and dynamic assignment generation', () => {
         source_bank_question_revision: number | null;
         source_category_code: string | null;
         minimum_level_code_snapshot: string | null;
+        time_sec: number;
       }>
     >('SELECT * FROM assignment_questions WHERE assignment_id = ? ORDER BY order_index', [
       assignment.id,
@@ -339,6 +345,7 @@ describe('Phase 7B Question Bank and dynamic assignment generation', () => {
     assert(snapshots.every((snapshot) => snapshot.source_bank_question_revision === 1));
     assert(snapshots.every((snapshot) => snapshot.source_category_code === 'THU_TUC_HAI_QUAN'));
     assert(snapshots.every((snapshot) => snapshot.minimum_level_code_snapshot === 'CS1'));
+    assert(snapshots.every((snapshot) => snapshot.time_sec === 25));
     assert.equal(
       (
         await databaseModule.db.get<{ count: number }>(

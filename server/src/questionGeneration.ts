@@ -1,7 +1,11 @@
 import crypto from 'node:crypto';
 import type { Database } from 'sqlite';
-import { config } from './config';
 import { db } from './db';
+import {
+  MIN_QUESTION_TIME_SECONDS,
+  resolveEffectiveQuestionTime,
+  type EffectiveQuestionTimeSource,
+} from './questionTiming';
 import { withImmediateTransaction } from './transactions';
 import type {
   DbAssignment,
@@ -60,6 +64,7 @@ export interface SelectedBankQuestion {
   orderIndex: number;
   effectiveScore: number;
   effectiveTimeSec: number;
+  effectiveTimeSource: EffectiveQuestionTimeSource;
 }
 
 export interface PoolRuleStatus {
@@ -120,7 +125,7 @@ export function normalizeGenerationRules(
       recommendedSecondsOverride: nullableInteger(
         rule.recommendedSecondsOverride,
         'recommendedSecondsOverride',
-        1,
+        MIN_QUESTION_TIME_SECONDS,
       ),
       sortOrder: rule.sortOrder === undefined ? index : integer(rule.sortOrder, 'sortOrder', 0),
     };
@@ -384,16 +389,17 @@ export async function resolveQuestionSelection(
         );
       }
       used.add(candidate.id);
+      const effectiveTime = resolveEffectiveQuestionTime(
+        candidate,
+        rule.recommended_seconds_override,
+      );
       selected.push({
         rule,
         question: candidate,
         orderIndex: selected.length,
         effectiveScore: rule.points_override ?? candidate.base_score,
-        effectiveTimeSec:
-          rule.recommended_seconds_override ??
-          candidate.recommended_seconds ??
-          candidate.time_sec ??
-          config.questionTimeSec,
+        effectiveTimeSec: effectiveTime.seconds,
+        effectiveTimeSource: effectiveTime.source,
       });
     }
   }

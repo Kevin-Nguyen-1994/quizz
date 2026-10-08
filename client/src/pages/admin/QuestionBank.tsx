@@ -25,6 +25,11 @@ import {
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { useAuthFetch } from '@/hooks/useAuthFetch';
+import {
+  calculateAutoQuestionTime,
+  questionTimeOverride,
+  withQuestionTimeOverride,
+} from '@/helpers/questionTiming';
 import type {
   BankQuestion,
   BankQuestionSummary,
@@ -144,6 +149,8 @@ function QuestionDialog({
   const baselineRef = useRef<string | null>(null);
   const [confirmingClose, setConfirmingClose] = useState(false);
   const legal = (q.source_metadata?.legal ?? {}) as Record<string, unknown>;
+  const autoTimeSec = calculateAutoQuestionTime(q);
+  const customTimeSec = questionTimeOverride(q.source_metadata);
   useEffect(() => {
     setError('');
     if (id === null) return;
@@ -555,19 +562,53 @@ function QuestionDialog({
                 />
               </div>
               <div className="space-y-2">
-                <Label>Giây khuyến nghị</Label>
-                <Input
-                  type="number"
-                  min="1"
-                  value={q.recommended_seconds ?? q.time_sec ?? 30}
-                  onChange={(e) =>
-                    updateQuestion((x) => ({
-                      ...x,
-                      recommended_seconds: Number(e.target.value),
-                      time_sec: Number(e.target.value),
-                    }))
+                <Label>Thời gian câu hỏi</Label>
+                <Select
+                  value={customTimeSec === null ? 'auto' : 'custom'}
+                  onValueChange={(value) =>
+                    updateQuestion((x) => {
+                      const seconds = value === 'custom' ? calculateAutoQuestionTime(x) : null;
+                      return {
+                        ...x,
+                        time_sec: seconds ?? x.time_sec,
+                        source_metadata: withQuestionTimeOverride(x.source_metadata, seconds),
+                      };
+                    })
                   }
-                />
+                >
+                  <SelectTrigger aria-label="Chế độ thời gian câu hỏi">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="auto">Tự động</SelectItem>
+                    <SelectItem value="custom">Tùy chỉnh</SelectItem>
+                  </SelectContent>
+                </Select>
+                {customTimeSec === null ? (
+                  <p className="text-xs text-muted-foreground">
+                    Hệ thống đề xuất: {autoTimeSec} giây
+                  </p>
+                ) : (
+                  <Input
+                    aria-label="Số giây tùy chỉnh"
+                    type="number"
+                    min="15"
+                    value={customTimeSec}
+                    onChange={(e) => {
+                      const seconds = Math.max(15, Number(e.target.value) || 15);
+                      updateQuestion((x) => ({
+                        ...x,
+                        time_sec: seconds,
+                        source_metadata: withQuestionTimeOverride(x.source_metadata, seconds),
+                      }));
+                    }}
+                  />
+                )}
+                {q.recommended_seconds !== null && q.recommended_seconds !== undefined && (
+                  <p className="text-xs text-muted-foreground">
+                    Tham khảo từ nguồn: {q.recommended_seconds} giây
+                  </p>
+                )}
               </div>
             </div>
             <div className="space-y-2 md:col-span-2">

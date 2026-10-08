@@ -8,6 +8,7 @@ import {
 } from '../questionContent';
 import { getRequestUser, requireSuperAdmin } from '../middleware';
 import { planSmartMix, SmartMixPlanError, type SmartMixRequest } from '../smartMix';
+import { MIN_QUESTION_TIME_SECONDS } from '../questionTiming';
 import { withImmediateTransaction } from '../transactions';
 import type {
   DbBankQuestion,
@@ -73,6 +74,21 @@ async function validateMetadata(database: typeof db, payload: BankQuestionPayloa
     (!Number.isInteger(payload.recommendedSeconds) || payload.recommendedSeconds < 1)
   ) {
     throw new QuestionContentError('recommendedSeconds is invalid');
+  }
+  const sourceMetadata = payload.sourceMetadata;
+  if (sourceMetadata && typeof sourceMetadata === 'object' && !Array.isArray(sourceMetadata)) {
+    const runtime = (sourceMetadata as Record<string, unknown>).runtime;
+    if (runtime && typeof runtime === 'object' && !Array.isArray(runtime)) {
+      const override = (runtime as Record<string, unknown>).time_seconds_override;
+      if (
+        override !== undefined &&
+        (!Number.isInteger(override) || (override as number) < MIN_QUESTION_TIME_SECONDS)
+      ) {
+        throw new QuestionContentError(
+          `Question time override must be at least ${MIN_QUESTION_TIME_SECONDS} seconds`,
+        );
+      }
+    }
   }
   const category = await database.get<{ is_active: number }>(
     'SELECT is_active FROM question_categories WHERE id = ?',

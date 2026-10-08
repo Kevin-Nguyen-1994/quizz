@@ -414,10 +414,10 @@ export function DynamicQuizEditor({
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label>Giây khuyến nghị (ghi đè)</Label>
+                    <Label>Thời gian cố định (ghi đè)</Label>
                     <Input
                       type="number"
-                      min="1"
+                      min="15"
                       inputMode="numeric"
                       value={r.recommendedSecondsOverride ?? ''}
                       placeholder="Theo câu hỏi"
