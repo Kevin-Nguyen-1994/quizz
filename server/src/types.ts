@@ -86,6 +86,8 @@ export interface QuizQuestion {
   matches?: string[];
   /** Free-form labels (difficulty/topic), e.g. ["easy", "geography"]. */
   tags?: string[];
+  sourceBankQuestionId?: number | null;
+  sourceBankQuestionRevision?: number | null;
 }
 
 export interface QuizImportPayload {
@@ -238,6 +240,8 @@ export interface DbQuestion {
   geo: string | null; // JSON GeoPoint {x,y}, used for geo
   matches: string | null; // JSON string[], index-aligned with options, used for matching
   tags: string | null; // JSON string[] of free-form labels
+  source_bank_question_id?: number | null;
+  source_bank_question_revision?: number | null;
 }
 
 export interface DbSession {
@@ -252,6 +256,11 @@ export interface DbSession {
   current_question_started_at_ms: number | null;
   quiz_title?: string;
   hosted_by_user_id: number | null;
+  uses_question_snapshot: number;
+  generation_seed: string | null;
+  question_pool_fingerprint: string | null;
+  question_selection_fingerprint: string | null;
+  quiz_blueprint_revision_snapshot: number | null;
 }
 
 export interface DbPlayer {

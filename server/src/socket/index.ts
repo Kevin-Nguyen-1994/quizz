@@ -3,6 +3,7 @@ import { type Socket, Server as SocketServer } from 'socket.io';
 import { parseIntegerInRange, scoreClosestToGuess } from '../closestTo';
 import { config } from '../config';
 import { db, getRankedPlayers } from '../db';
+import { loadSessionQuestions } from '../liveSessionQuestions';
 import { verifyToken } from '../middleware';
 import { linkPlayerToUser, resolveUserFromAuthToken, seedPlayProfile } from '../playProfile';
 import {
@@ -109,12 +110,11 @@ export function setupSockets(httpServer: HttpServer): SocketServer {
 
       const state = await getOrCreateActiveSession(
         session,
+        () => loadSessionQuestions(db, session),
         () =>
-          db.all<DbQuestion[]>(
-            'SELECT * FROM questions WHERE quiz_id = ? ORDER BY order_index',
-            session.quiz_id,
-          ),
-        () => loadQuizTranslations(session.quiz_id),
+          session.uses_question_snapshot === 1
+            ? Promise.resolve(new Map())
+            : loadQuizTranslations(session.quiz_id),
         socket.id,
       );
       state.adminSocketId = socket.id;
@@ -338,11 +338,16 @@ export function setupSockets(httpServer: HttpServer): SocketServer {
             text: string;
           }>
         >(
-          `SELECT a.question_id, a.score, a.is_correct, q.text
+          `SELECT a.question_id, a.score, a.is_correct, COALESCE(q.text, lsq.text) AS text
            FROM answers a
-           JOIN questions q ON q.id = a.question_id
+           JOIN sessions s ON s.id = a.session_id
+           LEFT JOIN questions q
+             ON s.uses_question_snapshot = 0 AND q.id = a.question_id
+           LEFT JOIN live_session_questions lsq
+             ON s.uses_question_snapshot = 1 AND lsq.session_id = a.session_id
+            AND lsq.id = a.question_id
            WHERE a.player_id = ? AND a.session_id = ?
-           ORDER BY q.order_index`,
+           ORDER BY COALESCE(q.order_index, lsq.order_index)`,
           playerId,
           sessionId,
         );
@@ -426,12 +431,11 @@ export function setupSockets(httpServer: HttpServer): SocketServer {
           const wasActive = activeSessions.has(pin);
           const state = await getOrCreateActiveSession(
             session,
+            () => loadSessionQuestions(db, session),
             () =>
-              db.all<DbQuestion[]>(
-                'SELECT * FROM questions WHERE quiz_id = ? ORDER BY order_index',
-                session.quiz_id,
-              ),
-            () => loadQuizTranslations(session.quiz_id),
+              session.uses_question_snapshot === 1
+                ? Promise.resolve(new Map())
+                : loadQuizTranslations(session.quiz_id),
           );
           if (wasActive) state.status = session.status as ActiveSession['status'];
 
@@ -507,12 +511,11 @@ export function setupSockets(httpServer: HttpServer): SocketServer {
         const wasActive = activeSessions.has(pin);
         const state = await getOrCreateActiveSession(
           session,
+          () => loadSessionQuestions(db, session),
           () =>
-            db.all<DbQuestion[]>(
-              'SELECT * FROM questions WHERE quiz_id = ? ORDER BY order_index',
-              session.quiz_id,
-            ),
-          () => loadQuizTranslations(session.quiz_id),
+            session.uses_question_snapshot === 1
+              ? Promise.resolve(new Map())
+              : loadQuizTranslations(session.quiz_id),
         );
         if (wasActive) state.status = session.status as ActiveSession['status'];
 
@@ -1213,14 +1216,9 @@ async function emitReconnectGameState(
     }
     return;
   }
-
 }
 
-async function sendQuestion(
-  io: SocketServer,
-  state: ActiveSession,
-  index: number,
-): Promise<void> {
+async function sendQuestion(io: SocketServer, state: ActiveSession, index: number): Promise<void> {
   // Cancel any pending results auto-advance timer
   if (state.resultsTimer) {
     clearTimeout(state.resultsTimer);

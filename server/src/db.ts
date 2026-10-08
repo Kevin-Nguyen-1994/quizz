@@ -420,6 +420,36 @@ async function migrateQuestionBank(): Promise<void> {
         PRIMARY KEY(preview_id, order_index),
         UNIQUE(preview_id, bank_question_id)
       );
+
+      CREATE TABLE IF NOT EXISTS live_session_questions (
+        id                            INTEGER PRIMARY KEY AUTOINCREMENT,
+        session_id                    INTEGER NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+        source_bank_question_id       INTEGER REFERENCES bank_questions(id) ON DELETE RESTRICT,
+        source_bank_question_revision INTEGER,
+        source_generation_rule_id     INTEGER,
+        text                          TEXT NOT NULL,
+        options                       TEXT NOT NULL,
+        correct_index                 INTEGER NOT NULL DEFAULT 0,
+        correct_indices               TEXT,
+        base_score                    INTEGER NOT NULL DEFAULT 500,
+        time_sec                      INTEGER NOT NULL DEFAULT 20,
+        order_index                   INTEGER NOT NULL DEFAULT 0,
+        image_url                     TEXT,
+        explanation                   TEXT,
+        range_min                     INTEGER,
+        range_max                     INTEGER,
+        question_type                 TEXT NOT NULL DEFAULT 'multiple_choice',
+        correct_answer                TEXT,
+        media_url                     TEXT,
+        media_type                    TEXT,
+        blanks                        TEXT,
+        geo                           TEXT,
+        matches                       TEXT,
+        tags                          TEXT,
+        source_metadata_snapshot      TEXT,
+        UNIQUE(session_id, order_index),
+        UNIQUE(session_id, source_bank_question_id)
+      );
     `);
 
     await addColumnIfMissing(
@@ -437,6 +467,27 @@ async function migrateQuestionBank(): Promise<void> {
       'blueprint_revision',
       'blueprint_revision INTEGER NOT NULL DEFAULT 1',
     );
+
+    await addColumnIfMissing(
+      'questions',
+      'source_bank_question_id',
+      'source_bank_question_id INTEGER REFERENCES bank_questions(id) ON DELETE RESTRICT',
+    );
+    await addColumnIfMissing(
+      'questions',
+      'source_bank_question_revision',
+      'source_bank_question_revision INTEGER',
+    );
+
+    for (const [column, definition] of [
+      ['uses_question_snapshot', 'uses_question_snapshot INTEGER NOT NULL DEFAULT 0'],
+      ['generation_seed', 'generation_seed TEXT'],
+      ['question_pool_fingerprint', 'question_pool_fingerprint TEXT'],
+      ['question_selection_fingerprint', 'question_selection_fingerprint TEXT'],
+      ['quiz_blueprint_revision_snapshot', 'quiz_blueprint_revision_snapshot INTEGER'],
+    ] as const) {
+      await addColumnIfMissing('sessions', column, definition);
+    }
 
     for (const [column, definition] of [
       ['generation_seed', 'generation_seed TEXT'],
@@ -501,6 +552,10 @@ async function migrateQuestionBank(): Promise<void> {
         ON quiz_generation_rules(quiz_id, sort_order, id);
       CREATE INDEX IF NOT EXISTS idx_assignment_questions_bank_source
         ON assignment_questions(source_bank_question_id, source_bank_question_revision);
+      CREATE INDEX IF NOT EXISTS idx_questions_bank_source
+        ON questions(quiz_id, source_bank_question_id);
+      CREATE INDEX IF NOT EXISTS idx_live_session_questions_session
+        ON live_session_questions(session_id, order_index);
     `);
     await db.run('COMMIT');
   } catch (error) {

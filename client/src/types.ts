@@ -447,6 +447,43 @@ export interface BankQuestion extends BankQuestionSummary {
   source_metadata: Record<string, unknown>;
 }
 
+export interface QuestionBankImportResult {
+  dryRun: boolean;
+  bankId: string;
+  bankVersion: string;
+  schemaVersion: string;
+  sourceHash: string;
+  questionCount: number;
+  insertedCount: number;
+  updatedCount: number;
+  skippedCount: number;
+  conflictCount: number;
+  errorCount: number;
+  categories: Record<string, number>;
+  levels: Record<string, number>;
+  types: Record<string, number>;
+  difficulties: Record<string, number>;
+  conflicts: Array<{
+    sourceQuestionId: string;
+    existingRevision: number;
+    topic: string | null;
+    text: string;
+  }>;
+}
+
+export interface DynamicLivePreview {
+  seed: string;
+  poolFingerprint: string;
+  selectionFingerprint: string;
+  blueprintRevision: number;
+  totalQuestions: number;
+  totalScore: number;
+  recommendedTotalSeconds: number;
+  criticalCount: number;
+  levelCounts: Record<string, number>;
+  questions: Question[];
+}
+
 export interface QuizGenerationRule {
   id?: number;
   categoryId: number | null;
@@ -532,6 +569,8 @@ export interface Question {
   geo?: GeoPoint | null;
   matches?: string[] | null;
   tags?: string[] | null;
+  source_bank_question_id?: number | null;
+  source_bank_question_revision?: number | null;
 }
 
 export interface Session {
@@ -549,6 +588,7 @@ export interface Session {
   hosted_by_user_id?: number | null;
   host_email?: string | null;
   host_username?: string | null;
+  uses_question_snapshot?: number;
 }
 
 export interface Player {
@@ -696,6 +736,8 @@ export interface ImportQuestion {
   /** matching: correct right-hand item per `options[i]` (left item), 2-6 pairs. */
   matches?: string[];
   tags?: string[];
+  sourceBankQuestionId?: number | null;
+  sourceBankQuestionRevision?: number | null;
 }
 
 export interface ImportPayload {

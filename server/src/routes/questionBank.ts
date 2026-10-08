@@ -1,14 +1,15 @@
 import crypto from 'node:crypto';
 import { type Request, type Response, Router } from 'express';
 import { db } from '../db';
+import { getRequestUser, requireSuperAdmin } from '../middleware';
+import { importSourceQuestionBankText, QuestionBankImportError } from '../questionBankImport';
 import {
   normalizeQuestionContent,
   QuestionContentError,
   storedQuestionValues,
 } from '../questionContent';
-import { getRequestUser, requireSuperAdmin } from '../middleware';
-import { planSmartMix, SmartMixPlanError, type SmartMixRequest } from '../smartMix';
 import { MIN_QUESTION_TIME_SECONDS } from '../questionTiming';
+import { planSmartMix, SmartMixPlanError, type SmartMixRequest } from '../smartMix';
 import { withImmediateTransaction } from '../transactions';
 import type {
   DbBankQuestion,
@@ -192,6 +193,60 @@ questionBankRouter.get('/imports', async (_req, res) => {
   });
 });
 
+questionBankRouter.post('/imports/dry-run', async (req, res) => {
+  try {
+    const body = req.body as { sourceText?: unknown; sourceFilename?: unknown };
+    if (typeof body.sourceText !== 'string') {
+      return res.status(400).json({ error: 'sourceText is required' });
+    }
+    const result = await importSourceQuestionBankText(
+      body.sourceText,
+      typeof body.sourceFilename === 'string' ? body.sourceFilename : 'question-bank.json',
+      { dryRun: true },
+    );
+    res.json({ result });
+  } catch (error) {
+    if (error instanceof QuestionBankImportError) {
+      return res.status(400).json({ error: error.message, details: error.details });
+    }
+    throw error;
+  }
+});
+
+questionBankRouter.post('/imports/apply', async (req, res) => {
+  try {
+    const body = req.body as {
+      sourceText?: unknown;
+      sourceFilename?: unknown;
+      updateSourceQuestionIds?: unknown;
+    };
+    if (typeof body.sourceText !== 'string') {
+      return res.status(400).json({ error: 'sourceText is required' });
+    }
+    if (
+      body.updateSourceQuestionIds !== undefined &&
+      (!Array.isArray(body.updateSourceQuestionIds) ||
+        body.updateSourceQuestionIds.some((id) => typeof id !== 'string'))
+    ) {
+      return res.status(400).json({ error: 'updateSourceQuestionIds is invalid' });
+    }
+    const result = await importSourceQuestionBankText(
+      body.sourceText,
+      typeof body.sourceFilename === 'string' ? body.sourceFilename : 'question-bank.json',
+      {
+        updateSourceQuestionIds: (body.updateSourceQuestionIds as string[] | undefined) ?? [],
+        skipUnselectedUpdates: true,
+      },
+    );
+    res.json({ result });
+  } catch (error) {
+    if (error instanceof QuestionBankImportError) {
+      return res.status(400).json({ error: error.message, details: error.details });
+    }
+    throw error;
+  }
+});
+
 questionBankRouter.post('/smart-mix/plan', async (req, res) => {
   try {
     const body = req.body as SmartMixRequest;
@@ -267,8 +322,7 @@ questionBankRouter.post('/smart-mix/plan', async (req, res) => {
           minimumLevelId: level.id,
           minimumLevelCode: level.code,
           critical,
-          availableCount:
-            countMap.get(`${category.id}:${level.id}:${critical ? 1 : 0}`) ?? 0,
+          availableCount: countMap.get(`${category.id}:${level.id}:${critical ? 1 : 0}`) ?? 0,
         })),
       ),
     );
@@ -307,6 +361,10 @@ questionBankRouter.get('/questions', async (req, res) => {
     const term = `%${req.query.search.trim()}%`;
     values.push(term, term, term);
   }
+  if (typeof req.query.topic === 'string' && req.query.topic.trim()) {
+    where.push('bq.topic LIKE ?');
+    values.push(`%${req.query.topic.trim()}%`);
+  }
   const limit = Math.min(Math.max(Number(req.query.limit) || 50, 1), 200);
   const offset = Math.max(Number(req.query.offset) || 0, 0);
   const questions = await db.all(
@@ -326,6 +384,103 @@ questionBankRouter.get('/questions', async (req, res) => {
     values,
   );
   res.json({ questions, total: count?.count ?? 0, limit, offset });
+});
+
+questionBankRouter.post('/questions/random-preview', async (req, res) => {
+  try {
+    const body = req.body as {
+      seed?: unknown;
+      count?: unknown;
+      categoryId?: unknown;
+      minimumLevelId?: unknown;
+      difficulty?: unknown;
+      questionType?: unknown;
+      critical?: unknown;
+      topic?: unknown;
+      excludeIds?: unknown;
+    };
+    const count = Number(body.count);
+    if (!Number.isInteger(count) || count < 1 || count > 100) {
+      throw new QuestionContentError('count must be between 1 and 100');
+    }
+    const where = ['bq.is_enabled = 1', 'qc.is_active = 1'];
+    const values: unknown[] = [];
+    for (const [column, value] of [
+      ['bq.category_id', body.categoryId],
+      ['bq.minimum_level_id', body.minimumLevelId],
+      ['bq.difficulty', body.difficulty],
+      ['bq.question_type', body.questionType],
+      ['bq.critical', body.critical],
+    ] as const) {
+      if (value !== undefined && value !== null && value !== '') {
+        where.push(`${column} = ?`);
+        values.push(value);
+      }
+    }
+    if (typeof body.topic === 'string' && body.topic.trim()) {
+      where.push('bq.topic LIKE ?');
+      values.push(`%${body.topic.trim()}%`);
+    }
+    if (
+      body.excludeIds !== undefined &&
+      (!Array.isArray(body.excludeIds) ||
+        body.excludeIds.length > 500 ||
+        body.excludeIds.some((id) => !Number.isInteger(id) || (id as number) < 1))
+    ) {
+      throw new QuestionContentError('excludeIds is invalid');
+    }
+    const excludeIds = (body.excludeIds as number[] | undefined) ?? [];
+    if (excludeIds.length > 0) {
+      where.push(`bq.id NOT IN (${excludeIds.map(() => '?').join(', ')})`);
+      values.push(...excludeIds);
+    }
+    const candidates = await db.all<
+      Array<
+        DbBankQuestion & {
+          category_code: string;
+          category_name: string;
+          minimum_level_code: string;
+        }
+      >
+    >(
+      `SELECT bq.*, qc.code AS category_code, qc.name AS category_name,
+              el.code AS minimum_level_code
+       FROM bank_questions bq
+       JOIN question_categories qc ON qc.id = bq.category_id
+       JOIN employee_levels el ON el.id = bq.minimum_level_id
+       WHERE ${where.join(' AND ')}`,
+      values,
+    );
+    if (candidates.length < count) {
+      return res.status(409).json({
+        error: `Chỉ có ${candidates.length} câu phù hợp, không đủ ${count} câu.`,
+        code: 'QUESTION_POOL_INSUFFICIENT',
+        availableCount: candidates.length,
+      });
+    }
+    const seed =
+      typeof body.seed === 'string' && body.seed.trim()
+        ? body.seed.trim()
+        : crypto.randomBytes(16).toString('hex');
+    const ranked = candidates
+      .map((question) => ({
+        question,
+        rank: crypto
+          .createHash('sha256')
+          .update(`${seed}|${question.id}|${question.revision}`)
+          .digest('hex'),
+      }))
+      .sort((left, right) =>
+        left.rank === right.rank
+          ? left.question.id - right.question.id
+          : left.rank.localeCompare(right.rank),
+      )
+      .slice(0, count)
+      .map(({ question }) => parseBankQuestion(question));
+    res.json({ seed, availableCount: candidates.length, questions: ranked });
+  } catch (error) {
+    handleError(error, res);
+  }
 });
 
 questionBankRouter.get('/questions/:id', async (req, res) => {

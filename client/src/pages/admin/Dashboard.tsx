@@ -23,7 +23,16 @@ import { useDialog } from '../../context/DialogContext';
 import { groupQuizzesByOwner } from '../../helpers/groupByOwner';
 import { useAuthFetch } from '../../hooks/useAuthFetch';
 import { useCreatorBase } from '../../hooks/useCreatorBase';
-import type { AppConfig, GameSettings, ImportQuestion, Quiz, Session, ThemeId } from '../../types';
+import type {
+  AppConfig,
+  DynamicLivePreview,
+  GameSettings,
+  ImportQuestion,
+  Quiz,
+  Session,
+  ThemeId,
+} from '../../types';
+import { DynamicLivePreviewModal } from './components/DynamicLivePreviewModal';
 import { PreGameSettingsModal } from './components/PreGameSettingsModal';
 
 export default function Dashboard() {
@@ -47,6 +56,8 @@ export default function Dashboard() {
     theme?: ThemeId;
     questions: ImportQuestion[];
   } | null>(null);
+  const [dynamicPreview, setDynamicPreview] = useState<DynamicLivePreview | null>(null);
+  const [pendingGameSettings, setPendingGameSettings] = useState<GameSettings | null>(null);
 
   const [closing, setClosing] = useState<number | null>(null);
 
@@ -110,6 +121,13 @@ export default function Dashboard() {
 
   async function confirmStart(gameSettings: GameSettings) {
     if (!pendingStartQuizId) return;
+    const quiz = quizzes.find((item) => item.id === pendingStartQuizId);
+    if (quiz?.quiz_mode === 'bank_generated') {
+      setShowSettingsModal(false);
+      setPendingGameSettings(gameSettings);
+      await loadDynamicPreview(pendingStartQuizId);
+      return;
+    }
     setStarting(pendingStartQuizId);
     setShowSettingsModal(false);
     const { ok, data } = await api.post<{ id: number }>('/api/admin/sessions', {
@@ -121,6 +139,40 @@ export default function Dashboard() {
       sessionStorage.setItem(`gameSettings:${data.id}`, JSON.stringify(gameSettings));
       navigate(`${basePath}/game/${data.id}`);
     }
+  }
+
+  async function loadDynamicPreview(quizId: number) {
+    setStarting(quizId);
+    const response = await api.post<{ preview?: DynamicLivePreview; error?: string }>(
+      `/api/admin/quizzes/${quizId}/live-preview`,
+    );
+    setStarting(null);
+    if (!response.ok || !response.data.preview) {
+      await alert({ message: response.data.error ?? 'Không thể tạo đề Live xem trước.' });
+      return;
+    }
+    setDynamicPreview(response.data.preview);
+  }
+
+  async function startDynamicLive() {
+    if (!pendingStartQuizId || !dynamicPreview || !pendingGameSettings) return;
+    setStarting(pendingStartQuizId);
+    const response = await api.post<{ id?: number; error?: string }>('/api/admin/sessions', {
+      quizId: pendingStartQuizId,
+      generationSeed: dynamicPreview.seed,
+      poolFingerprint: dynamicPreview.poolFingerprint,
+      selectionFingerprint: dynamicPreview.selectionFingerprint,
+    });
+    setStarting(null);
+    if (!response.ok || !response.data.id) {
+      await alert({ message: response.data.error ?? 'Không thể bắt đầu Live Game.' });
+      return;
+    }
+    sessionStorage.setItem(`gameSettings:${response.data.id}`, JSON.stringify(pendingGameSettings));
+    setDynamicPreview(null);
+    setPendingGameSettings(null);
+    setPendingStartQuizId(null);
+    navigate(`${basePath}/game/${response.data.id}`);
   }
 
   async function deleteQuiz(id: number) {
@@ -187,12 +239,7 @@ export default function Dashboard() {
               variant="success"
               size="sm"
               onClick={() => handleStartClick(q.id)}
-              disabled={starting === q.id || q.quiz_mode === 'bank_generated'}
-              title={
-                q.quiz_mode === 'bank_generated'
-                  ? 'Bộ đề động hiện chỉ hỗ trợ Bài kiểm tra, chưa hỗ trợ Live Game.'
-                  : undefined
-              }
+              disabled={starting === q.id}
             >
               {starting === q.id ? (
                 '…'
@@ -418,6 +465,19 @@ export default function Dashboard() {
           questions={preview.questions}
           theme={preview.theme}
           onClose={() => setPreview(null)}
+        />
+      )}
+      {dynamicPreview && (
+        <DynamicLivePreviewModal
+          preview={dynamicPreview}
+          loading={starting === pendingStartQuizId}
+          onRegenerate={() => pendingStartQuizId && loadDynamicPreview(pendingStartQuizId)}
+          onConfirm={startDynamicLive}
+          onClose={() => {
+            setDynamicPreview(null);
+            setPendingGameSettings(null);
+            setPendingStartQuizId(null);
+          }}
         />
       )}
     </Page>

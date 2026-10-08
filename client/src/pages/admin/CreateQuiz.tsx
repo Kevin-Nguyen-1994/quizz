@@ -208,6 +208,7 @@ export default function CreateQuiz() {
           onSave={saveQuiz}
           onCancel={() => navigate(basePath)}
           onValidationError={setJsonError}
+          allowQuestionBank={isSuperAdmin}
           headerExtra={
             <>
               {isSuperAdmin && (

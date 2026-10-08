@@ -2,12 +2,12 @@ import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { db } from './db';
+import { CS_V2_TOPIC_CATEGORY } from './questionBankCatalog';
 import {
   normalizeQuestionContent,
   type StoredQuestionContent,
   storedQuestionValues,
 } from './questionContent';
-import { CS_V2_TOPIC_CATEGORY } from './questionBankCatalog';
 import { withImmediateTransaction } from './transactions';
 import type { QuestionCompetency, QuestionDifficulty, QuizQuestion } from './types';
 
@@ -18,6 +18,7 @@ interface SourceOption {
 
 interface SourceQuestion {
   id: string;
+  category_code?: string;
   minimum_level: string;
   topic: string | null;
   competency: { code: QuestionCompetency; label_vi?: string };
@@ -66,7 +67,19 @@ export interface QuestionBankImportResult {
   levels: Record<string, number>;
   types: Record<string, number>;
   difficulties: Record<string, number>;
-  conflicts: Array<{ sourceQuestionId: string; existingRevision: number }>;
+  conflicts: Array<{
+    sourceQuestionId: string;
+    existingRevision: number;
+    topic: string | null;
+    text: string;
+  }>;
+}
+
+export interface QuestionBankImportOptions {
+  dryRun?: boolean;
+  applyUpdates?: boolean;
+  updateSourceQuestionIds?: string[];
+  skipUnselectedUpdates?: boolean;
 }
 
 export class QuestionBankImportError extends Error {
@@ -94,8 +107,13 @@ function validateSourceQuestion(question: SourceQuestion, seen: Set<string>): vo
   if (question.minimum_level !== 'CS1' && question.minimum_level !== 'CS2') {
     throw new QuestionBankImportError(`${question.id}: unsupported minimum_level`);
   }
-  if (!question.topic?.trim() || !CS_V2_TOPIC_CATEGORY.has(question.topic)) {
-    throw new QuestionBankImportError(`${question.id}: topic has no approved category mapping`);
+  if (!question.topic?.trim()) {
+    throw new QuestionBankImportError(`${question.id}: topic is required`);
+  }
+  if (!question.category_code && !CS_V2_TOPIC_CATEGORY.has(question.topic)) {
+    throw new QuestionBankImportError(
+      `${question.id}: category_code is missing and topic has no approved mapping`,
+    );
   }
   if (!['easy', 'medium', 'hard'].includes(question.difficulty?.code)) {
     throw new QuestionBankImportError(`${question.id}: invalid difficulty`);
@@ -222,12 +240,14 @@ function sourceMetadata(question: SourceQuestion): string {
   });
 }
 
-export async function readSourceQuestionBank(filename: string): Promise<{
+function parseSourceQuestionBank(
+  raw: Buffer,
+  sourceFilename: string,
+): {
   bank: SourceBank;
   sourceHash: string;
   sourceFilename: string;
-}> {
-  const raw = await fs.readFile(filename);
+} {
   let bank: SourceBank;
   try {
     bank = JSON.parse(raw.toString('utf8')) as SourceBank;
@@ -249,14 +269,23 @@ export async function readSourceQuestionBank(filename: string): Promise<{
   bank.questions.forEach((question) => {
     validateSourceQuestion(question, seen);
   });
-  return { bank, sourceHash: sha256(raw), sourceFilename: path.basename(filename) };
+  return { bank, sourceHash: sha256(raw), sourceFilename: path.basename(sourceFilename) };
 }
 
-export async function importSourceQuestionBank(
-  filename: string,
-  options: { dryRun?: boolean; applyUpdates?: boolean } = {},
+export async function readSourceQuestionBank(filename: string): Promise<{
+  bank: SourceBank;
+  sourceHash: string;
+  sourceFilename: string;
+}> {
+  return parseSourceQuestionBank(await fs.readFile(filename), filename);
+}
+
+async function importValidatedSourceQuestionBank(
+  input: { bank: SourceBank; sourceHash: string; sourceFilename: string },
+  options: QuestionBankImportOptions = {},
 ): Promise<QuestionBankImportResult> {
-  const { bank, sourceHash, sourceFilename } = await readSourceQuestionBank(filename);
+  const { bank, sourceHash, sourceFilename } = input;
+  const selectedUpdates = new Set(options.updateSourceQuestionIds ?? []);
   const categories = await db.all<Array<{ id: number; code: string }>>(
     'SELECT id, code FROM question_categories',
   );
@@ -290,31 +319,67 @@ export async function importSourceQuestionBank(
     levelId: number;
     content: StoredQuestionContent;
     contentHash: string;
-    existing: { id: number; source_content_hash: string; revision: number } | undefined;
+    existing:
+      | {
+          id: number;
+          source_content_hash: string;
+          revision: number;
+          topic: string;
+          text: string;
+        }
+      | undefined;
     metadata: string;
+    action: 'insert' | 'unchanged' | 'update' | 'conflict';
   }> = [];
   for (const source of bank.questions) {
-    const categoryCode = CS_V2_TOPIC_CATEGORY.get(source.topic as string) as string;
-    const categoryId = categoryByCode.get(categoryCode);
+    const categoryCode =
+      source.category_code?.trim().toUpperCase() ??
+      (CS_V2_TOPIC_CATEGORY.get(source.topic as string) as string | undefined);
+    const categoryId = categoryCode ? categoryByCode.get(categoryCode) : undefined;
     const levelId = levelByCode.get(source.minimum_level);
     if (!categoryId || !levelId) {
-      throw new QuestionBankImportError(`${source.id}: category or employee level is missing`);
+      const missing = [
+        !categoryId ? `category_code ${categoryCode ?? '(missing)'}` : null,
+        !levelId ? `employee level ${source.minimum_level}` : null,
+      ].filter(Boolean);
+      throw new QuestionBankImportError(
+        `${source.id}: unsupported ${missing.join(' and ')}. Create or enable it before importing.`,
+      );
     }
     const content = normalizeQuestionContent(adaptQuestion(source));
     const contentHash = sha256(JSON.stringify(source));
-    const existing = await db.get<{ id: number; source_content_hash: string; revision: number }>(
-      `SELECT id, source_content_hash, revision FROM bank_questions
+    const existing = await db.get<{
+      id: number;
+      source_content_hash: string;
+      revision: number;
+      topic: string;
+      text: string;
+    }>(
+      `SELECT id, source_content_hash, revision, topic, text FROM bank_questions
        WHERE source_bank_id = ? AND source_question_id = ?`,
       [bank.bank_id, source.id],
     );
-    if (!existing) result.insertedCount += 1;
-    else if (existing.source_content_hash === contentHash) result.skippedCount += 1;
-    else if (options.applyUpdates) result.updatedCount += 1;
-    else {
+    let action: 'insert' | 'unchanged' | 'update' | 'conflict';
+    if (!existing) {
+      action = 'insert';
+      result.insertedCount += 1;
+    } else if (existing.source_content_hash === contentHash) {
+      action = 'unchanged';
+      result.skippedCount += 1;
+    } else if (options.applyUpdates || selectedUpdates.has(source.id)) {
+      action = 'update';
+      result.updatedCount += 1;
+    } else {
+      action = 'conflict';
       result.conflictCount += 1;
-      result.conflicts.push({ sourceQuestionId: source.id, existingRevision: existing.revision });
+      result.conflicts.push({
+        sourceQuestionId: source.id,
+        existingRevision: existing.revision,
+        topic: existing.topic,
+        text: existing.text,
+      });
     }
-    increment(result.categories, categoryCode);
+    increment(result.categories, categoryCode as string);
     increment(result.levels, source.minimum_level);
     increment(result.types, content.question_type);
     increment(result.difficulties, source.difficulty.code);
@@ -326,11 +391,12 @@ export async function importSourceQuestionBank(
       contentHash,
       existing,
       metadata: sourceMetadata(source),
+      action,
     });
   }
 
   if (options.dryRun) return result;
-  if (result.conflictCount > 0) {
+  if (result.conflictCount > 0 && !options.skipUnselectedUpdates) {
     throw new QuestionBankImportError(
       'Import contains changed source questions; rerun with explicit update confirmation',
       result,
@@ -342,35 +408,62 @@ export async function importSourceQuestionBank(
      WHERE bank_id = ? AND bank_version = ? AND source_hash = ?`,
     [bank.bank_id, bank.bank_version, sourceHash],
   );
-  if (completed && result.insertedCount === 0 && result.updatedCount === 0) return result;
+  if (
+    completed &&
+    result.insertedCount === 0 &&
+    result.updatedCount === 0 &&
+    result.conflictCount === 0
+  ) {
+    return result;
+  }
 
   await withImmediateTransaction(async (database) => {
     const now = Date.now();
-    const importRow = await database.run(
-      `INSERT INTO question_bank_imports (
-         bank_id, bank_version, schema_version, source_hash, source_filename, imported_at_ms,
-         inserted_count, updated_count, skipped_count, conflict_count, error_count, summary_json
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?)`,
-      bank.bank_id,
-      bank.bank_version,
-      bank.schema_version,
-      sourceHash,
-      sourceFilename,
-      now,
-      result.insertedCount,
-      result.updatedCount,
-      result.skippedCount,
-      JSON.stringify({
-        questionCount: result.questionCount,
-        categories: result.categories,
-        levels: result.levels,
-        types: result.types,
-        difficulties: result.difficulties,
-      }),
-    );
-    const importId = Number(importRow.lastID);
+    const summary = JSON.stringify({
+      questionCount: result.questionCount,
+      categories: result.categories,
+      levels: result.levels,
+      types: result.types,
+      difficulties: result.difficulties,
+    });
+    let importId: number;
+    if (completed) {
+      importId = completed.id;
+      await database.run(
+        `UPDATE question_bank_imports SET imported_at_ms = ?, source_filename = ?,
+           inserted_count = ?, updated_count = ?, skipped_count = ?, conflict_count = ?,
+           error_count = 0, summary_json = ? WHERE id = ?`,
+        now,
+        sourceFilename,
+        result.insertedCount,
+        result.updatedCount,
+        result.skippedCount,
+        result.conflictCount,
+        summary,
+        importId,
+      );
+    } else {
+      const importRow = await database.run(
+        `INSERT INTO question_bank_imports (
+           bank_id, bank_version, schema_version, source_hash, source_filename, imported_at_ms,
+           inserted_count, updated_count, skipped_count, conflict_count, error_count, summary_json
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`,
+        bank.bank_id,
+        bank.bank_version,
+        bank.schema_version,
+        sourceHash,
+        sourceFilename,
+        now,
+        result.insertedCount,
+        result.updatedCount,
+        result.skippedCount,
+        result.conflictCount,
+        summary,
+      );
+      importId = Number(importRow.lastID);
+    }
     for (const item of prepared) {
-      if (!item.existing) {
+      if (item.action === 'insert') {
         await database.run(
           `INSERT INTO bank_questions (
              source_bank_id, source_question_id, source_bank_version, source_content_hash,
@@ -399,7 +492,7 @@ export async function importSourceQuestionBank(
           now,
           now,
         );
-      } else if (item.existing.source_content_hash !== item.contentHash && options.applyUpdates) {
+      } else if (item.action === 'update' && item.existing) {
         await database.run(
           `UPDATE bank_questions SET
              source_bank_version = ?, source_content_hash = ?, last_import_id = ?,
@@ -425,7 +518,7 @@ export async function importSourceQuestionBank(
           now,
           item.existing.id,
         );
-      } else {
+      } else if (item.action === 'unchanged' && item.existing) {
         await database.run(
           `UPDATE bank_questions
            SET source_bank_version = ?, last_import_id = ?
@@ -438,4 +531,28 @@ export async function importSourceQuestionBank(
     }
   });
   return result;
+}
+
+export async function importSourceQuestionBank(
+  filename: string,
+  options: QuestionBankImportOptions = {},
+): Promise<QuestionBankImportResult> {
+  return importValidatedSourceQuestionBank(await readSourceQuestionBank(filename), options);
+}
+
+export async function importSourceQuestionBankText(
+  sourceText: string,
+  sourceFilename: string,
+  options: QuestionBankImportOptions = {},
+): Promise<QuestionBankImportResult> {
+  if (typeof sourceText !== 'string' || !sourceText.trim()) {
+    throw new QuestionBankImportError('Question Bank source is empty');
+  }
+  return importValidatedSourceQuestionBank(
+    parseSourceQuestionBank(
+      Buffer.from(sourceText, 'utf8'),
+      sourceFilename || 'question-bank.json',
+    ),
+    options,
+  );
 }

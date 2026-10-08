@@ -56,12 +56,7 @@ export function CompactQuizList({
               variant="success"
               size="sm"
               onClick={() => onStart(q.id)}
-              disabled={starting === q.id || q.quiz_mode === 'bank_generated'}
-              title={
-                q.quiz_mode === 'bank_generated'
-                  ? 'Bộ đề động hiện chỉ hỗ trợ Bài kiểm tra, chưa hỗ trợ Live Game.'
-                  : undefined
-              }
+              disabled={starting === q.id}
             >
               {starting === q.id ? (
                 '…'

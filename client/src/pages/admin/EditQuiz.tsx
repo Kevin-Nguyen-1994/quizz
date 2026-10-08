@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { mapDbQuestionToImport, type QuestionWithKey } from '@/helpers';
 import { DEFAULT_LOCALE } from '@/helpers/locale';
 import CreatorNav from '../../components/CreatorNav';
+import { useAuth } from '../../context/AuthContext';
 import { useAuthFetch } from '../../hooks/useAuthFetch';
 import { useCreatorBase } from '../../hooks/useCreatorBase';
 import type { ImportPayload, ThemeId } from '../../types';
@@ -17,6 +18,7 @@ export default function EditQuiz() {
   const api = useAuthFetch();
   const navigate = useNavigate();
   const basePath = useCreatorBase();
+  const { isSuperAdmin } = useAuth();
   const { id } = useParams<{ id: string }>();
 
   const [loading, setLoading] = useState(true);
@@ -126,6 +128,7 @@ export default function EditQuiz() {
         onSave={handleSave}
         onCancel={() => navigate(basePath)}
         onValidationError={setError}
+        allowQuestionBank={isSuperAdmin}
         headerExtra={
           <Button type="button" variant="ghost" size="sm" onClick={() => setTranslationsOpen(true)}>
             <Languages className="size-4" />

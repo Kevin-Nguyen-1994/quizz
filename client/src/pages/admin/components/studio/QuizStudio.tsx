@@ -2,13 +2,15 @@ import {
   Check,
   ClipboardList,
   Copy,
+  Database,
+  Dices,
   Eye,
   PencilLine,
   Search,
   SlidersHorizontal,
   Zap,
 } from 'lucide-react';
-import { type ReactNode, useEffect, useState } from 'react';
+import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import { AppAlert } from '@/components/AppAlert';
 import { Input, Textarea } from '@/components/Input';
 import { MediaPicker } from '@/components/MediaPicker';
@@ -21,9 +23,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { useAuthFetch } from '@/hooks/useAuthFetch';
 import { type QuestionWithKey, validateQuizPayload, withKey } from '@/helpers';
 import { COMMON_LOCALES, DEFAULT_LOCALE, localeName } from '@/helpers/locale';
+import { useAuthFetch } from '@/hooks/useAuthFetch';
 import { cn } from '@/lib/utils';
 import {
   type EmployeeLevel,
@@ -33,6 +35,7 @@ import {
   type ThemeId,
 } from '@/types';
 import { PropertiesPanel } from './PropertiesPanel';
+import { QuestionBankPicker } from './QuestionBankPicker';
 import { QuestionCanvas } from './QuestionCanvas';
 import {
   blankQuestion,
@@ -128,6 +131,7 @@ interface Props {
   onCancel: () => void;
   onValidationError: (msg: string) => void;
   headerExtra?: ReactNode;
+  allowQuestionBank?: boolean;
 }
 
 export function QuizStudio({
@@ -146,6 +150,7 @@ export function QuizStudio({
   onCancel,
   onValidationError,
   headerExtra,
+  allowQuestionBank = false,
 }: Props) {
   const api = useAuthFetch();
   // Only the create flow restores an autosaved draft; edit hydrates from the DB.
@@ -172,6 +177,17 @@ export function QuizStudio({
   const [previewing, setPreviewing] = useState(false);
   const [coverPicker, setCoverPicker] = useState(false);
   const [copiedJson, setCopiedJson] = useState(false);
+  const [bankPickerMode, setBankPickerMode] = useState<'manual' | 'random' | null>(null);
+
+  const existingSourceIds = useMemo(
+    () =>
+      new Set(
+        questions
+          .map((question) => question.sourceBankQuestionId)
+          .filter((id): id is number => typeof id === 'number'),
+      ),
+    [questions],
+  );
 
   const activeQ = questions[Math.min(active, questions.length - 1)];
 
@@ -230,6 +246,29 @@ export function QuizStudio({
   function removeSlide(i: number) {
     setQuestions((prev) => prev.filter((_, idx) => idx !== i));
     setActive((a) => Math.max(0, Math.min(a, questions.length - 2)));
+  }
+
+  function addBankQuestions(imported: ImportQuestion[]) {
+    const unique = imported.filter(
+      (question, index) =>
+        typeof question.sourceBankQuestionId === 'number' &&
+        !existingSourceIds.has(question.sourceBankQuestionId) &&
+        imported.findIndex(
+          (candidate) => candidate.sourceBankQuestionId === question.sourceBankQuestionId,
+        ) === index,
+    );
+    if (unique.length === 0) {
+      onValidationError('Các câu đã chọn đều đã có trong Bộ đề.');
+      return;
+    }
+    const mapped = unique.map(withKey);
+    const blankOnly =
+      questions.length === 1 &&
+      !questions[0].text.trim() &&
+      questions[0].options.every((option) => !option.trim());
+    setQuestions((current) => (blankOnly ? mapped : [...current, ...mapped]));
+    setActive(blankOnly ? 0 : questions.length);
+    onValidationError('');
   }
 
   function handleSave() {
@@ -323,6 +362,32 @@ export function QuizStudio({
             </Button>
           )}
           {headerExtra}
+          {allowQuestionBank && (
+            <>
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                aria-label="Thêm từ Ngân hàng câu hỏi"
+                title="Thêm từ Ngân hàng câu hỏi"
+                onClick={() => setBankPickerMode('manual')}
+              >
+                <Database className="size-4" />
+                <span className="hidden xl:inline">Thêm từ Ngân hàng</span>
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                aria-label="Chọn ngẫu nhiên từ Ngân hàng câu hỏi"
+                title="Chọn ngẫu nhiên từ Ngân hàng câu hỏi"
+                onClick={() => setBankPickerMode('random')}
+              >
+                <Dices className="size-4" />
+                <span className="hidden xl:inline">Chọn ngẫu nhiên</span>
+              </Button>
+            </>
+          )}
           <Button type="button" variant="ghost" size="sm" onClick={onCancel}>
             Thoát
           </Button>
@@ -620,6 +685,13 @@ export function QuizStudio({
         onPick={(m) => {
           if (m.kind === 'image') setCoverImage(m.url);
         }}
+      />
+      <QuestionBankPicker
+        open={bankPickerMode !== null}
+        initialMode={bankPickerMode ?? 'manual'}
+        existingSourceIds={existingSourceIds}
+        onClose={() => setBankPickerMode(null)}
+        onAdd={addBankQuestions}
       />
     </div>
   );

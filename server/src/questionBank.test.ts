@@ -10,6 +10,7 @@ let databaseModule: typeof import('./db');
 let assignmentService: typeof import('./assignmentService');
 let generation: typeof import('./questionGeneration');
 let importer: typeof import('./questionBankImport');
+let liveQuestions: typeof import('./liveSessionQuestions');
 let reporting: typeof import('./assignmentReporting');
 let scoring: typeof import('./assignmentScoring');
 let cs1Id = 0;
@@ -79,6 +80,7 @@ before(async () => {
   assignmentService = await import('./assignmentService');
   generation = await import('./questionGeneration');
   importer = await import('./questionBankImport');
+  liveQuestions = await import('./liveSessionQuestions');
   reporting = await import('./assignmentReporting');
   scoring = await import('./assignmentScoring');
   await databaseModule.initDb();
@@ -178,6 +180,57 @@ describe('Phase 7B Question Bank and dynamic assignment generation', () => {
       assert.equal(quizzes.find((quiz) => quiz.id === staticQuiz.lastID)?.question_count, 3);
       assert.equal(quizzes.find((quiz) => quiz.id === dynamicQuizId)?.question_count, 5);
       assert.equal(quizzes.find((quiz) => quiz.id === emptyDynamic.lastID)?.question_count, 0);
+
+      const source = await databaseModule.db.get<{
+        id: number;
+        revision: number;
+        text: string;
+      }>("SELECT id, revision, text FROM bank_questions WHERE source_question_id = 'Q-1'");
+      assert(source);
+      const copiedQuestion = {
+        text: source.text,
+        options: ['A', 'B'],
+        correctIndex: 0,
+        baseScore: 500,
+        timeSec: 25,
+        questionType: 'multiple_choice',
+        sourceBankQuestionId: source.id,
+        sourceBankQuestionRevision: source.revision,
+      };
+      const staticCreate = await fetch(`${baseUrl}/api/admin/quizzes`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+        body: JSON.stringify({ title: 'Static copied from Bank', questions: [copiedQuestion] }),
+      });
+      assert.equal(staticCreate.status, 201);
+      const copiedQuizId = ((await staticCreate.json()) as { id: number }).id;
+      await databaseModule.db.run(
+        "UPDATE bank_questions SET text = 'Changed source after static copy' WHERE id = ?",
+        source.id,
+      );
+      const copiedQuizResponse = await fetch(`${baseUrl}/api/admin/quizzes/${copiedQuizId}`, {
+        headers: { authorization: `Bearer ${token}` },
+      });
+      const copiedQuiz = (await copiedQuizResponse.json()) as {
+        questions: Array<{ text: string; source_bank_question_id: number }>;
+      };
+      assert.equal(copiedQuiz.questions[0].text, source.text);
+      assert.equal(copiedQuiz.questions[0].source_bank_question_id, source.id);
+      await databaseModule.db.run(
+        'UPDATE bank_questions SET text = ? WHERE id = ?',
+        source.text,
+        source.id,
+      );
+
+      const duplicateCreate = await fetch(`${baseUrl}/api/admin/quizzes`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+        body: JSON.stringify({
+          title: 'Duplicate source rejected',
+          questions: [copiedQuestion, { ...copiedQuestion, text: 'Duplicate copy' }],
+        }),
+      });
+      assert.equal(duplicateCreate.status, 400);
     } finally {
       await new Promise<void>((resolve, reject) =>
         server.close((error) => (error ? reject(error) : resolve())),
@@ -245,6 +298,98 @@ describe('Phase 7B Question Bank and dynamic assignment generation', () => {
         )
       )?.text,
       'Imported question',
+    );
+
+    const updated = await importer.importSourceQuestionBank(filename, {
+      updateSourceQuestionIds: ['IMPORT-001'],
+      skipUnselectedUpdates: true,
+    });
+    assert.equal(updated.updatedCount, 1);
+    assert.deepEqual(updated.conflicts, []);
+    assert.deepEqual(
+      await databaseModule.db.get<{ text: string; revision: number }>(
+        `SELECT text, revision FROM bank_questions
+         WHERE source_bank_id = 'test-import-bank' AND source_question_id = 'IMPORT-001'`,
+      ),
+      { text: 'Changed imported question', revision: 2 },
+    );
+
+    const invalid = structuredClone(source);
+    invalid.bank_id = 'invalid-import-bank';
+    invalid.questions[0].answer.correct_option_id = 'DOES_NOT_EXIST';
+    await assert.rejects(
+      importer.importSourceQuestionBankText(JSON.stringify(invalid), 'invalid.json'),
+      importer.QuestionBankImportError,
+    );
+    assert.equal(
+      (
+        await databaseModule.db.get<{ count: number }>(
+          "SELECT COUNT(*) AS count FROM bank_questions WHERE source_bank_id = 'invalid-import-bank'",
+        )
+      )?.count,
+      0,
+    );
+  });
+
+  it('freezes one exact dynamic question set for the whole Live session', async () => {
+    const quizId = await createDynamicQuiz(20);
+    const preview = await liveQuestions.createLiveQuestionPreview(databaseModule.db, quizId);
+    const verified = await liveQuestions.verifyLiveQuestionPreview(databaseModule.db, quizId, {
+      seed: preview.seed,
+      poolFingerprint: preview.poolFingerprint,
+      selectionFingerprint: preview.selectionFingerprint,
+    });
+    assert.equal(verified.selected.length, 20);
+    assert.equal(new Set(verified.selected.map((item) => item.question.id)).size, 20);
+
+    const session = await databaseModule.db.run(
+      `INSERT INTO sessions (
+         quiz_id, pin, status, uses_question_snapshot, generation_seed,
+         question_pool_fingerprint, question_selection_fingerprint,
+         quiz_blueprint_revision_snapshot
+       ) VALUES (?, '919191', 'waiting', 1, ?, ?, ?, ?)`,
+      quizId,
+      preview.seed,
+      preview.poolFingerprint,
+      preview.selectionFingerprint,
+      preview.blueprintRevision,
+    );
+    const sessionId = Number(session.lastID);
+    await liveQuestions.snapshotLiveSessionQuestions(databaseModule.db, sessionId, verified);
+    const sessionRow = await databaseModule.db.get<import('./types').DbSession>(
+      'SELECT * FROM sessions WHERE id = ?',
+      sessionId,
+    );
+    assert(sessionRow);
+    const frozen = await liveQuestions.loadSessionQuestions(databaseModule.db, sessionRow);
+    assert.equal(frozen.length, 20);
+    assert.deepEqual(
+      frozen.map((question) => question.id),
+      await databaseModule.db
+        .all<Array<{ id: number }>>(
+          'SELECT id FROM live_session_questions WHERE session_id = ? ORDER BY order_index',
+          sessionId,
+        )
+        .then((rows) => rows.map((row) => row.id)),
+    );
+
+    const firstSourceId = verified.selected[0].question.id;
+    await databaseModule.db.run(
+      `UPDATE bank_questions
+       SET text = 'Bank content changed after Live start', revision = revision + 1, is_enabled = 0
+       WHERE id = ?`,
+      firstSourceId,
+    );
+    const reloaded = await liveQuestions.loadSessionQuestions(databaseModule.db, sessionRow);
+    assert.equal(reloaded[0].text, frozen[0].text);
+    assert.equal(reloaded[0].time_sec, frozen[0].time_sec);
+    assert.equal(reloaded[0].base_score, frozen[0].base_score);
+    assert.notEqual(reloaded[0].text, 'Bank content changed after Live start');
+    await databaseModule.db.run(
+      'UPDATE bank_questions SET text = ?, revision = ?, is_enabled = 1 WHERE id = ?',
+      verified.selected[0].question.text,
+      verified.selected[0].question.revision,
+      firstSourceId,
     );
   });
 

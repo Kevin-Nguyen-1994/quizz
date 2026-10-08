@@ -1,18 +1,18 @@
 import bcrypt from 'bcrypt';
 import { type Request, type Response, Router } from 'express';
 import { db, getRankedPlayers } from '../db';
+import { loadSessionQuestions } from '../liveSessionQuestions';
 import { getRequestUser, requireAuth, signToken } from '../middleware';
 import { hashPassword, MIN_PASSWORD_LENGTH } from '../passwords';
 import { savePlayProfile } from '../playProfile';
 import { getClientIp, LoginFailureLimiter, maskIp } from '../requestSecurity';
-import type { DbQuestion, DbSession, DbUser } from '../types';
+import type { DbSession, DbUser } from '../types';
 import { authenticateInternalUser } from '../userAccounts';
 import { isUserBanned, parseQuestionRow } from '../utils';
 
 export const authRouter = Router();
 const loginLimiter = new LoginFailureLimiter();
-const RATE_LIMIT_MESSAGE =
-  'Bạn đã thử đăng nhập quá nhiều lần. Vui lòng thử lại sau ít phút.';
+const RATE_LIMIT_MESSAGE = 'Bạn đã thử đăng nhập quá nhiều lần. Vui lòng thử lại sau ít phút.';
 
 function setRateLimitHeaders(res: Response, remaining: number): void {
   res.setHeader('RateLimit-Limit', String(loginLimiter.limit));
@@ -265,10 +265,7 @@ authRouter.get('/play-history/:sessionId', requireAuth, async (req, res) => {
     });
   }
 
-  const questions = await db.all<DbQuestion[]>(
-    'SELECT * FROM questions WHERE quiz_id = ? ORDER BY order_index',
-    session.quiz_id,
-  );
+  const questions = await loadSessionQuestions(db, session);
   const answers = await db.all(
     'SELECT a.*, p.username FROM answers a JOIN players p ON p.id = a.player_id WHERE a.session_id = ?',
     sessionId,

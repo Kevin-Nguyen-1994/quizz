@@ -301,6 +301,8 @@ export function mapDbQuestionToImport(q: {
   geo?: GeoPoint | null;
   matches?: string[] | null;
   tags?: string[] | null;
+  source_bank_question_id?: number | null;
+  source_bank_question_revision?: number | null;
 }): QuestionWithKey {
   return withKey({
     text: q.text,
@@ -321,6 +323,8 @@ export function mapDbQuestionToImport(q: {
     geo: q.geo ?? undefined,
     matches: q.matches ?? undefined,
     tags: q.tags ?? undefined,
+    sourceBankQuestionId: q.source_bank_question_id ?? undefined,
+    sourceBankQuestionRevision: q.source_bank_question_revision ?? undefined,
   });
 }
 

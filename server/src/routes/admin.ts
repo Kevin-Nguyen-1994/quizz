@@ -3,6 +3,12 @@ import { deleteAvatarByUrl, saveAvatarsFromDataUrls } from '../avatars';
 import { config, saveConfig, toPublicConfig } from '../config';
 import { db, getRankedPlayers } from '../db';
 import { EmployeeLevelError, requireActiveEmployeeLevel } from '../employeeLevels';
+import {
+  createLiveQuestionPreview,
+  loadSessionQuestions,
+  snapshotLiveSessionQuestions,
+  verifyLiveQuestionPreview,
+} from '../liveSessionQuestions';
 import { getMetricsSnapshot } from '../metrics';
 import { getRequestUser, requireAuth, requireSuperAdmin } from '../middleware';
 import { hashPassword, MIN_PASSWORD_LENGTH } from '../passwords';
@@ -175,7 +181,7 @@ async function insertQuestion(
 ): Promise<void> {
   const content = normalizeQuestionContent(q);
   await database.run(
-    'INSERT INTO questions (quiz_id, text, options, correct_index, base_score, time_sec, order_index, image_url, question_type, correct_answer, correct_indices, explanation, range_min, range_max, media_url, media_type, blanks, geo, tags, matches) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    'INSERT INTO questions (quiz_id, text, options, correct_index, base_score, time_sec, order_index, image_url, question_type, correct_answer, correct_indices, explanation, range_min, range_max, media_url, media_type, blanks, geo, tags, matches, source_bank_question_id, source_bank_question_revision) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
     quizId,
     content.text,
     content.options,
@@ -196,7 +202,45 @@ async function insertQuestion(
     content.geo,
     content.tags,
     content.matches,
+    q.sourceBankQuestionId ?? null,
+    q.sourceBankQuestionRevision ?? null,
   );
+}
+
+async function validateStaticQuestionSources(
+  database: typeof db,
+  questions: QuizQuestion[] | undefined,
+): Promise<void> {
+  const seen = new Set<number>();
+  for (const question of questions ?? []) {
+    const sourceId = question.sourceBankQuestionId;
+    if (sourceId === undefined || sourceId === null) continue;
+    if (!Number.isInteger(sourceId) || sourceId < 1) {
+      throw new QuestionContentError('sourceBankQuestionId is invalid');
+    }
+    if (
+      question.sourceBankQuestionRevision !== undefined &&
+      question.sourceBankQuestionRevision !== null &&
+      (!Number.isInteger(question.sourceBankQuestionRevision) ||
+        question.sourceBankQuestionRevision < 1)
+    ) {
+      throw new QuestionContentError('sourceBankQuestionRevision is invalid');
+    }
+    if (seen.has(sourceId)) {
+      throw new QuestionContentError('A Bank Question cannot be added twice to the same quiz');
+    }
+    seen.add(sourceId);
+  }
+  if (seen.size > 0) {
+    const ids = [...seen];
+    const rows = await database.all<Array<{ id: number }>>(
+      `SELECT id FROM bank_questions WHERE id IN (${ids.map(() => '?').join(', ')})`,
+      ids,
+    );
+    if (rows.length !== ids.length) {
+      throw new QuestionContentError('One or more source Bank Questions no longer exist');
+    }
+  }
 }
 
 adminRouter.get('/quizzes', requireAuth, async (req, res) => {
@@ -330,6 +374,7 @@ adminRouter.post('/quizzes', requireAuth, async (req: Request, res: Response) =>
   }
 
   try {
+    if (quizMode === 'static') await validateStaticQuestionSources(db, body.questions);
     const rules =
       quizMode === 'bank_generated' ? normalizeGenerationRules(body.generationRules) : [];
     const quizId = await withImmediateTransaction(async (database) => {
@@ -405,6 +450,7 @@ adminRouter.put('/quizzes/:id', requireAuth, async (req: Request, res: Response)
   }
 
   try {
+    if (quiz.quiz_mode === 'static') await validateStaticQuestionSources(db, body.questions);
     const rules =
       quiz.quiz_mode === 'bank_generated' ? normalizeGenerationRules(body.generationRules) : [];
     await withImmediateTransaction(async (database) => {
@@ -454,6 +500,58 @@ adminRouter.post(
   async (req: Request, res: Response) => {
     try {
       res.json(await validateQuestionPool(Number(req.params.id)));
+    } catch (error) {
+      if (error instanceof QuestionGenerationError) {
+        return res
+          .status(error.statusCode)
+          .json({ error: error.message, code: error.code, details: error.details });
+      }
+      throw error;
+    }
+  },
+);
+
+adminRouter.post(
+  '/quizzes/:id/live-preview',
+  requireSuperAdmin,
+  async (req: Request, res: Response) => {
+    const quizId = Number(req.params.id);
+    const quiz = await db.get<DbQuiz>('SELECT * FROM quizzes WHERE id = ?', quizId);
+    if (!quiz || quiz.quiz_mode !== 'bank_generated') {
+      return res.status(404).json({ error: 'Dynamic Quiz not found' });
+    }
+    try {
+      const selection = await createLiveQuestionPreview(db, quizId);
+      const questions = selection.selected.map((item) =>
+        parseQuestionRow({
+          ...item.question,
+          quiz_id: quizId,
+          order_index: item.orderIndex,
+          base_score: item.effectiveScore,
+          time_sec: item.effectiveTimeSec,
+        }),
+      );
+      const levelCounts = new Map<string, number>();
+      let criticalCount = 0;
+      for (const item of selection.selected) {
+        const code = item.question.minimum_level_code;
+        levelCounts.set(code, (levelCounts.get(code) ?? 0) + 1);
+        if (item.question.critical === 1) criticalCount += 1;
+      }
+      res.json({
+        preview: {
+          seed: selection.seed,
+          poolFingerprint: selection.poolFingerprint,
+          selectionFingerprint: selection.selectionFingerprint,
+          blueprintRevision: selection.blueprintRevision,
+          totalQuestions: selection.totalQuestions,
+          totalScore: selection.totalScore,
+          recommendedTotalSeconds: selection.recommendedTotalSeconds,
+          criticalCount,
+          levelCounts: Object.fromEntries(levelCounts),
+          questions,
+        },
+      });
     } catch (error) {
       if (error instanceof QuestionGenerationError) {
         return res
@@ -578,36 +676,67 @@ function generatePin(): string {
 }
 
 adminRouter.post('/sessions', requireAuth, async (req: Request, res: Response) => {
-  const { quizId } = req.body as { quizId: number };
+  const { quizId, generationSeed, poolFingerprint, selectionFingerprint } = req.body as {
+    quizId: number;
+    generationSeed?: string;
+    poolFingerprint?: string;
+    selectionFingerprint?: string;
+  };
   const quiz = await db.get<DbQuiz>('SELECT * FROM quizzes WHERE id = ?', quizId);
   if (!quiz) return res.status(404).json({ error: 'Quiz not found' });
-  if (quiz.quiz_mode === 'bank_generated') {
-    return res.status(409).json({
-      error: 'Bank-generated quizzes are not available for Live Game',
-      code: 'DYNAMIC_QUIZ_LIVE_GAME_UNSUPPORTED',
-    });
+  if (quiz.quiz_mode === 'bank_generated' && !isSuperAdmin(req)) {
+    return res.status(403).json({ error: 'Dynamic Live Game requires super administrator access' });
   }
   if (!(await canAccessQuiz(req, quiz))) {
     return res.status(404).json({ error: 'Quiz not found' });
   }
 
-  let pin = generatePin();
-  while (await db.get("SELECT id FROM sessions WHERE pin = ? AND status != 'finished'", pin)) {
-    pin = generatePin();
-  }
-
   // Super admin: hosted_by_user_id = NULL. User: hosted_by_user_id = their id.
   const hostedBy = isSuperAdmin(req) ? null : currentUserId(req);
-
-  const result = await db.run(
-    'INSERT INTO sessions (quiz_id, pin, status, hosted_by_user_id) VALUES (?, ?, ?, ?)',
-    quizId,
-    pin,
-    'waiting',
-    hostedBy,
-  );
-
-  res.status(201).json({ id: result.lastID, pin });
+  try {
+    const created = await withImmediateTransaction(async (database) => {
+      let pin = generatePin();
+      while (
+        await database.get("SELECT id FROM sessions WHERE pin = ? AND status != 'finished'", pin)
+      ) {
+        pin = generatePin();
+      }
+      const selection =
+        quiz.quiz_mode === 'bank_generated'
+          ? await verifyLiveQuestionPreview(database, quizId, {
+              seed: generationSeed ?? '',
+              poolFingerprint: poolFingerprint ?? '',
+              selectionFingerprint: selectionFingerprint ?? '',
+            })
+          : null;
+      const result = await database.run(
+        `INSERT INTO sessions (
+           quiz_id, pin, status, hosted_by_user_id, uses_question_snapshot,
+           generation_seed, question_pool_fingerprint, question_selection_fingerprint,
+           quiz_blueprint_revision_snapshot
+         ) VALUES (?, ?, 'waiting', ?, ?, ?, ?, ?, ?)`,
+        quizId,
+        pin,
+        hostedBy,
+        selection ? 1 : 0,
+        selection?.seed ?? null,
+        selection?.poolFingerprint ?? null,
+        selection?.selectionFingerprint ?? null,
+        selection?.blueprintRevision ?? null,
+      );
+      const sessionId = Number(result.lastID);
+      if (selection) await snapshotLiveSessionQuestions(database, sessionId, selection);
+      return { id: sessionId, pin };
+    });
+    res.status(201).json(created);
+  } catch (error) {
+    if (error instanceof QuestionGenerationError) {
+      return res
+        .status(error.statusCode)
+        .json({ error: error.message, code: error.code, details: error.details });
+    }
+    throw error;
+  }
 });
 
 adminRouter.get('/sessions', requireAuth, async (req, res) => {
@@ -663,10 +792,7 @@ adminRouter.get('/sessions/:id', requireAuth, async (req: Request, res: Response
 
   const players = await getRankedPlayers(req.params.id as string);
 
-  const questions = await db.all<DbQuestion[]>(
-    'SELECT * FROM questions WHERE quiz_id = ? ORDER BY order_index',
-    session.quiz_id,
-  );
+  const questions = await loadSessionQuestions(db, session);
 
   const answers = await db.all(
     'SELECT a.*, p.username FROM answers a JOIN players p ON p.id = a.player_id WHERE a.session_id = ?',

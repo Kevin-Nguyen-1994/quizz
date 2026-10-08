@@ -1,4 +1,14 @@
-import { Eye, FilterX, Pencil, Plus, Search, ToggleLeft, ToggleRight, X } from 'lucide-react';
+import {
+  Eye,
+  FileJson,
+  FilterX,
+  Pencil,
+  Plus,
+  Search,
+  ToggleLeft,
+  ToggleRight,
+  X,
+} from 'lucide-react';
 import { type FormEvent, useCallback, useEffect, useRef, useState } from 'react';
 import AdminNav from '@/components/AdminNav';
 import { AppAlert } from '@/components/AppAlert';
@@ -24,12 +34,12 @@ import {
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
-import { useAuthFetch } from '@/hooks/useAuthFetch';
 import {
   calculateAutoQuestionTime,
   questionTimeOverride,
   withQuestionTimeOverride,
 } from '@/helpers/questionTiming';
+import { useAuthFetch } from '@/hooks/useAuthFetch';
 import type {
   BankQuestion,
   BankQuestionSummary,
@@ -37,6 +47,7 @@ import type {
   QuestionCategory,
   QuestionType,
 } from '@/types';
+import { QuestionBankImportDialog } from './components/QuestionBankImportDialog';
 
 const TYPE_LABELS: Record<QuestionType, string> = {
   multiple_choice: 'Một đáp án',
@@ -181,17 +192,14 @@ function QuestionDialog({
       cancelled = true;
     };
   }, [api, id]);
-  function updateQuestion(
-    updater: (current: Partial<BankQuestion>) => Partial<BankQuestion>,
-  ) {
+  function updateQuestion(updater: (current: Partial<BankQuestion>) => Partial<BankQuestion>) {
     const next = updater(qRef.current);
     qRef.current = next;
     setQ(next);
   }
   function isDirtyNow() {
     return (
-      baselineRef.current !== null &&
-      questionDraftSignature(qRef.current) !== baselineRef.current
+      baselineRef.current !== null && questionDraftSignature(qRef.current) !== baselineRef.current
     );
   }
   function closeNow() {
@@ -380,7 +388,9 @@ function QuestionDialog({
               <Label>Bậc tối thiểu</Label>
               <Select
                 value={String(q.minimum_level_id ?? '')}
-                onValueChange={(v) => updateQuestion((x) => ({ ...x, minimum_level_id: Number(v) }))}
+                onValueChange={(v) =>
+                  updateQuestion((x) => ({ ...x, minimum_level_id: Number(v) }))
+                }
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Chọn bậc" />
@@ -615,9 +625,7 @@ function QuestionDialog({
               <Label>Giải thích</Label>
               <Textarea
                 value={q.explanation ?? ''}
-                onChange={(e) =>
-                  updateQuestion((x) => ({ ...x, explanation: e.target.value }))
-                }
+                onChange={(e) => updateQuestion((x) => ({ ...x, explanation: e.target.value }))}
               />
             </div>
             <label
@@ -628,9 +636,7 @@ function QuestionDialog({
               <Switch
                 id="bank-critical"
                 checked={q.critical === 1}
-                onCheckedChange={(v) =>
-                  updateQuestion((x) => ({ ...x, critical: v ? 1 : 0 }))
-                }
+                onCheckedChange={(v) => updateQuestion((x) => ({ ...x, critical: v ? 1 : 0 }))}
               />
             </label>
             <label
@@ -641,9 +647,7 @@ function QuestionDialog({
               <Switch
                 id="bank-enabled"
                 checked={q.is_enabled !== 0}
-                onCheckedChange={(v) =>
-                  updateQuestion((x) => ({ ...x, is_enabled: v ? 1 : 0 }))
-                }
+                onCheckedChange={(v) => updateQuestion((x) => ({ ...x, is_enabled: v ? 1 : 0 }))}
               />
             </label>
             {id !== 'new' && (
@@ -726,6 +730,8 @@ export default function QuestionBank() {
   const [categories, setCategories] = useState<QuestionCategory[]>([]);
   const [levels, setLevels] = useState<EmployeeLevel[]>([]);
   const [dialog, setDialog] = useState<number | null | 'new'>(null);
+  const [importOpen, setImportOpen] = useState(false);
+  const [notice, setNotice] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const load = useCallback(async () => {
@@ -791,12 +797,19 @@ export default function QuestionBank() {
           title="Ngân hàng câu hỏi"
           description={`${total} / ${grandTotal} câu`}
           actions={
-            <Button onClick={() => setDialog('new')}>
-              <Plus className="size-4" />
-              Tạo câu hỏi
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button onClick={() => setDialog('new')}>
+                <Plus className="size-4" />
+                Tạo câu hỏi
+              </Button>
+              <Button variant="secondary" onClick={() => setImportOpen(true)}>
+                <FileJson className="size-4" />
+                Import JSON
+              </Button>
+            </div>
           }
         />
+        {notice && <AppAlert variant="success">{notice}</AppAlert>}
         {error && <AppAlert variant="error">{error}</AppAlert>}
         <Card className="mb-5">
           <CardContent className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -1016,6 +1029,16 @@ export default function QuestionBank() {
           onClose={() => setDialog(null)}
           onSaved={() => {
             setDialog(null);
+            load();
+          }}
+        />
+        <QuestionBankImportDialog
+          open={importOpen}
+          onClose={() => setImportOpen(false)}
+          onImported={(result) => {
+            setNotice(
+              `Đã nhập ${result.insertedCount} câu mới. ${result.skippedCount} câu không thay đổi. ${result.updatedCount} câu đã cập nhật.`,
+            );
             load();
           }}
         />
