@@ -7,6 +7,7 @@ import {
   Search,
   ToggleLeft,
   ToggleRight,
+  Trash2,
   X,
 } from 'lucide-react';
 import { type FormEvent, useCallback, useEffect, useRef, useState } from 'react';
@@ -16,6 +17,7 @@ import { MainContent, Page, PageHeader } from '@/components/layout';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Dialog,
   DialogContent,
@@ -158,7 +160,10 @@ function QuestionDialog({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const baselineRef = useRef<string | null>(null);
+  const baselineAuxRef = useRef('');
   const [confirmingClose, setConfirmingClose] = useState(false);
+  const [fillBlankDraft, setFillBlankDraft] = useState('');
+  const [customTimeDraft, setCustomTimeDraft] = useState('');
   const legal = (q.source_metadata?.legal ?? {}) as Record<string, unknown>;
   const autoTimeSec = calculateAutoQuestionTime(q);
   const customTimeSec = questionTimeOverride(q.source_metadata);
@@ -170,6 +175,9 @@ function QuestionDialog({
       qRef.current = draft;
       setQ(draft);
       baselineRef.current = questionDraftSignature(draft);
+      baselineAuxRef.current = JSON.stringify({ fillBlankDraft: '', customTimeDraft: '' });
+      setFillBlankDraft('');
+      setCustomTimeDraft('');
       setConfirmingClose(false);
       setLoading(false);
       return;
@@ -184,6 +192,17 @@ function QuestionDialog({
           qRef.current = r.data.question;
           setQ(r.data.question);
           baselineRef.current = questionDraftSignature(r.data.question);
+          const nextFillDraft = (r.data.question.blanks ?? [])
+            .map((answers) => answers.join(', '))
+            .join('\n');
+          const nextCustomTime = questionTimeOverride(r.data.question.source_metadata);
+          const nextCustomDraft = nextCustomTime === null ? '' : String(nextCustomTime);
+          setFillBlankDraft(nextFillDraft);
+          setCustomTimeDraft(nextCustomDraft);
+          baselineAuxRef.current = JSON.stringify({
+            fillBlankDraft: nextFillDraft,
+            customTimeDraft: nextCustomDraft,
+          });
         } else setError('Không thể tải câu hỏi.');
         setLoading(false);
       }
@@ -199,7 +218,9 @@ function QuestionDialog({
   }
   function isDirtyNow() {
     return (
-      baselineRef.current !== null && questionDraftSignature(qRef.current) !== baselineRef.current
+      baselineRef.current !== null &&
+      (questionDraftSignature(qRef.current) !== baselineRef.current ||
+        JSON.stringify({ fillBlankDraft, customTimeDraft }) !== baselineAuxRef.current)
     );
   }
   function closeNow() {
@@ -207,6 +228,9 @@ function QuestionDialog({
     qRef.current = draft;
     setQ(draft);
     baselineRef.current = questionDraftSignature(draft);
+    baselineAuxRef.current = JSON.stringify({ fillBlankDraft: '', customTimeDraft: '' });
+    setFillBlankDraft('');
+    setCustomTimeDraft('');
     setConfirmingClose(false);
     onClose();
   }
@@ -218,33 +242,66 @@ function QuestionDialog({
     }
     closeNow();
   }
-  const optionsText = (q.options ?? []).join('\n');
-  const answer =
-    q.question_type === 'multi_select'
-      ? (q.correct_indices ?? []).map((i) => i + 1).join(', ')
-      : q.question_type === 'multiple_choice' ||
-          q.question_type === 'true_false' ||
-          q.question_type === 'ordering'
-        ? String((q.correct_index ?? 0) + 1)
-        : (q.correct_answer ?? '');
-  function setAnswer(value: string) {
-    if (q.question_type === 'multi_select')
-      updateQuestion((x) => ({
-        ...x,
-        correct_indices: value
-          .split(',')
-          .map((v) => Number(v.trim()) - 1)
-          .filter(Number.isInteger),
-      }));
-    else if (['multiple_choice', 'true_false', 'ordering'].includes(q.question_type ?? ''))
-      updateQuestion((x) => ({ ...x, correct_index: Math.max(0, Number(value) - 1) }));
-    else updateQuestion((x) => ({ ...x, correct_answer: value }));
+  function updateOption(index: number, value: string) {
+    updateQuestion((current) => ({
+      ...current,
+      options: (current.options ?? []).map((option, position) =>
+        position === index ? value : option,
+      ),
+    }));
+  }
+  function removeOption(index: number) {
+    updateQuestion((current) => {
+      const options = (current.options ?? []).filter((_, position) => position !== index);
+      const correctIndices = (current.correct_indices ?? [])
+        .filter((position) => position !== index)
+        .map((position) => (position > index ? position - 1 : position));
+      const correctIndex =
+        current.correct_index === index
+          ? undefined
+          : current.correct_index !== undefined && current.correct_index > index
+            ? current.correct_index - 1
+            : current.correct_index;
+      return { ...current, options, correct_index: correctIndex, correct_indices: correctIndices };
+    });
+  }
+  function addOption() {
+    updateQuestion((current) => ({ ...current, options: [...(current.options ?? []), ''] }));
+  }
+  function toggleCorrectIndex(index: number) {
+    updateQuestion((current) => {
+      const correct = new Set(current.correct_indices ?? []);
+      if (correct.has(index)) correct.delete(index);
+      else correct.add(index);
+      return { ...current, correct_indices: [...correct].sort((a, b) => a - b) };
+    });
   }
   async function save(e: FormEvent) {
     e.preventDefault();
-    setSaving(true);
     setError('');
-    const currentQuestion = qRef.current;
+    const currentDraft = qRef.current;
+    let sourceMetadata = currentDraft.source_metadata ?? {};
+    let timeSec = Number(currentDraft.time_sec ?? 30);
+    if (questionTimeOverride(sourceMetadata) !== null) {
+      const parsedTime = Number(customTimeDraft);
+      if (!/^\d+$/.test(customTimeDraft) || !Number.isInteger(parsedTime) || parsedTime < 15) {
+        setError('Thời gian tùy chỉnh phải là số nguyên từ 15 giây trở lên.');
+        return;
+      }
+      timeSec = parsedTime;
+      sourceMetadata = withQuestionTimeOverride(sourceMetadata, parsedTime);
+    }
+    const blanks =
+      currentDraft.question_type === 'fill_blank'
+        ? fillBlankDraft.split('\n').map((line) =>
+            line
+              .split(',')
+              .map((value) => value.trim())
+              .filter(Boolean),
+          )
+        : currentDraft.blanks;
+    const currentQuestion = { ...currentDraft, blanks, source_metadata: sourceMetadata, time_sec: timeSec };
+    setSaving(true);
     const payload = {
       ...currentQuestion,
       categoryId: currentQuestion.category_id,
@@ -253,7 +310,7 @@ function QuestionDialog({
       correctIndex: currentQuestion.correct_index,
       correctIndices: currentQuestion.correct_indices ?? [],
       baseScore: Number(currentQuestion.base_score ?? 100),
-      timeSec: Number(currentQuestion.time_sec ?? 30),
+      timeSec,
       imageUrl: currentQuestion.image_url || undefined,
       correctAnswer: currentQuestion.correct_answer || undefined,
       mediaUrl: currentQuestion.media_url || undefined,
@@ -268,7 +325,7 @@ function QuestionDialog({
       competencyCode: currentQuestion.competency_code,
       isEnabled: currentQuestion.is_enabled !== 0,
       critical: currentQuestion.critical === 1,
-      sourceMetadata: currentQuestion.source_metadata ?? {},
+      sourceMetadata,
     };
     const r =
       id === 'new'
@@ -277,6 +334,7 @@ function QuestionDialog({
     setSaving(false);
     if (!r.ok) return setError(r.data?.error ?? 'Không thể lưu câu hỏi.');
     baselineRef.current = questionDraftSignature(qRef.current);
+    baselineAuxRef.current = JSON.stringify({ fillBlankDraft, customTimeDraft });
     setConfirmingClose(false);
     onSaved();
   }
@@ -341,6 +399,7 @@ function QuestionDialog({
                     ...x,
                     question_type: v as QuestionType,
                     options: v === 'true_false' ? ['Đúng', 'Sai'] : x.options,
+                    correct_index: v === 'true_false' ? 0 : x.correct_index,
                   }))
                 }
               >
@@ -450,33 +509,112 @@ function QuestionDialog({
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-2 md:col-span-2">
-              <Label>Đáp án / lựa chọn (mỗi dòng một mục)</Label>
-              <Textarea
-                value={optionsText}
-                onChange={(e) =>
-                  updateQuestion((x) => ({ ...x, options: e.target.value.split('\n') }))
-                }
-              />
-            </div>
+            {['multiple_choice', 'multi_select', 'ordering'].includes(q.question_type ?? '') && (
+              <fieldset className="space-y-3 md:col-span-2">
+                <legend className="text-sm font-medium">Đáp án / lựa chọn</legend>
+                {(q.options ?? []).map((option, index) => {
+                  const isCorrect =
+                    q.question_type === 'multi_select'
+                      ? (q.correct_indices ?? []).includes(index)
+                      : q.correct_index === index;
+                  return (
+                    <div
+                      // biome-ignore lint/suspicious/noArrayIndexKey: option positions are the persisted answer identity
+                      key={index}
+                      className="flex min-w-0 items-center gap-2"
+                    >
+                      {q.question_type === 'multiple_choice' && (
+                        <input
+                          type="radio"
+                          name="bank-correct-option"
+                          aria-label={`Đặt đáp án ${index + 1} là đáp án đúng`}
+                          checked={isCorrect}
+                          onChange={() =>
+                            updateQuestion((current) => ({ ...current, correct_index: index }))
+                          }
+                          className="size-5 shrink-0 accent-[var(--primary)]"
+                        />
+                      )}
+                      {q.question_type === 'multi_select' && (
+                        <Checkbox
+                          aria-label={`Đặt đáp án ${index + 1} là đáp án đúng`}
+                          checked={isCorrect}
+                          onCheckedChange={() => toggleCorrectIndex(index)}
+                        />
+                      )}
+                      <Input
+                        value={option}
+                        aria-label={`Nội dung đáp án ${index + 1}`}
+                        onChange={(event) => updateOption(index, event.target.value)}
+                        placeholder={`Đáp án ${index + 1}`}
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        aria-label={`Xóa đáp án ${index + 1}`}
+                        onClick={() => removeOption(index)}
+                      >
+                        <Trash2 className="size-4" />
+                      </Button>
+                    </div>
+                  );
+                })}
+                <Button type="button" variant="secondary" size="sm" onClick={addOption}>
+                  <Plus className="size-4" /> Thêm đáp án
+                </Button>
+                {q.question_type !== 'ordering' && (
+                  <p className="text-xs text-muted-foreground">
+                    {q.question_type === 'multi_select'
+                      ? 'Đánh dấu ít nhất một đáp án đúng.'
+                      : 'Chọn lại đáp án đúng trước khi lưu nếu đáp án cũ đã bị xóa.'}
+                  </p>
+                )}
+              </fieldset>
+            )}
+            {q.question_type === 'matching' && (
+              <div className="space-y-2 md:col-span-2">
+                <Label>Vế trái (mỗi dòng một mục)</Label>
+                <Textarea
+                  value={(q.options ?? []).join('\n')}
+                  onChange={(event) =>
+                    updateQuestion((current) => ({
+                      ...current,
+                      options: event.target.value.split('\n'),
+                    }))
+                  }
+                />
+              </div>
+            )}
+            {q.question_type === 'true_false' && (
+              <fieldset className="space-y-2 md:col-span-2">
+                <legend className="text-sm font-medium">Đáp án đúng</legend>
+                <div className="grid grid-cols-2 gap-2">
+                  {['Đúng', 'Sai'].map((label, index) => (
+                    <Button
+                      key={label}
+                      type="button"
+                      variant={q.correct_index === index ? 'default' : 'secondary'}
+                      aria-pressed={q.correct_index === index}
+                      onClick={() =>
+                        updateQuestion((current) => ({ ...current, correct_index: index }))
+                      }
+                    >
+                      {label}
+                    </Button>
+                  ))}
+                </div>
+              </fieldset>
+            )}
             {q.question_type === 'fill_blank' && (
               <div className="space-y-2 md:col-span-2">
                 <Label>
                   Đáp án từng chỗ trống (mỗi dòng một chỗ; đáp án tương đương cách nhau dấu phẩy)
                 </Label>
                 <Textarea
-                  value={(q.blanks ?? []).map((x) => x.join(', ')).join('\n')}
-                  onChange={(e) =>
-                    updateQuestion((x) => ({
-                      ...x,
-                      blanks: e.target.value.split('\n').map((line) =>
-                        line
-                          .split(',')
-                          .map((v) => v.trim())
-                          .filter(Boolean),
-                      ),
-                    }))
-                  }
+                  value={fillBlankDraft}
+                  onChange={(event) => setFillBlankDraft(event.target.value)}
+                  placeholder="AWB, Air Waybill, air waybill"
                 />
               </div>
             )}
@@ -499,7 +637,10 @@ function QuestionDialog({
                     type="number"
                     value={q.range_min ?? ''}
                     onChange={(e) =>
-                      updateQuestion((x) => ({ ...x, range_min: Number(e.target.value) }))
+                      updateQuestion((x) => ({
+                        ...x,
+                        range_min: e.target.value === '' ? null : Number(e.target.value),
+                      }))
                     }
                   />
                 </div>
@@ -509,7 +650,10 @@ function QuestionDialog({
                     type="number"
                     value={q.range_max ?? ''}
                     onChange={(e) =>
-                      updateQuestion((x) => ({ ...x, range_max: Number(e.target.value) }))
+                      updateQuestion((x) => ({
+                        ...x,
+                        range_max: e.target.value === '' ? null : Number(e.target.value),
+                      }))
                     }
                   />
                 </div>
@@ -547,16 +691,18 @@ function QuestionDialog({
                 </div>
               </div>
             )}
-            {['multiple_choice', 'true_false', 'multi_select', 'open_text', 'closest_to'].includes(
-              q.question_type ?? '',
-            ) && (
+            {['open_text', 'closest_to'].includes(q.question_type ?? '') && (
               <div className="space-y-2">
-                <Label>
-                  {q.question_type === 'multi_select'
-                    ? 'Số thứ tự đáp án đúng, cách nhau dấu phẩy'
-                    : 'Đáp án đúng'}
-                </Label>
-                <Input value={answer} onChange={(e) => setAnswer(e.target.value)} />
+                <Label>Đáp án đúng</Label>
+                <Input
+                  value={q.correct_answer ?? ''}
+                  onChange={(event) =>
+                    updateQuestion((current) => ({
+                      ...current,
+                      correct_answer: event.target.value,
+                    }))
+                  }
+                />
               </div>
             )}
             <div className="grid grid-cols-2 gap-3">
@@ -567,7 +713,10 @@ function QuestionDialog({
                   min="0"
                   value={q.base_score ?? 100}
                   onChange={(e) =>
-                    updateQuestion((x) => ({ ...x, base_score: Number(e.target.value) }))
+                    updateQuestion((x) => ({
+                      ...x,
+                      base_score: e.target.value === '' ? undefined : Number(e.target.value),
+                    }))
                   }
                 />
               </div>
@@ -578,6 +727,7 @@ function QuestionDialog({
                   onValueChange={(value) =>
                     updateQuestion((x) => {
                       const seconds = value === 'custom' ? calculateAutoQuestionTime(x) : null;
+                      setCustomTimeDraft(seconds === null ? '' : String(seconds));
                       return {
                         ...x,
                         time_sec: seconds ?? x.time_sec,
@@ -603,14 +753,18 @@ function QuestionDialog({
                     aria-label="Số giây tùy chỉnh"
                     type="number"
                     min="15"
-                    value={customTimeSec}
+                    value={customTimeDraft}
                     onChange={(e) => {
-                      const seconds = Math.max(15, Number(e.target.value) || 15);
-                      updateQuestion((x) => ({
-                        ...x,
-                        time_sec: seconds,
-                        source_metadata: withQuestionTimeOverride(x.source_metadata, seconds),
-                      }));
+                      const raw = e.target.value;
+                      setCustomTimeDraft(raw);
+                      if (/^\d+$/.test(raw) && Number(raw) >= 15) {
+                        const seconds = Number(raw);
+                        updateQuestion((x) => ({
+                          ...x,
+                          time_sec: seconds,
+                          source_metadata: withQuestionTimeOverride(x.source_metadata, seconds),
+                        }));
+                      }
                     }}
                   />
                 )}

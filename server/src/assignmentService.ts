@@ -106,6 +106,7 @@ export interface ParticipantAssignmentListItem {
   opensAtMs: number;
   deadlineAtMs: number | null;
   questionCount: number;
+  totalTimeSec: number;
   maxAttempts: number;
   attemptsUsed: number;
   participantStatus: DbAssignmentAttempt['status'] | 'not_started';
@@ -1127,8 +1128,13 @@ async function buildParticipantAssignmentListItem(
   );
   if (active) active = await reconcileAttempt(database, assignment, active, nowMs);
 
-  const questionTotals = await database.get<{ count: number; max_score: number }>(
-    `SELECT COUNT(*) as count, COALESCE(SUM(base_score), 0) as max_score
+  const questionTotals = await database.get<{
+    count: number;
+    max_score: number;
+    total_time_sec: number;
+  }>(
+    `SELECT COUNT(*) as count, COALESCE(SUM(base_score), 0) as max_score,
+            COALESCE(SUM(time_sec), 0) as total_time_sec
      FROM assignment_questions WHERE assignment_id = ?`,
     [assignment.id],
   );
@@ -1157,6 +1163,7 @@ async function buildParticipantAssignmentListItem(
     opensAtMs: assignment.opens_at_ms,
     deadlineAtMs: assignment.deadline_at_ms,
     questionCount: questionTotals?.count ?? 0,
+    totalTimeSec: questionTotals?.total_time_sec ?? 0,
     maxAttempts: assignment.max_attempts,
     attemptsUsed,
     participantStatus,
@@ -1219,6 +1226,7 @@ export async function lookupParticipantAssignment(
       maxAttempts: item.maxAttempts,
       attemptsUsed: item.attemptsUsed,
       questionCount: item.questionCount,
+      totalTimeSec: item.totalTimeSec,
       participantStatus: item.participantStatus,
       attemptId: item.attemptId,
       startedAtMs: item.startedAtMs,

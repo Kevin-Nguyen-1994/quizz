@@ -16,6 +16,10 @@ interface Props {
   eliminatedIndices?: number[];
   /** Disables every option (e.g. after a multi-select submit). */
   disabled?: boolean;
+  /** Live keeps its game palette; assessment uses a quieter corporate treatment. */
+  variant?: 'game' | 'assessment';
+  /** Live submits immediately; Assignment may change the choice before explicit submit. */
+  lockOnSelection?: boolean;
   /** Per-option accent color; defaults to `quadColor`. */
   colorFor?: (index: number) => string;
   /** Full badge override (e.g. ✓/✗ for true/false). */
@@ -58,6 +62,8 @@ export function QuadOptionGrid({
   selectedIndices = [],
   eliminatedIndices = [],
   disabled = false,
+  variant = 'game',
+  lockOnSelection = true,
   colorFor = quadColor,
   badgeFor,
   selectedBadge,
@@ -71,7 +77,14 @@ export function QuadOptionGrid({
   const stackOptions = shouldStackAnswerOptions(options);
 
   return (
-    <div className={cn('quad-grid', stackOptions && 'quad-grid-stacked', className)}>
+    <div
+      className={cn(
+        'quad-grid',
+        `quad-grid-${variant}`,
+        stackOptions && 'quad-grid-stacked',
+        className,
+      )}
+    >
       {options.map((opt, i) => {
         const eliminated = eliminatedIndices.includes(i);
         const selected = selectedIndex === i || selectedIndices.includes(i);
@@ -96,6 +109,11 @@ export function QuadOptionGrid({
             <span className={cn('quad-label', labelClassName)}>
               {eliminated ? '—' : <OptionText value={opt} />}
             </span>
+            {variant === 'assessment' && selected && (
+              <span className="assessment-selected-label" aria-hidden="true">
+                ✓ Đã chọn
+              </span>
+            )}
           </>
         );
         const optionClass = cn(
@@ -116,7 +134,7 @@ export function QuadOptionGrid({
           <button
             type="button"
             key={key}
-            disabled={disabled || eliminated || selectedIndex !== null}
+            disabled={disabled || eliminated || (lockOnSelection && selectedIndex !== null)}
             onClick={() => onSelect?.(i)}
             className={optionClass}
             style={style}

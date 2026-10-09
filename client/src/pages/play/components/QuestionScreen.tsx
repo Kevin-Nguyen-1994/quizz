@@ -20,6 +20,7 @@ import { QuestionText } from '@/components/QuestionText';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { countBlanks, hasQuestionImage, quadColor } from '@/helpers';
+import { liveQuestionSizeClass } from '@/helpers/questionTypography';
 import { arrayMove, usePointerReorder } from '@/hooks/usePointerReorder';
 import { cn } from '@/lib/utils';
 import type { QuestionPayload } from '@/types';
@@ -195,7 +196,7 @@ export function QuestionScreen({
             <QuestionImage src={question.imageUrl} className="question-image" />
           )}
           <div
-            className="question-text"
+            className={cn('question-text live-question-text', liveQuestionSizeClass(question.text))}
             style={{ marginTop: question.mediaType || showImage ? 12 : 0 }}
           >
             <QuestionText text={question.text} />

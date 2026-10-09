@@ -8,6 +8,8 @@ import { QuestionText } from '@/components/QuestionText';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { hasQuestionImage, quadColor } from '@/helpers';
+import { liveQuestionSizeClass } from '@/helpers/questionTypography';
+import { cn } from '@/lib/utils';
 import type { QuestionPayload } from '../../../types';
 
 interface Props {
@@ -71,12 +73,10 @@ export function GameQuestion({
 
           {/* Big centered question */}
           <div
-            className="mx-auto mb-5 max-w-[820px] text-center font-extrabold"
-            style={{
-              fontSize: 'clamp(1.6rem, 4vw, 42px)',
-              lineHeight: 1.16,
-              letterSpacing: '-0.02em',
-            }}
+            className={cn(
+              'live-question-text mx-auto mb-5 max-w-[820px] text-center font-extrabold',
+              liveQuestionSizeClass(question.text),
+            )}
           >
             <QuestionText text={question.text} />
           </div>

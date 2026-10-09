@@ -17,6 +17,14 @@ import type {
   ParticipantAssignmentLookup,
   ParticipantAttemptState,
 } from '@/types';
+
+function formatDuration(totalSeconds: number): string {
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  if (minutes === 0) return `${seconds} giây`;
+  if (seconds === 0) return `${minutes} phút`;
+  return `${minutes} phút ${seconds} giây`;
+}
 import { AssignmentQuestion } from './AssignmentQuestion';
 
 function dateTime(value: number | null) {
@@ -374,6 +382,10 @@ export default function AssignmentPage() {
                 <div className="flex justify-between gap-3">
                   <span className="text-muted-foreground">Số câu hỏi</span>
                   <strong>{lookup.questionCount}</strong>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <span className="text-muted-foreground">Tổng thời gian tối đa</span>
+                  <strong className="text-right">{formatDuration(lookup.totalTimeSec)}</strong>
                 </div>
                 <div className="flex justify-between gap-3">
                   <span className="text-muted-foreground">Thời gian mở</span>

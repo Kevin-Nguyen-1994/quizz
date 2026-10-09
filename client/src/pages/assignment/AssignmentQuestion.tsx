@@ -79,6 +79,8 @@ export function AssignmentQuestion({
             options={isTrueFalse ? ['Đúng', 'Sai'] : question.options}
             selectedIndex={selectedIndex}
             disabled={disabled}
+            variant="assessment"
+            lockOnSelection={false}
             colorFor={isTrueFalse ? (index) => (index === 0 ? '#047857' : '#b91c1c') : undefined}
             badgeFor={
               isTrueFalse
@@ -107,6 +109,8 @@ export function AssignmentQuestion({
             selectedIndices={selectedIndices}
             selectedBadge={<Check className="size-5" />}
             disabled={disabled}
+            variant="assessment"
+            lockOnSelection={false}
             onSelect={toggleMulti}
           />
           <Button
@@ -383,7 +387,7 @@ export function AssignmentQuestion({
   })();
 
   return (
-    <div className="mx-auto w-full max-w-3xl px-4 py-5 sm:py-8">
+    <div className="assignment-question mx-auto w-full max-w-3xl px-4 py-5 sm:py-8">
       <div className="mb-4">
         <p className="text-xs font-semibold uppercase tracking-wide text-primary">Bài kiểm tra</p>
         <h1 className="mb-2 mt-1 break-words text-lg leading-snug sm:text-xl">

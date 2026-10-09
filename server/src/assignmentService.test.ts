@@ -89,11 +89,13 @@ describe('assignment attempt state machine', () => {
       canStart: boolean;
       canResume: boolean;
       attemptId: number | null;
+      totalTimeSec: number;
     };
     assert.equal(lookupBefore.participantStatus, 'not_started');
     assert.equal(lookupBefore.canStart, true);
     assert.equal(lookupBefore.canResume, false);
     assert.equal(lookupBefore.attemptId, null);
+    assert.equal(lookupBefore.totalTimeSec, 21);
     await assert.rejects(
       service.lookupParticipantAssignment(accessCode, outsiderUserId, startedAt),
       (error: unknown) =>

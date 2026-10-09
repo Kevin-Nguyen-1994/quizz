@@ -87,6 +87,7 @@ export function QuestionBankPicker({
   const [categories, setCategories] = useState<QuestionCategory[]>([]);
   const [levels, setLevels] = useState<EmployeeLevel[]>([]);
   const [rows, setRows] = useState<BankQuestionSummary[]>([]);
+  const [filteredTotal, setFilteredTotal] = useState(0);
   const [preview, setPreview] = useState<BankQuestion[]>([]);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [search, setSearch] = useState('');
@@ -99,6 +100,7 @@ export function QuestionBankPicker({
   const [count, setCount] = useState(5);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [confirmingClose, setConfirmingClose] = useState(false);
 
   const queryString = useMemo(() => {
     const query = new URLSearchParams({ limit: '200', isEnabled: '1' });
@@ -118,6 +120,7 @@ export function QuestionBankPicker({
     setPreview([]);
     setSelected(new Set());
     setError('');
+    setConfirmingClose(false);
     Promise.all([
       api.get<{ categories: QuestionCategory[] }>('/api/admin/question-bank/categories'),
       api.get<{ levels: EmployeeLevel[] }>('/api/admin/employee-levels'),
@@ -131,11 +134,14 @@ export function QuestionBankPicker({
   const loadManual = useCallback(async () => {
     setLoading(true);
     setError('');
-    const response = await api.get<{ questions: BankQuestionSummary[] }>(
+    const response = await api.get<{ questions: BankQuestionSummary[]; total: number }>(
       `/api/admin/question-bank/questions?${queryString}`,
     );
     setLoading(false);
-    if (response.ok) setRows(response.data.questions);
+    if (response.ok) {
+      setRows(response.data.questions);
+      setFilteredTotal(response.data.total);
+    }
     else setError('Không thể tải câu hỏi phù hợp.');
   }, [api, queryString]);
 
@@ -156,7 +162,49 @@ export function QuestionBankPicker({
       return;
     }
     onAdd(details.map((item) => toImportQuestion(item.data.question)));
+    finishClose();
+  }
+
+  function hasPendingSelection() {
+    return mode === 'manual' ? selected.size > 0 : preview.length > 0;
+  }
+
+  function requestClose() {
+    if (loading) return;
+    if (hasPendingSelection()) {
+      setConfirmingClose(true);
+      return;
+    }
+    finishClose();
+  }
+
+  function finishClose() {
+    setConfirmingClose(false);
     onClose();
+  }
+
+  async function selectAllFiltered() {
+    setLoading(true);
+    setError('');
+    const allIds: number[] = [];
+    for (let offset = 0; offset < filteredTotal; offset += 200) {
+      const response = await api.get<{
+        questions: BankQuestionSummary[];
+        total: number;
+      }>(`/api/admin/question-bank/questions?${queryString}&offset=${offset}`);
+      if (!response.ok) {
+        setLoading(false);
+        setError('Không thể chọn toàn bộ kết quả lọc. Vui lòng thử lại.');
+        return;
+      }
+      allIds.push(
+        ...response.data.questions
+          .filter((question) => !existingSourceIds.has(question.id))
+          .map((question) => question.id),
+      );
+    }
+    setSelected((current) => new Set([...current, ...allIds]));
+    setLoading(false);
   }
 
   function randomBody() {
@@ -210,8 +258,17 @@ export function QuestionBankPicker({
   );
 
   return (
-    <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
-      <DialogContent className="sm:max-w-5xl">
+    <Dialog open={open}>
+      <DialogContent
+        className="sm:max-w-5xl"
+        showCloseButton={false}
+        onPointerDownOutside={(event) => event.preventDefault()}
+        onInteractOutside={(event) => event.preventDefault()}
+        onEscapeKeyDown={(event) => {
+          event.preventDefault();
+          requestClose();
+        }}
+      >
         <DialogHeader>
           <DialogTitle>Thêm từ Ngân hàng câu hỏi</DialogTitle>
           <p className="text-sm text-muted-foreground">
@@ -286,7 +343,31 @@ export function QuestionBankPicker({
         </div>
 
         {mode === 'manual' ? (
-          <div className="max-h-[46vh] space-y-2 overflow-y-auto rounded-lg border p-2">
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-muted/50 px-3 py-2 text-sm">
+              <strong>Đã chọn {selected.size} câu</strong>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  disabled={loading || filteredTotal === 0}
+                  onClick={selectAllFiltered}
+                >
+                  Chọn tất cả {filteredTotal} câu
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  disabled={selected.size === 0}
+                  onClick={() => setSelected(new Set())}
+                >
+                  Bỏ chọn tất cả
+                </Button>
+              </div>
+            </div>
+            <div className="max-h-[46vh] space-y-2 overflow-y-auto rounded-lg border p-2">
             {loading ? (
               <p className="p-4 text-muted-foreground">Đang tải…</p>
             ) : (
@@ -324,6 +405,7 @@ export function QuestionBankPicker({
                 );
               })
             )}
+            </div>
           </div>
         ) : (
           <div className="space-y-3">
@@ -350,7 +432,7 @@ export function QuestionBankPicker({
           </div>
         )}
         <DialogFooter>
-          <Button variant="ghost" onClick={onClose}>
+          <Button variant="ghost" onClick={requestClose}>
             Hủy
           </Button>
           {mode === 'manual' ? (
@@ -365,7 +447,7 @@ export function QuestionBankPicker({
                     .filter((question) => !existingSourceIds.has(question.id))
                     .map(toImportQuestion),
                 );
-                onClose();
+                finishClose();
               }}
               disabled={preview.length === 0}
             >
@@ -373,6 +455,31 @@ export function QuestionBankPicker({
             </Button>
           )}
         </DialogFooter>
+        {confirmingClose && (
+          <div
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="pending-bank-selection-title"
+            className="absolute inset-0 z-20 grid place-items-center rounded-xl bg-slate-950/45 p-4 backdrop-blur-xs"
+          >
+            <div className="w-full max-w-md space-y-4 rounded-xl border bg-popover p-5 text-popover-foreground shadow-[var(--shadow-dialog)]">
+              <h3 id="pending-bank-selection-title" className="font-heading text-lg font-semibold">
+                Thoát khi chưa thêm câu?
+              </h3>
+              <p className="text-sm text-muted-foreground">
+                Bạn có lựa chọn chưa được thêm vào Bộ đề.
+              </p>
+              <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                <Button variant="ghost" onClick={() => setConfirmingClose(false)}>
+                  Tiếp tục chọn
+                </Button>
+                <Button variant="destructive" onClick={finishClose}>
+                  Thoát không thêm
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );

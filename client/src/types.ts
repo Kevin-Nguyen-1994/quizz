@@ -131,6 +131,7 @@ export interface ParticipantAssignmentLookup {
   maxAttempts: number;
   attemptsUsed: number;
   questionCount: number;
+  totalTimeSec: number;
   participantStatus: AssignmentAttemptStatus | 'not_started';
   attemptId: number | null;
   startedAtMs: number | null;

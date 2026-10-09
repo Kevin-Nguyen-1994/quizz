@@ -2,6 +2,7 @@ import { ArrowRight, Flag, Heart, Music, Trophy, Video } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { ClosestGuessesList, LeaderboardList } from '@/components/game/LeaderboardList';
 import { QuestionDistribution } from '@/components/game/QuestionDistribution';
+import { QuestionExplanation } from '@/components/QuestionExplanation';
 import { MainContent } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -45,7 +46,9 @@ export function GameResults({
   return (
     <MainContent>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-4">
-        <h2>Kết quả — Câu {questionIndex + 1}</h2>
+        <h2>
+          Kết quả câu {questionIndex + 1}/{nextPreview?.total ?? questionIndex + 1}
+        </h2>
         <div className="flex items-center gap-2">
           <Button type="button" variant="ghost" size="lg" onClick={onEndGame}>
             Kết thúc trò chơi
@@ -71,6 +74,30 @@ export function GameResults({
           </Button>
         </div>
       </div>
+
+      <Card className="mb-4 w-full max-w-4xl">
+        <CardContent className="p-6">
+          <p className="mb-3 text-sm text-muted-foreground">{results.questionText}</p>
+          {revealed ? (
+            <QuestionDistribution results={results} />
+          ) : (
+            <div className="pre-reveal">
+              <Heart className="pre-reveal-heart" fill="currentColor" />
+              <span>Đang hiển thị…</span>
+            </div>
+          )}
+          {revealed && <QuestionExplanation explanation={results.explanation} />}
+        </CardContent>
+      </Card>
+
+      {isClosestTo && closestList.length > 0 && (
+        <Card className="mb-4 w-full max-w-4xl">
+          <CardContent className="p-6">
+            <h2 className="mb-4">Dự đoán gần nhất</h2>
+            <ClosestGuessesList entries={closestList} limit={10} />
+          </CardContent>
+        </Card>
+      )}
 
       {nextPreview &&
         (nextPreview.hasNext ? (
@@ -104,29 +131,6 @@ export function GameResults({
             </CardContent>
           </Card>
         ))}
-
-      <Card className="mb-4 w-full max-w-4xl">
-        <CardContent className="p-6">
-          <p className="mb-3 text-sm text-muted-foreground">{results.questionText}</p>
-          {revealed ? (
-            <QuestionDistribution results={results} />
-          ) : (
-            <div className="pre-reveal">
-              <Heart className="pre-reveal-heart" fill="currentColor" />
-              <span>Đang hiển thị…</span>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {isClosestTo && closestList.length > 0 && (
-        <Card className="mb-4 w-full max-w-4xl">
-          <CardContent className="p-6">
-            <h2 className="mb-4">Dự đoán gần nhất</h2>
-            <ClosestGuessesList entries={closestList} limit={10} />
-          </CardContent>
-        </Card>
-      )}
 
       <Card className="w-full max-w-4xl">
         <CardContent className="p-6">

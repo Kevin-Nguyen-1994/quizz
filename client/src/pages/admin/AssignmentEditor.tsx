@@ -975,7 +975,14 @@ export default function AssignmentEditor() {
                           {member.loginName} · {member.levelCode ?? 'Chưa phân bậc'}
                         </span>
                       </span>
-                      <Badge variant="outline">
+                      <Badge
+                        variant="outline"
+                        className={
+                          member.source === 'override_include'
+                            ? 'border-amber-300 bg-amber-50 text-amber-800'
+                            : 'border-slate-300 bg-slate-50 text-slate-700'
+                        }
+                      >
                         {member.source === 'override_include' ? 'Ngoại lệ thêm' : 'Theo điều kiện'}
                       </Badge>
                     </div>
@@ -995,7 +1002,12 @@ export default function AssignmentEditor() {
                               {user.login_name} · {levelLabel(user)}
                             </span>
                           </span>
-                          <Badge variant="outline">Ngoại lệ loại</Badge>
+                          <Badge
+                            variant="outline"
+                            className="border-red-300 bg-red-50 text-red-700"
+                          >
+                            Ngoại lệ loại trừ
+                          </Badge>
                         </div>
                       ) : null;
                     })}
