@@ -40,6 +40,7 @@ function duration(value: number | null) {
 
 function friendlyError(message?: string) {
   if (!message) return 'Không thể xử lý yêu cầu. Vui lòng thử lại.';
+  if (message.includes('thu hồi')) return 'Bài kiểm tra đã được thu hồi.';
   if (message.includes('not found'))
     return 'Không tìm thấy bài kiểm tra hoặc bạn không có quyền truy cập.';
   if (message.includes('has not opened')) return 'Bài kiểm tra chưa đến thời gian mở.';
@@ -63,6 +64,7 @@ export default function AssignmentPage() {
   const [review, setReview] = useState<AssignmentAttemptDetail | null>(null);
   const [reviewLoading, setReviewLoading] = useState(false);
   const [timeLeft, setTimeLeft] = useState(0);
+  const [revoked, setRevoked] = useState(false);
   const timeoutSentFor = useRef<number | null>(null);
 
   const loadLookup = useCallback(async () => {
@@ -71,6 +73,7 @@ export default function AssignmentPage() {
       `/api/assignments/${encodeURIComponent(accessCode)}`,
     );
     if (result.ok && result.data?.id) setLookup(result.data);
+    else if (result.data?.error?.includes('thu hồi')) setRevoked(true);
     else setError(friendlyError(result.data?.error));
     setLoading(false);
   }, [accessCode, api]);
@@ -93,6 +96,14 @@ export default function AssignmentPage() {
     }
   }, []);
 
+  const handleFailure = useCallback((message?: string) => {
+    if (message?.includes('thu hồi')) {
+      setRevoked(true); setAttempt(null); setLookup(null); setSubmitting(false); setTimeLeft(0);
+      timeoutSentFor.current = null; return;
+    }
+    setSubmitting(false); setError(friendlyError(message));
+  }, []);
+
   const sendTimeout = useCallback(async () => {
     const current = attempt;
     if (!current?.question || current.attempt.status !== 'in_progress') return;
@@ -108,13 +119,12 @@ export default function AssignmentPage() {
         applyAttemptState(result.data);
         return;
       }
-      setSubmitting(false);
-      setError(friendlyError(result.data?.error));
+      handleFailure(result.data?.error);
     } catch {
       setSubmitting(false);
       setError('Mất kết nối với máy chủ. Câu trả lời chưa được gửi; vui lòng thử lại.');
     }
-  }, [api, applyAttemptState, attempt]);
+  }, [api, applyAttemptState, attempt, handleFailure]);
 
   useEffect(() => {
     const question = attempt?.question;
@@ -145,8 +155,7 @@ export default function AssignmentPage() {
         applyAttemptState(result.data);
         return;
       }
-      setSubmitting(false);
-      setError(friendlyError(result.data?.error));
+      handleFailure(result.data?.error);
     } catch {
       setSubmitting(false);
       setError('Không thể kết nối máy chủ. Hãy kiểm tra mạng LAN và thử lại.');
@@ -164,8 +173,7 @@ export default function AssignmentPage() {
         applyAttemptState(result.data);
         return;
       }
-      setSubmitting(false);
-      setError(friendlyError(result.data?.error));
+      handleFailure(result.data?.error);
     } catch {
       setSubmitting(false);
       setError('Không thể kết nối máy chủ. Hãy kiểm tra mạng LAN và thử lại.');
@@ -189,8 +197,7 @@ export default function AssignmentPage() {
         applyAttemptState(result.data);
         return;
       }
-      setSubmitting(false);
-      setError(friendlyError(result.data?.error));
+      handleFailure(result.data?.error);
     } catch {
       setSubmitting(false);
       setError('Mất kết nối với máy chủ. Câu trả lời chưa được gửi; vui lòng thử lại.');
@@ -206,7 +213,7 @@ export default function AssignmentPage() {
         `/api/assignments/attempts/${attempt.attempt.id}/review`,
       );
       if (result.ok && result.data?.attempt) setReview(result.data);
-      else setError(friendlyError(result.data?.error));
+      else handleFailure(result.data?.error);
     } catch {
       setError('Không thể kết nối máy chủ để tải phần xem lại.');
     } finally {
@@ -240,6 +247,8 @@ export default function AssignmentPage() {
         <div className="m-auto text-muted-foreground">Đang tải bài kiểm tra…</div>
       </Page>
     );
+
+  if (revoked) return <Page>{header}<main className="m-auto w-full max-w-lg px-4 py-8"><Card><CardContent className="p-8 text-center"><h1>Bài kiểm tra đã được thu hồi.</h1><Button variant="ghost" className="mt-6" asChild><Link to="/u/assignments"><ArrowLeft className="size-4" /> Về danh sách bài kiểm tra</Link></Button></CardContent></Card></main></Page>;
 
   if (attempt?.question && attempt.attempt.status === 'in_progress') {
     return (

@@ -40,7 +40,7 @@ function accessCode(req: Request): string {
 
 function handleError(error: unknown, res: Response, next: NextFunction): void {
   if (error instanceof AssignmentServiceError) {
-    res.status(error.statusCode).json({ error: error.message });
+    res.status(error.statusCode).json({ error: error.message, ...(error.code ? { code: error.code } : {}) });
     return;
   }
   next(error);

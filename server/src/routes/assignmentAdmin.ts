@@ -10,6 +10,9 @@ import {
   setAssignmentMembers,
   setAssignmentTargetOverrides,
   updateDraftAssignment,
+  addPublishedAssignmentRecipients,
+  revokeAssignmentRecipient,
+  reassignAssignmentRecipient,
 } from '../assignmentService';
 import {
   buildAssignmentCsv,
@@ -23,6 +26,10 @@ import { createAssignmentQuestionPreview, QuestionGenerationError } from '../que
 export const assignmentAdminRouter = Router();
 
 assignmentAdminRouter.use(requireAuth);
+
+assignmentAdminRouter.post('/:id/recipients', async (req,res,next)=>{ try { const body=req.body as {userIds?:unknown;reason?:unknown}; if(!Array.isArray(body.userIds)) throw new AssignmentServiceError('userIds must be an array'); await addPublishedAssignmentRecipients(actor(req),assignmentId(req),body.userIds as number[],typeof body.reason==='string'?body.reason:undefined); res.status(204).end(); } catch(error){handleError(error,res,next);} });
+assignmentAdminRouter.post('/:id/recipients/:userId/revoke', async (req,res,next)=>{ try { await revokeAssignmentRecipient(actor(req),assignmentId(req),Number(req.params.userId),(req.body as {reason?:unknown})?.reason as string|undefined); res.status(204).end(); } catch(error){handleError(error,res,next);} });
+assignmentAdminRouter.post('/:id/recipients/:userId/reassign', async (req,res,next)=>{ try { await reassignAssignmentRecipient(actor(req),assignmentId(req),Number(req.params.userId),(req.body as {reason?:unknown})?.reason as string|undefined); res.status(204).end(); } catch(error){handleError(error,res,next);} });
 
 function actor(req: Request) {
   const user = getRequestUser(req);

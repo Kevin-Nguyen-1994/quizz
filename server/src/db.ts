@@ -261,6 +261,7 @@ export async function initDb(): Promise<void> {
 
   await migrateInternalUserIdentifiers();
   await migrateEmployeeLevelsAndTargeting();
+  await migrateAssignmentRecipientLifecycle();
   await migrateQuestionBank();
 
   // Migrate admin from config to database if needed
@@ -699,6 +700,53 @@ async function migrateEmployeeLevelsAndTargeting(): Promise<void> {
         ON assignments(target_mode, target_level_id);
       CREATE INDEX IF NOT EXISTS idx_assignment_members_assignment_level
         ON assignment_members(assignment_id, level_id_snapshot);
+    `);
+    await db.run('COMMIT');
+  } catch (error) {
+    await db.run('ROLLBACK').catch(() => undefined);
+    throw error;
+  }
+}
+
+/** Phase 7D additive recipient lifecycle schema. */
+async function migrateAssignmentRecipientLifecycle(): Promise<void> {
+  await db.run('BEGIN IMMEDIATE');
+  try {
+    for (const [column, definition] of [
+      ['recipient_status', "recipient_status TEXT NOT NULL DEFAULT 'assigned' CHECK(recipient_status IN ('assigned','revoked'))"],
+      ['membership_source', "membership_source TEXT NOT NULL DEFAULT 'initial_target' CHECK(membership_source IN ('initial_target','manual_added_after_publish','exception'))"],
+      ['entitlement_version', 'entitlement_version INTEGER NOT NULL DEFAULT 1'],
+      ['updated_at_ms', 'updated_at_ms INTEGER'],
+      ['revoked_at_ms', 'revoked_at_ms INTEGER'],
+      ['revoked_by_user_id', 'revoked_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL'],
+      ['revoked_reason', 'revoked_reason TEXT'],
+    ] as const) await addColumnIfMissing('assignment_members', column, definition);
+    for (const [column, definition] of [
+      ['recipient_entitlement_version', 'recipient_entitlement_version INTEGER NOT NULL DEFAULT 1'],
+      ['termination_reason', "termination_reason TEXT CHECK(termination_reason IS NULL OR termination_reason = 'revoked_by_admin')"],
+      ['terminated_at_ms', 'terminated_at_ms INTEGER'],
+    ] as const) await addColumnIfMissing('assignment_attempts', column, definition);
+    await db.exec(`
+      CREATE TABLE IF NOT EXISTS assignment_recipient_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        assignment_id INTEGER NOT NULL REFERENCES assignments(id) ON DELETE CASCADE,
+        assignment_member_id INTEGER NOT NULL REFERENCES assignment_members(id) ON DELETE CASCADE,
+        user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        action TEXT NOT NULL CHECK(action IN ('added_after_publish','revoked','reassigned')),
+        entitlement_version INTEGER NOT NULL,
+        actor_role TEXT NOT NULL,
+        actor_id INTEGER,
+        actor_name_snapshot TEXT NOT NULL,
+        reason TEXT,
+        created_at_ms INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_assignment_recipient_events_assignment
+        ON assignment_recipient_events(assignment_id, created_at_ms DESC);
+      CREATE INDEX IF NOT EXISTS idx_assignment_recipient_events_user
+        ON assignment_recipient_events(user_id);
+      CREATE INDEX IF NOT EXISTS idx_assignment_recipient_events_created
+        ON assignment_recipient_events(created_at_ms DESC);
+      UPDATE assignment_members SET updated_at_ms = assigned_at_ms WHERE updated_at_ms IS NULL;
     `);
     await db.run('COMMIT');
   } catch (error) {

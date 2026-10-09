@@ -663,6 +663,13 @@ export async function getParticipantAttemptReview(
     [attempt.assignment_id],
   );
   if (!assignment) throw new AssignmentServiceError('Assignment not found', 404);
+  const member = await db.get<{ recipient_status: string; entitlement_version: number }>(
+    'SELECT recipient_status, entitlement_version FROM assignment_members WHERE assignment_id = ? AND user_id = ?',
+    [assignment.id, userId],
+  );
+  if (!member || member.recipient_status !== 'assigned' || attempt.recipient_entitlement_version !== member.entitlement_version || attempt.termination_reason === 'revoked_by_admin') {
+    throw new AssignmentServiceError('Bài kiểm tra đã được thu hồi.', 403, 'ASSIGNMENT_REVOKED');
+  }
   if (!reviewIsAvailable(assignment, nowMs)) {
     throw new AssignmentServiceError('Review is not available yet', 403);
   }

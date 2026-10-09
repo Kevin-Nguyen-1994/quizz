@@ -432,8 +432,8 @@ export async function setAssignmentMembers(
       await database.run(
         `INSERT INTO assignment_members
           (assignment_id, user_id, login_name_snapshot, display_name_snapshot, email_snapshot,
-           assigned_at_ms, level_id_snapshot, level_code_snapshot, level_name_snapshot)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           assigned_at_ms, level_id_snapshot, level_code_snapshot, level_name_snapshot, updated_at_ms)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         assignmentId,
         user.id,
         userLoginName(user),
@@ -443,6 +443,7 @@ export async function setAssignmentMembers(
         user.employee_level_id,
         user.level_code,
         user.level_name,
+        now,
       );
     }
     return database.all<DbAssignmentMember[]>(
@@ -755,8 +756,8 @@ export async function publishAssignment(
         await database.run(
           `INSERT INTO assignment_members (
              assignment_id, user_id, login_name_snapshot, display_name_snapshot, email_snapshot,
-             assigned_at_ms, level_id_snapshot, level_code_snapshot, level_name_snapshot
-           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+             assigned_at_ms, level_id_snapshot, level_code_snapshot, level_name_snapshot, updated_at_ms
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           assignmentId,
           member.id,
           member.loginName,
@@ -766,6 +767,7 @@ export async function publishAssignment(
           member.levelId,
           member.levelCode,
           member.levelName,
+          assignedAt,
         );
       }
       targetLevelCode = resolved.targetLevel?.code ?? null;
@@ -926,6 +928,7 @@ export async function getAssignmentForAdmin(
   members: unknown[];
   targetOverrides: Array<{ userId: number; action: AssignmentTargetOverrideAction }>;
   questionPreview: unknown | null;
+  recipientEvents: unknown[];
 }> {
   const assignment = await requireOwnedAssignment(db, actor, assignmentId);
   const quiz = assignment.quiz_id
@@ -970,6 +973,7 @@ export async function getAssignmentForAdmin(
      ORDER BY user_id, attempt_number DESC`,
     [assignmentId],
   );
+  const recipientEvents = await db.all(`SELECT * FROM assignment_recipient_events WHERE assignment_id = ? ORDER BY created_at_ms DESC, id DESC`, [assignmentId]);
   const targetOverrides = await db.all<
     Array<{ userId: number; action: AssignmentTargetOverrideAction }>
   >(
@@ -980,6 +984,8 @@ export async function getAssignmentForAdmin(
   const selectedAttempts = new Map<number, DbAssignmentAttempt>();
   for (const attempt of attempts) {
     if (attempt.user_id === null) continue;
+    const member = (members as DbAssignmentMember[]).find((item) => item.user_id === attempt.user_id);
+    if (member && attempt.recipient_entitlement_version !== member.entitlement_version) continue;
     const selected = selectedAttempts.get(attempt.user_id);
     if (!selected) {
       selectedAttempts.set(attempt.user_id, attempt);
@@ -1009,7 +1015,7 @@ export async function getAssignmentForAdmin(
     const attempt = selectedAttempts.get(member.user_id as number);
     return {
       ...member,
-      participant_status: attempt?.status ?? 'not_started',
+      participant_status: member.recipient_status === 'revoked' ? 'revoked' : (attempt?.termination_reason === 'revoked_by_admin' ? 'revoked' : attempt?.status ?? 'not_started'),
       attempt_id: attempt?.id ?? null,
       started_at_ms: attempt?.started_at_ms ?? null,
       completed_at_ms: attempt?.completed_at_ms ?? null,
@@ -1028,6 +1034,7 @@ export async function getAssignmentForAdmin(
     members: membersWithProgress,
     targetOverrides,
     questionPreview: questionPreview ?? null,
+    recipientEvents,
   };
 }
 
@@ -1083,6 +1090,57 @@ export async function closeAssignment(
   });
 }
 
+async function recipientActorName(database: Database, actor: AssignmentActor): Promise<string> {
+  const row = actor.id > 0 ? await database.get<{ username: string }>('SELECT username FROM users WHERE id = ?', [actor.id]) : null;
+  return row?.username ?? (actor.role === 'super_admin' ? 'Super Admin' : 'Admin');
+}
+
+export async function addPublishedAssignmentRecipients(actor: AssignmentActor, assignmentId: number, userIds: number[], reason?: string): Promise<void> {
+  await withAssignmentTransaction(async (database) => {
+    const assignment = await requireOwnedAssignment(database, actor, assignmentId);
+    const now = Date.now();
+    if (assignment.status !== 'published') throw new AssignmentServiceError('Only published assignments can receive new recipients', 409);
+    if (assignment.deadline_at_ms !== null && now >= assignment.deadline_at_ms) throw new AssignmentServiceError('Assignment deadline has passed', 409);
+    const actorName = await recipientActorName(database, actor);
+    for (const userId of [...new Set(userIds)]) {
+      const existing = await database.get<DbAssignmentMember>('SELECT * FROM assignment_members WHERE assignment_id = ? AND user_id = ?', [assignmentId, userId]);
+      if (existing) continue;
+      const user = await database.get<DbUser & { level_code: string | null; level_name: string | null }>(`SELECT u.*, l.code level_code, l.name level_name FROM users u LEFT JOIN employee_levels l ON l.id=u.employee_level_id WHERE u.id=? AND u.is_banned=0`, [userId]);
+      if (!user) throw new AssignmentServiceError('User not found or inactive', 404);
+      const inserted = await database.run(`INSERT INTO assignment_members (assignment_id,user_id,login_name_snapshot,display_name_snapshot,email_snapshot,assigned_at_ms,level_id_snapshot,level_code_snapshot,level_name_snapshot,recipient_status,membership_source,entitlement_version,updated_at_ms) VALUES (?,?,?,?,?,?,?,?,?,'assigned','manual_added_after_publish',1,?)`, assignmentId,user.id,userLoginName(user),user.play_display_name?.trim()||user.username,user.email??'',now,user.employee_level_id,user.level_code,user.level_name,now);
+      await database.run(`INSERT INTO assignment_recipient_events (assignment_id,assignment_member_id,user_id,action,entitlement_version,actor_role,actor_id,actor_name_snapshot,reason,created_at_ms) VALUES (?,?,?,'added_after_publish',1,?,?,?,?,?)`, assignmentId,inserted.lastID,userId,actor.role,actor.id,actorName,reason?.trim()||null,now);
+    }
+  });
+}
+
+export async function revokeAssignmentRecipient(actor: AssignmentActor, assignmentId: number, userId: number, reason?: string): Promise<void> {
+  await withAssignmentTransaction(async (database) => {
+    await requireOwnedAssignment(database, actor, assignmentId);
+    const member = await database.get<DbAssignmentMember>('SELECT * FROM assignment_members WHERE assignment_id=? AND user_id=?', [assignmentId,userId]);
+    if (!member) throw new AssignmentServiceError('Recipient not found',404);
+    if (member.recipient_status === 'revoked') return;
+    const completed = await database.get<{count:number}>(`SELECT COUNT(*) count FROM assignment_attempts WHERE assignment_id=? AND user_id=? AND recipient_entitlement_version=? AND status='completed'`,[assignmentId,userId,member.entitlement_version]);
+    if ((completed?.count??0)>0) throw new AssignmentServiceError('Đã hoàn thành – không thể thu hồi',409,'RECIPIENT_COMPLETED');
+    const now=Date.now(); const actorName=await recipientActorName(database,actor);
+    await database.run(`UPDATE assignment_members SET recipient_status='revoked',updated_at_ms=?,revoked_at_ms=?,revoked_by_user_id=?,revoked_reason=? WHERE id=?`,now,now,actor.id>0?actor.id:null,reason?.trim()||null,member.id);
+    await database.run(`UPDATE assignment_attempts SET status='expired',termination_reason='revoked_by_admin',terminated_at_ms=?,completed_at_ms=?,last_activity_at_ms=?,current_question_started_at_ms=NULL WHERE assignment_id=? AND user_id=? AND recipient_entitlement_version=? AND status='in_progress'`,now,now,now,assignmentId,userId,member.entitlement_version);
+    await database.run(`INSERT INTO assignment_recipient_events (assignment_id,assignment_member_id,user_id,action,entitlement_version,actor_role,actor_id,actor_name_snapshot,reason,created_at_ms) VALUES (?,?,?,'revoked',?,?,?,?,?,?)`,assignmentId,member.id,userId,member.entitlement_version,actor.role,actor.id,actorName,reason?.trim()||null,now);
+  });
+}
+
+export async function reassignAssignmentRecipient(actor: AssignmentActor, assignmentId: number, userId: number, reason?: string): Promise<void> {
+  await withAssignmentTransaction(async (database) => {
+    const assignment=await requireOwnedAssignment(database,actor,assignmentId); const now=Date.now();
+    if (assignment.deadline_at_ms!==null && now>=assignment.deadline_at_ms) throw new AssignmentServiceError('Assignment deadline has passed',409);
+    const member=await database.get<DbAssignmentMember>('SELECT * FROM assignment_members WHERE assignment_id=? AND user_id=?',[assignmentId,userId]);
+    if (!member) throw new AssignmentServiceError('Recipient not found',404);
+    if (member.recipient_status!=='revoked') throw new AssignmentServiceError('Recipient is already assigned',409);
+    const next=member.entitlement_version+1; const actorName=await recipientActorName(database,actor);
+    await database.run(`UPDATE assignment_members SET recipient_status='assigned',entitlement_version=?,updated_at_ms=?,revoked_at_ms=NULL,revoked_by_user_id=NULL,revoked_reason=NULL WHERE id=?`,next,now,member.id);
+    await database.run(`INSERT INTO assignment_recipient_events (assignment_id,assignment_member_id,user_id,action,entitlement_version,actor_role,actor_id,actor_name_snapshot,reason,created_at_ms) VALUES (?,?,?,'reassigned',?,?,?,?,?,?)`,assignmentId,member.id,userId,next,actor.role,actor.id,actorName,reason?.trim()||null,now);
+  });
+}
+
 async function requireParticipantAssignmentByCode(
   database: Database,
   accessCode: string,
@@ -1102,6 +1160,9 @@ async function requireParticipantAssignmentByCode(
     )) ?? null;
   if (assignment.audience_mode === 'members' && !member) {
     throw new AssignmentServiceError('Assignment not found', 404);
+  }
+  if (member?.recipient_status === 'revoked') {
+    throw new AssignmentServiceError('Bài kiểm tra đã được thu hồi.', 403, 'ASSIGNMENT_REVOKED');
   }
   return { assignment, member };
 }
@@ -1194,7 +1255,8 @@ export async function listParticipantAssignments(
     const assignments = await database.all<DbAssignment[]>(
       `SELECT a.* FROM assignments a
        JOIN assignment_members m ON m.assignment_id = a.id
-       WHERE m.user_id = ? AND a.status NOT IN ('draft', 'archived')
+       WHERE m.user_id = ? AND m.recipient_status = 'assigned'
+         AND a.status NOT IN ('draft', 'archived')
        ORDER BY
          CASE WHEN a.deadline_at_ms IS NULL THEN 1 ELSE 0 END,
          a.deadline_at_ms ASC,
@@ -1437,6 +1499,15 @@ async function requireParticipantAttempt(
     attempt.assignment_id,
   ]);
   if (!assignment) throw new AssignmentServiceError('Assignment not found', 404);
+  const member = await database.get<DbAssignmentMember>(
+    'SELECT * FROM assignment_members WHERE assignment_id = ? AND user_id = ?',
+    [assignment.id, userId],
+  );
+  if (!member || member.recipient_status !== 'assigned' ||
+      attempt.recipient_entitlement_version !== member.entitlement_version ||
+      attempt.termination_reason === 'revoked_by_admin') {
+    throw new AssignmentServiceError('Bài kiểm tra đã được thu hồi.', 403, 'ASSIGNMENT_REVOKED');
+  }
   return { assignment, attempt };
 }
 
@@ -1453,8 +1524,9 @@ export async function startOrResumeAttempt(
     );
     const active = await database.get<DbAssignmentAttempt>(
       `SELECT * FROM assignment_attempts
-       WHERE assignment_id = ? AND user_id = ? AND status = 'in_progress'`,
-      [assignment.id, userId],
+       WHERE assignment_id = ? AND user_id = ? AND status = 'in_progress'
+         AND recipient_entitlement_version = ?`,
+      [assignment.id, userId, existingMember?.entitlement_version ?? 1],
     );
     if (active) {
       const reconciled = await reconcileAttempt(database, assignment, active, nowMs);
@@ -1462,14 +1534,15 @@ export async function startOrResumeAttempt(
     }
 
     const used = await database.get<{ count: number }>(
-      'SELECT COUNT(*) as count FROM assignment_attempts WHERE assignment_id = ? AND user_id = ?',
-      [assignment.id, userId],
+      `SELECT COUNT(*) as count FROM assignment_attempts
+       WHERE assignment_id = ? AND user_id = ? AND recipient_entitlement_version = ?`,
+      [assignment.id, userId, existingMember?.entitlement_version ?? 1],
     );
     if ((used?.count ?? 0) >= assignment.max_attempts) {
       const latest = await database.get<DbAssignmentAttempt>(
         `SELECT * FROM assignment_attempts WHERE assignment_id = ? AND user_id = ?
-         ORDER BY attempt_number DESC LIMIT 1`,
-        [assignment.id, userId],
+         AND recipient_entitlement_version = ? ORDER BY attempt_number DESC LIMIT 1`,
+        [assignment.id, userId, existingMember?.entitlement_version ?? 1],
       );
       if (latest) return buildAttemptState(database, assignment, latest, nowMs);
       throw new AssignmentServiceError('No attempts remaining', 409);
@@ -1498,8 +1571,8 @@ export async function startOrResumeAttempt(
       const result = await database.run(
         `INSERT INTO assignment_members
           (assignment_id, user_id, login_name_snapshot, display_name_snapshot, email_snapshot,
-           assigned_at_ms, level_id_snapshot, level_code_snapshot, level_name_snapshot)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           assigned_at_ms, level_id_snapshot, level_code_snapshot, level_name_snapshot, updated_at_ms)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         assignment.id,
         user.id,
         userLoginName(user),
@@ -1509,6 +1582,7 @@ export async function startOrResumeAttempt(
         user.employee_level_id,
         user.level_code,
         user.level_name,
+        nowMs,
       );
       member = (await database.get<DbAssignmentMember>(
         'SELECT * FROM assignment_members WHERE id = ?',
@@ -1517,13 +1591,17 @@ export async function startOrResumeAttempt(
     }
     if (!member) throw new AssignmentServiceError('Assignment not found', 404);
 
-    const attemptNumber = (used?.count ?? 0) + 1;
+    const sequence = await database.get<{ max_attempt_number: number }>(
+      'SELECT COALESCE(MAX(attempt_number), 0) AS max_attempt_number FROM assignment_attempts WHERE assignment_id = ? AND user_id = ?',
+      [assignment.id, userId],
+    );
+    const attemptNumber = (sequence?.max_attempt_number ?? 0) + 1;
     const result = await database.run(
       `INSERT INTO assignment_attempts (
         assignment_id, assignment_member_id, user_id, participant_login_name, participant_name, participant_email,
         attempt_number, status, current_question_index, current_question_started_at_ms,
-        started_at_ms, last_activity_at_ms
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, 'in_progress', 0, ?, ?, ?)`,
+        started_at_ms, last_activity_at_ms, recipient_entitlement_version
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, 'in_progress', 0, ?, ?, ?, ?)`,
       assignment.id,
       member.id,
       user.id,
@@ -1534,6 +1612,7 @@ export async function startOrResumeAttempt(
       nowMs,
       nowMs,
       nowMs,
+      member.entitlement_version,
     );
     const attempt = (await database.get<DbAssignmentAttempt>(
       'SELECT * FROM assignment_attempts WHERE id = ?',

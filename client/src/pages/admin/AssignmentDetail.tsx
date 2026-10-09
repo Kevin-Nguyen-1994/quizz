@@ -1,4 +1,4 @@
-import { ArrowLeft, Check, Copy, Download, ExternalLink, Eye } from 'lucide-react';
+import { ArrowLeft, Check, Copy, Download, ExternalLink, Eye, UserPlus } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { AppAlert } from '@/components/AppAlert';
@@ -31,6 +31,8 @@ import type {
   AssignmentParticipantReportRow,
   AssignmentQuestionDetail,
   AssignmentReport,
+  AdminAssignmentDetail,
+  UserAccount,
 } from '@/types';
 
 function dateTime(value: number | null) {
@@ -99,14 +101,22 @@ export default function AssignmentDetail() {
   const [questionOpen, setQuestionOpen] = useState(false);
   const [questionDetail, setQuestionDetail] = useState<AssignmentQuestionDetail | null>(null);
   const [questionError, setQuestionError] = useState('');
+  const [detail, setDetail] = useState<AdminAssignmentDetail | null>(null);
+  const [users, setUsers] = useState<UserAccount[]>([]);
+  const [addOpen, setAddOpen] = useState(false);
+  const [selectedUsers, setSelectedUsers] = useState<number[]>([]);
 
   const load = useCallback(async () => {
     setError('');
-    const result = await api.get<AssignmentReport & { error?: string }>(
-      `/api/admin/assignments/${id}/report`,
-    );
+    const [result, detailResult, usersResult] = await Promise.all([
+      api.get<AssignmentReport & { error?: string }>(`/api/admin/assignments/${id}/report`),
+      api.get<AdminAssignmentDetail & { error?: string }>(`/api/admin/assignments/${id}`),
+      api.get<{ users?: UserAccount[] }>('/api/admin/users'),
+    ]);
     if (result.ok && result.data?.assignment) setReport(result.data);
     else setError(result.data?.error ?? 'Không thể tải báo cáo bài kiểm tra.');
+    if (detailResult.ok && detailResult.data?.assignment) setDetail(detailResult.data);
+    if (usersResult.ok) setUsers(usersResult.data?.users ?? []);
     setLoading(false);
   }, [api, id]);
 
@@ -116,6 +126,17 @@ export default function AssignmentDetail() {
       setLoading(false);
     });
   }, [load]);
+
+  async function addRecipients() {
+    if (!selectedUsers.length) return;
+    setBusy(true); const result=await api.post<{error?:string}>(`/api/admin/assignments/${id}/recipients`,{userIds:selectedUsers});
+    setBusy(false); if(!result.ok){setError(result.data?.error??'Không thể thêm người nhận.');return;} setAddOpen(false);setSelectedUsers([]);await load();
+  }
+
+  async function recipientAction(userId:number, action:'revoke'|'reassign', inProgress=false) {
+    const approved=await confirm({title:action==='revoke'?'Thu hồi bài kiểm tra':'Giao lại bài kiểm tra',message:action==='revoke'?(inProgress?'Nhân viên đang làm bài. Thu hồi sẽ chấm dứt lượt làm hiện tại và nhân viên không thể tiếp tục xem nội dung hoặc kết quả bài kiểm tra.':'Thu hồi bài kiểm tra khỏi nhân viên này?'):'Nhân viên sẽ nhận một quyền làm bài mới trên cùng bộ câu hỏi đã phát hành.',confirmText:action==='revoke'?'Thu hồi bài':'Giao lại',variant:action==='revoke'?'danger':'default'}); if(!approved)return;
+    setBusy(true);const result=await api.post<{error?:string}>(`/api/admin/assignments/${id}/recipients/${userId}/${action}`,{});setBusy(false);if(!result.ok)setError(result.data?.error??'Không thể cập nhật người nhận.');else await load();
+  }
 
   const participantRows = useMemo<ParticipantAttemptRow[]>(
     () =>
@@ -378,6 +399,16 @@ export default function AssignmentDetail() {
           />
         </div>
 
+        {assignment.status === 'published' && detail && (
+          <Card className="mb-7">
+            <CardContent className="p-4">
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-xl">Quản lý người nhận</h2><p className="text-sm text-muted-foreground">Thêm, thu hồi hoặc giao lại mà không thay đổi bộ câu hỏi đã phát hành.</p></div><Button onClick={()=>setAddOpen(true)}><UserPlus className="size-4" /> Thêm người nhận</Button></div>
+              <div className="overflow-x-auto"><table className="w-full min-w-[760px] text-sm"><thead><tr className="border-b text-left text-muted-foreground"><th className="py-2">Nhân viên</th><th>Level</th><th>Trạng thái</th><th>Nguồn giao</th><th /></tr></thead><tbody>{detail.members.map(member=><tr key={member.id} className="border-b last:border-0"><td className="py-3"><strong className="block">{member.display_name_snapshot}</strong><span className="text-xs text-muted-foreground">{member.login_name_snapshot}</span></td><td>{member.level_code_snapshot??'—'}</td><td><AssignmentStatusBadge status={member.participant_status} /></td><td>{member.membership_source==='manual_added_after_publish'?'Thêm sau phát hành':'Đối tượng ban đầu'}</td><td className="text-right">{member.recipient_status==='revoked'&&member.user_id?<Button size="sm" variant="secondary" onClick={()=>recipientAction(member.user_id as number,'reassign')}>Giao lại</Button>:member.participant_status!=='completed'&&member.user_id?<Button size="sm" variant="destructive" onClick={()=>recipientAction(member.user_id as number,'revoke',member.participant_status==='in_progress')}>Thu hồi</Button>:<span className="text-xs text-muted-foreground">Đã hoàn thành</span>}</td></tr>)}</tbody></table></div>
+              {detail.recipientEvents.length>0&&<div className="mt-5 border-t pt-4"><h3 className="mb-2 text-base">Lịch sử người nhận</h3><div className="space-y-1 text-sm text-muted-foreground">{detail.recipientEvents.slice(0,10).map(event=><p key={event.id}>{dateTime(event.created_at_ms)} · {event.action==='revoked'?'Thu hồi':event.action==='reassigned'?'Giao lại':'Thêm sau phát hành'} · {event.actor_name_snapshot}{event.reason?` · ${event.reason}`:''}</p>)}</div></div>}
+            </CardContent>
+          </Card>
+        )}
+
         <h2 className="mb-3 text-xl">Kết quả theo nhân viên</h2>
         <p className="mb-3 text-sm text-muted-foreground">
           <strong>Từ bắt đầu đến nộp</strong> bao gồm thời gian rời khỏi bài.{' '}
@@ -600,6 +631,8 @@ export default function AssignmentDetail() {
           )}
         </DialogContent>
       </Dialog>
+
+      <Dialog open={addOpen} onOpenChange={setAddOpen}><DialogContent><DialogHeader><DialogTitle>Thêm người nhận</DialogTitle><DialogDescription>Chọn nhiều nhân viên. Người mới sẽ dùng đúng snapshot câu hỏi hiện tại.</DialogDescription></DialogHeader><select multiple className="min-h-64 w-full rounded-md border bg-background p-2" value={selectedUsers.map(String)} onChange={(event)=>setSelectedUsers(Array.from(event.currentTarget.selectedOptions).map(option=>Number(option.value)))}>{users.filter(user=>!user.is_banned&&!detail?.members.some(member=>member.user_id===user.id)).map(user=><option key={user.id} value={user.id}>{user.username} · {user.login_name} · {user.employee_level_code??'Chưa có level'}</option>)}</select><div className="flex justify-end gap-2"><Button variant="ghost" onClick={()=>setAddOpen(false)}>Hủy</Button><Button disabled={busy||!selectedUsers.length} onClick={addRecipients}>Thêm người nhận</Button></div></DialogContent></Dialog>
 
       <Dialog open={questionOpen} onOpenChange={setQuestionOpen}>
         <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-5xl">

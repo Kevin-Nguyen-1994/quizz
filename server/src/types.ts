@@ -393,6 +393,13 @@ export interface DbAssignmentMember {
   level_id_snapshot: number | null;
   level_code_snapshot: string | null;
   level_name_snapshot: string | null;
+  recipient_status: 'assigned' | 'revoked';
+  membership_source: 'initial_target' | 'manual_added_after_publish' | 'exception';
+  entitlement_version: number;
+  updated_at_ms: number;
+  revoked_at_ms: number | null;
+  revoked_by_user_id: number | null;
+  revoked_reason: string | null;
 }
 
 export interface DbAssignmentAttempt {
@@ -412,6 +419,9 @@ export interface DbAssignmentAttempt {
   last_activity_at_ms: number;
   correct_count: number;
   total_score: number;
+  recipient_entitlement_version: number;
+  termination_reason: 'revoked_by_admin' | null;
+  terminated_at_ms: number | null;
 }
 
 export interface DbAttemptAnswer {

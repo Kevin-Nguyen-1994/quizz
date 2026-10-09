@@ -66,12 +66,19 @@ export interface AdminAssignmentMember {
   assigned_at_ms: number;
   attempt_count: number;
   completed_count: number;
-  participant_status: AssignmentAttemptStatus | 'not_started';
+  participant_status: AssignmentAttemptStatus | 'not_started' | 'revoked';
   attempt_id: number | null;
   started_at_ms: number | null;
   completed_at_ms: number | null;
   correct_count: number | null;
   total_score: number | null;
+  recipient_status: 'assigned' | 'revoked';
+  membership_source: 'initial_target' | 'manual_added_after_publish' | 'exception';
+  entitlement_version: number;
+  level_code_snapshot: string | null;
+  level_name_snapshot: string | null;
+  revoked_at_ms: number | null;
+  revoked_reason: string | null;
 }
 
 export interface AdminAssignmentDetail {
@@ -94,6 +101,7 @@ export interface AdminAssignmentDetail {
   questions: Array<{ id: number; text: string; order_index: number; time_sec: number }>;
   members: AdminAssignmentMember[];
   targetOverrides: AssignmentTargetOverride[];
+  recipientEvents: Array<{id:number;user_id:number|null;action:'added_after_publish'|'revoked'|'reassigned';entitlement_version:number;actor_name_snapshot:string;reason:string|null;created_at_ms:number}>;
 }
 
 export interface AssignmentTargetOverride {
