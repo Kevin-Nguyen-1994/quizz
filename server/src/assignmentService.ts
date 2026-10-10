@@ -1182,10 +1182,16 @@ async function buildParticipantAssignmentListItem(
   userId: number,
   nowMs: number,
 ): Promise<ParticipantAssignmentListItem> {
+  const member = await database.get<DbAssignmentMember>(
+    'SELECT * FROM assignment_members WHERE assignment_id = ? AND user_id = ?',
+    [assignment.id, userId],
+  );
+  const entitlementVersion = member?.entitlement_version ?? 1;
   let active = await database.get<DbAssignmentAttempt>(
     `SELECT * FROM assignment_attempts
-     WHERE assignment_id = ? AND user_id = ? AND status = 'in_progress'`,
-    [assignment.id, userId],
+     WHERE assignment_id = ? AND user_id = ? AND status = 'in_progress'
+       AND recipient_entitlement_version = ?`,
+    [assignment.id, userId, entitlementVersion],
   );
   if (active) active = await reconcileAttempt(database, assignment, active, nowMs);
 
@@ -1201,8 +1207,9 @@ async function buildParticipantAssignmentListItem(
   );
   const attempts = await database.all<DbAssignmentAttempt[]>(
     `SELECT * FROM assignment_attempts WHERE assignment_id = ? AND user_id = ?
+       AND recipient_entitlement_version = ?
      ORDER BY attempt_number DESC`,
-    [assignment.id, userId],
+    [assignment.id, userId, entitlementVersion],
   );
   const latest = active ?? attempts[0] ?? null;
   const attemptsUsed = attempts.length;

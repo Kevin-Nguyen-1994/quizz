@@ -97,6 +97,8 @@ describe('assignment attempt state machine', () => {
     await service.reassignAssignmentRecipient(actor,draft.id,addedUserId);
     const first = await service.startOrResumeAttempt(published.access_code as string,addedUserId,now+10);
     assert.equal((await databaseModule.db.get<{recipient_entitlement_version:number}>('SELECT recipient_entitlement_version FROM assignment_attempts WHERE id=?',[first.attempt.id]))?.recipient_entitlement_version,2);
+    await service.submitAssignmentAnswer(first.attempt.id,addedUserId,first.question?.questionId as number,{chosenIndex:0},now+10);
+    assert.equal((await databaseModule.db.get<{count:number}>('SELECT COUNT(*) count FROM attempt_answers WHERE attempt_id=?',[first.attempt.id]))?.count,1);
     await service.revokeAssignmentRecipient(actor,draft.id,addedUserId);
     for (const operation of [
       service.getParticipantAttemptState(first.attempt.id,addedUserId,now+20),
@@ -108,16 +110,46 @@ describe('assignment attempt state machine', () => {
     const stored = await databaseModule.db.get<{status:string;termination_reason:string}>('SELECT status,termination_reason FROM assignment_attempts WHERE id=?',[first.attempt.id]);
     assert.deepEqual(stored,{status:'expired',termination_reason:'revoked_by_admin'});
     await service.reassignAssignmentRecipient(actor,draft.id,addedUserId);
+    const reassignedMember = await databaseModule.db.get<{recipient_status:string;entitlement_version:number;membership_source:string;revoked_at_ms:number|null;revoked_by_user_id:number|null;revoked_reason:string|null}>('SELECT recipient_status,entitlement_version,membership_source,revoked_at_ms,revoked_by_user_id,revoked_reason FROM assignment_members WHERE assignment_id=? AND user_id=?',[draft.id,addedUserId]);
+    assert.deepEqual(reassignedMember,{recipient_status:'assigned',entitlement_version:3,membership_source:'manual_added_after_publish',revoked_at_ms:null,revoked_by_user_id:null,revoked_reason:null});
+    const reassignedList = await service.listParticipantAssignments(addedUserId,now+30);
+    const reassignedItem = reassignedList.find(item=>item.assignmentId===draft.id);
+    assert.equal(reassignedItem?.attemptsUsed,0);
+    assert.equal(reassignedItem?.canStart,true);
+    assert.equal(reassignedItem?.canResume,false);
+    assert.equal(reassignedItem?.participantStatus,'not_started');
+    const reassignedLookup = await service.lookupParticipantAssignment(published.access_code as string,addedUserId,now+30) as {attemptsUsed:number;canStart:boolean;canResume:boolean;attemptId:number|null};
+    assert.equal(reassignedLookup.attemptsUsed,0);
+    assert.equal(reassignedLookup.canStart,true);
+    assert.equal(reassignedLookup.canResume,false);
+    assert.equal(reassignedLookup.attemptId,null);
+    await assert.rejects(service.getParticipantAttemptState(first.attempt.id,addedUserId,now+30),(error:unknown)=>error instanceof service.AssignmentServiceError&&error.code==='ASSIGNMENT_REVOKED');
     const second = await service.startOrResumeAttempt(published.access_code as string,addedUserId,now+30);
     assert.notEqual(second.attempt.id,first.attempt.id);
     assert.equal(second.attempt.attemptNumber,2);
+    assert.equal((await databaseModule.db.get<{recipient_entitlement_version:number}>('SELECT recipient_entitlement_version FROM assignment_attempts WHERE id=?',[second.attempt.id]))?.recipient_entitlement_version,3);
+    assert.equal(second.attempt.currentQuestionIndex,0);
+    assert.equal((await databaseModule.db.get<{count:number}>('SELECT COUNT(*) count FROM attempt_answers WHERE attempt_id=?',[second.attempt.id]))?.count,0);
     const events = await databaseModule.db.all<Array<{action:string}>>('SELECT action FROM assignment_recipient_events WHERE assignment_id=? ORDER BY id',[draft.id]);
     assert.deepEqual(events.map(event=>event.action),['added_after_publish','revoked','reassigned','revoked','reassigned']);
+
+    const twoAttemptDraft=await service.createDraftAssignment(actor,{quizId:sourceQuizId,title:'Reassign with two attempts',opensAtMs:now-1000,deadlineAtMs:now+600000,maxAttempts:2,shuffleQuestions:false});
+    await service.setAssignmentMembers(actor,twoAttemptDraft.id,[addedUserId]);
+    const twoAttemptPublished=await service.publishAssignment(actor,twoAttemptDraft.id);
+    const oldEntitlementAttempt=await service.startOrResumeAttempt(twoAttemptPublished.access_code as string,addedUserId,now+40);
+    await service.revokeAssignmentRecipient(actor,twoAttemptDraft.id,addedUserId);
+    await service.reassignAssignmentRecipient(actor,twoAttemptDraft.id,addedUserId);
+    const twoAttemptItem=(await service.listParticipantAssignments(addedUserId,now+50)).find(item=>item.assignmentId===twoAttemptDraft.id);
+    assert.equal(twoAttemptItem?.attemptsUsed,0);
+    assert.equal(twoAttemptItem?.canStart,true);
+    const newEntitlementAttempt=await service.startOrResumeAttempt(twoAttemptPublished.access_code as string,addedUserId,now+50);
+    assert.notEqual(newEntitlementAttempt.attempt.id,oldEntitlementAttempt.attempt.id);
+    assert.equal(newEntitlementAttempt.attempt.attemptNumber,2);
 
     const completeDraft=await service.createDraftAssignment(actor,{quizId:sourceQuizId,title:'Completed protection',opensAtMs:now-1000,deadlineAtMs:now+600000,shuffleQuestions:false});
     await service.setAssignmentMembers(actor,completeDraft.id,[userId]); const completePublished=await service.publishAssignment(actor,completeDraft.id); const completed=await service.startOrResumeAttempt(completePublished.access_code as string,userId,now); await service.completeAssignmentAttempt(completed.attempt.id,userId,now+100);
     await assert.rejects(service.revokeAssignmentRecipient(actor,completeDraft.id,userId),(error:unknown)=>error instanceof service.AssignmentServiceError&&error.code==='RECIPIENT_COMPLETED');
-    await databaseModule.db.run('DELETE FROM assignments WHERE id IN (?, ?)',[draft.id,completeDraft.id]);
+    await databaseModule.db.run('DELETE FROM assignments WHERE id IN (?, ?, ?)',[draft.id,twoAttemptDraft.id,completeDraft.id]);
     await databaseModule.db.run('DELETE FROM users WHERE id=?',[addedUserId]);
   });
   it('handles concurrent start, timeout/resume, duplicate submit and max_attempts=1', async () => {
