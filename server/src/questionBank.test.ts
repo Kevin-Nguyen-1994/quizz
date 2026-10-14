@@ -201,6 +201,40 @@ describe('Phase 7B Question Bank and dynamic assignment generation', () => {
         ((await smartMixRead.json()) as { smartMixDifficulties: string[] }).smartMixDifficulties,
         ['medium', 'hard'],
       );
+      const perLevelDifficulties = {
+        [String(cs1Id)]: ['easy', 'medium'],
+        [String(cs2Id)]: ['medium', 'hard'],
+      };
+      const smartMixUpdate = await fetch(`${baseUrl}/api/admin/quizzes/${smartMixQuizId}`, {
+        method: 'PUT',
+        headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+        body: JSON.stringify({
+          title: 'Smart Mix difficulty persistence',
+          quizMode: 'bank_generated',
+          smartMixDifficulties: perLevelDifficulties,
+          generationRules: [
+            {
+              categoryId,
+              minimumLevelId: cs1Id,
+              difficulty: 'medium',
+              questionCount: 2,
+              pointsOverride: 100,
+            },
+          ],
+        }),
+      });
+      assert.equal(smartMixUpdate.status, 200);
+      const smartMixObjectRead = await fetch(`${baseUrl}/api/admin/quizzes/${smartMixQuizId}`, {
+        headers: { authorization: `Bearer ${token}` },
+      });
+      assert.deepEqual(
+        (
+          (await smartMixObjectRead.json()) as {
+            smartMixDifficulties: Record<string, string[]>;
+          }
+        ).smartMixDifficulties,
+        perLevelDifficulties,
+      );
       const invalidSmartMix = await fetch(`${baseUrl}/api/admin/quizzes`, {
         method: 'POST',
         headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },

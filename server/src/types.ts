@@ -101,7 +101,10 @@ export interface QuizImportPayload {
   quizMode?: QuizMode;
   selectionMode?: QuestionSelectionMode;
   generationRules?: QuizGenerationRuleInput[];
-  smartMixDifficulties?: QuestionDifficulty[] | null;
+  smartMixDifficulties?:
+    | QuestionDifficulty[]
+    | Record<string, QuestionDifficulty[]>
+    | null;
   questions?: QuizQuestion[];
 }
 

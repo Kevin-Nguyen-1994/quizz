@@ -9,7 +9,7 @@ import CreatorNav from '../../components/CreatorNav';
 import { useAuth } from '../../context/AuthContext';
 import { useAuthFetch } from '../../hooks/useAuthFetch';
 import { useCreatorBase } from '../../hooks/useCreatorBase';
-import type { ImportPayload, ThemeId } from '../../types';
+import type { ImportPayload, SmartMixDifficultyConfig, ThemeId } from '../../types';
 import { DynamicQuizEditor } from './components/DynamicQuizEditor';
 import { QuizStudio } from './components/studio/QuizStudio';
 import { TranslationsDialog } from './components/TranslationsDialog';
@@ -36,9 +36,8 @@ export default function EditQuiz() {
   const [translationsOpen, setTranslationsOpen] = useState(false);
   const [quizMode, setQuizMode] = useState<'static' | 'bank_generated'>('static');
   const [generationRules, setGenerationRules] = useState<Record<string, unknown>[]>([]);
-  const [smartMixDifficulties, setSmartMixDifficulties] = useState<Array<
-    'easy' | 'medium' | 'hard'
-  > | null>(null);
+  const [smartMixDifficulties, setSmartMixDifficulties] =
+    useState<SmartMixDifficultyConfig>(null);
 
   useEffect(() => {
     api
@@ -51,7 +50,7 @@ export default function EditQuiz() {
         recommended_level_id?: number | null;
         quiz_mode?: 'static' | 'bank_generated';
         generationRules?: Record<string, unknown>[];
-        smartMixDifficulties?: Array<'easy' | 'medium' | 'hard'> | null;
+        smartMixDifficulties?: SmartMixDifficultyConfig;
         questions: unknown[];
       }>(`/api/admin/quizzes/${id}`)
       .then(({ ok, data }) => {

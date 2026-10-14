@@ -23,6 +23,7 @@ import type {
   QuestionDifficulty,
   QuestionType,
   QuizGenerationRule,
+  SmartMixDifficultyConfig,
 } from '@/types';
 import { SmartMixBuilder } from './SmartMixBuilder';
 
@@ -86,7 +87,7 @@ export function DynamicQuizEditor({
     title: string;
     description: string;
     recommendedLevelId: number | null;
-    smartMixDifficulties: QuestionDifficulty[] | null;
+    smartMixDifficulties: SmartMixDifficultyConfig;
     rules: Record<string, unknown>[];
   };
   onCancel(): void;
@@ -111,7 +112,7 @@ export function DynamicQuizEditor({
   const [checking, setChecking] = useState(false);
   const [error, setError] = useState('');
   const [builderMode, setBuilderMode] = useState<'smart' | 'manual'>(quizId ? 'manual' : 'smart');
-  const [smartMixDifficulties, setSmartMixDifficulties] = useState<QuestionDifficulty[] | null>(
+  const [smartMixDifficulties, setSmartMixDifficulties] = useState<SmartMixDifficultyConfig>(
     initial?.smartMixDifficulties ?? null,
   );
   useEffect(() => {

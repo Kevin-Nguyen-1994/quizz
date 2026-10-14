@@ -20,6 +20,7 @@ import type {
   QuestionCategory,
   QuestionDifficulty,
   QuizGenerationRule,
+  SmartMixDifficultyConfig,
   SmartMixPlan,
 } from '@/types';
 
@@ -39,6 +40,19 @@ function suggestedLevelMix(levels: EmployeeLevel[], targetId: string): Record<nu
   return target ? { [target.id]: 100 } : {};
 }
 
+function difficultiesByLevel(
+  levels: EmployeeLevel[],
+  initial: SmartMixDifficultyConfig | undefined,
+): Record<string, QuestionDifficulty[]> {
+  const all = DIFFICULTIES.map(([value]) => value);
+  return Object.fromEntries(
+    levels.map((level) => [
+      String(level.id),
+      Array.isArray(initial) ? [...initial] : [...(initial?.[String(level.id)] ?? all)],
+    ]),
+  );
+}
+
 export function SmartMixBuilder({
   categories,
   levels,
@@ -49,11 +63,11 @@ export function SmartMixBuilder({
   categories: QuestionCategory[];
   levels: EmployeeLevel[];
   recommendedLevelId: string;
-  initialDifficulties?: QuestionDifficulty[];
+  initialDifficulties?: SmartMixDifficultyConfig;
   onApply(
     rules: QuizGenerationRule[],
     targetLevelId: string,
-    selectedDifficulties: QuestionDifficulty[],
+    selectedDifficulties: Record<string, QuestionDifficulty[]>,
   ): void;
 }) {
   const api = useAuthFetch();
@@ -65,9 +79,9 @@ export function SmartMixBuilder({
   const [distribution, setDistribution] = useState<Distribution>('balanced');
   const [categoryWeights, setCategoryWeights] = useState<Record<number, number>>({});
   const [criticalMinimum, setCriticalMinimum] = useState(4);
-  const [selectedDifficulties, setSelectedDifficulties] = useState<QuestionDifficulty[]>(
-    initialDifficulties?.length ? initialDifficulties : DIFFICULTIES.map(([value]) => value),
-  );
+  const [selectedDifficulties, setSelectedDifficulties] = useState<
+    Record<string, QuestionDifficulty[]>
+  >({});
   const [planning, setPlanning] = useState(false);
   const [error, setError] = useState('');
   const [plan, setPlan] = useState<SmartMixPlan | null>(null);
@@ -83,22 +97,33 @@ export function SmartMixBuilder({
       String(levels.find((level) => level.code.toUpperCase() === 'CS2')?.id ?? levels[0].id);
     setTargetLevelId(fallbackTarget);
     setLevelPercentages(suggestedLevelMix(levels, fallbackTarget));
+    setSelectedDifficulties(difficultiesByLevel(levels, initialDifficulties));
     setSelectedCategories(activeCategories);
     setCategoryWeights(
       Object.fromEntries(activeCategories.map((id) => [id, 1])) as Record<number, number>,
     );
-  }, [categories, levels, recommendedLevelId]);
+  }, [categories, levels, recommendedLevelId, initialDifficulties]);
 
   const percentageTotal = Object.values(levelPercentages).reduce((sum, value) => sum + value, 0);
   const activeCategories = categories.filter((category) => category.is_active);
+  const hasInvalidDifficultyLevel = levels.some(
+    (level) =>
+      (levelPercentages[level.id] ?? 0) > 0 &&
+      (selectedDifficulties[String(level.id)]?.length ?? 0) === 0,
+  );
 
   async function createPlan() {
     if (percentageTotal !== 100) {
       setError('Tổng tỷ lệ bậc câu hỏi phải bằng 100%.');
       return;
     }
-    if (selectedDifficulties.length === 0) {
-      setError('Vui lòng chọn ít nhất một mức độ khó.');
+    const invalidLevel = levels.find(
+      (level) =>
+        (levelPercentages[level.id] ?? 0) > 0 &&
+        (selectedDifficulties[String(level.id)]?.length ?? 0) === 0,
+    );
+    if (invalidLevel) {
+      setError(`${invalidLevel.code} phải chọn ít nhất một mức độ khó.`);
       return;
     }
     setPlanning(true);
@@ -122,7 +147,7 @@ export function SmartMixBuilder({
               }))
             : undefined,
         criticalMinimum,
-        selectedDifficulties,
+        selectedDifficultiesByLevel: selectedDifficulties,
       },
     );
     setPlanning(false);
@@ -196,7 +221,10 @@ export function SmartMixBuilder({
                 const percentage = levelPercentages[level.id] ?? 0;
                 const estimated = Math.round((totalQuestions * percentage) / 100);
                 return (
-                  <div key={level.id} className="rounded-lg border p-3">
+                  <div
+                    key={level.id}
+                    className={`rounded-lg border p-3 ${percentage === 0 ? 'bg-muted/20 opacity-70' : ''}`}
+                  >
                     <div className="mb-2 flex items-center justify-between gap-2">
                       <Label htmlFor={`level-${level.id}`}>{level.code}</Label>
                       <span className="text-xs text-muted-foreground">≈ {estimated} câu</span>
@@ -222,45 +250,42 @@ export function SmartMixBuilder({
                         %
                       </span>
                     </div>
+                    <fieldset className="mt-3 space-y-2" disabled={percentage === 0}>
+                      <legend className="text-xs font-medium text-muted-foreground">Độ khó</legend>
+                      <div className="mt-2 grid gap-2">
+                        {DIFFICULTIES.map(([difficulty, label]) => {
+                          const levelKey = String(level.id);
+                          const selected = selectedDifficulties[levelKey] ?? [];
+                          return (
+                            <label
+                              key={difficulty}
+                              htmlFor={`smart-mix-level-${level.id}-difficulty-${difficulty}`}
+                              className="flex min-h-10 cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm disabled:cursor-not-allowed"
+                            >
+                              <Checkbox
+                                id={`smart-mix-level-${level.id}-difficulty-${difficulty}`}
+                                checked={selected.includes(difficulty)}
+                                disabled={percentage === 0}
+                                onCheckedChange={(value) => {
+                                  setSelectedDifficulties((current) => ({
+                                    ...current,
+                                    [levelKey]: value
+                                      ? [...(current[levelKey] ?? []), difficulty]
+                                      : (current[levelKey] ?? []).filter(
+                                          (item) => item !== difficulty,
+                                        ),
+                                  }));
+                                  setPlan(null);
+                                  setError('');
+                                }}
+                              />
+                              <span>{label}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </fieldset>
                   </div>
-                );
-              })}
-            </div>
-          </section>
-
-          <section className="space-y-3" aria-labelledby="smart-mix-difficulties">
-            <div>
-              <h3 id="smart-mix-difficulties" className="font-medium">
-                Mức độ khó được phép
-              </h3>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Hệ thống chỉ chọn câu thuộc các mức đã đánh dấu; đây không phải tỷ lệ phân bổ.
-              </p>
-            </div>
-            <div className="grid gap-2 sm:grid-cols-3">
-              {DIFFICULTIES.map(([difficulty, label]) => {
-                const checked = selectedDifficulties.includes(difficulty);
-                return (
-                  <label
-                    key={difficulty}
-                    htmlFor={`smart-mix-difficulty-${difficulty}`}
-                    className="flex min-h-11 cursor-pointer items-center gap-3 rounded-lg border px-3 py-2"
-                  >
-                    <Checkbox
-                      id={`smart-mix-difficulty-${difficulty}`}
-                      checked={checked}
-                      onCheckedChange={(value) => {
-                        setSelectedDifficulties((current) =>
-                          value
-                            ? [...current, difficulty]
-                            : current.filter((item) => item !== difficulty),
-                        );
-                        setPlan(null);
-                        setError('');
-                      }}
-                    />
-                    <span className="text-sm">{label}</span>
-                  </label>
                 );
               })}
             </div>
@@ -386,7 +411,7 @@ export function SmartMixBuilder({
               disabled={
                 planning ||
                 selectedCategories.length === 0 ||
-                selectedDifficulties.length === 0 ||
+                hasInvalidDifficultyLevel ||
                 percentageTotal !== 100
               }
             >
@@ -475,26 +500,54 @@ export function SmartMixBuilder({
                 <strong className="block text-xl">{plan.totalScore.toLocaleString('vi-VN')}</strong>
               </div>
             </div>
-            <div className="rounded-lg border p-3 text-sm">
-              <p>
-                <span className="text-muted-foreground">Độ khó cho phép: </span>
-                <strong>
-                  {selectedDifficulties
-                    .map((difficulty) => DIFFICULTIES.find(([value]) => value === difficulty)?.[1])
-                    .join(', ')}
-                </strong>
-              </p>
-              <p className="mt-1">
-                <span className="text-muted-foreground">Số câu thực tế theo độ khó: </span>
-                <strong>
-                  {plan.difficultyCounts
-                    .map((item) => {
-                      const label = DIFFICULTIES.find(([value]) => value === item.difficulty)?.[1];
-                      return `${label}: ${item.questionCount}`;
-                    })
-                    .join(' · ')}
-                </strong>
-              </p>
+            <div className="overflow-x-auto rounded-lg border p-3 text-sm">
+              <p className="mb-2 font-medium">Phân bổ thực tế theo bậc và độ khó</p>
+              <table className="w-full min-w-[28rem] text-left">
+                <thead className="text-muted-foreground">
+                  <tr>
+                    <th className="px-2 py-1">Bậc</th>
+                    {DIFFICULTIES.map(([difficulty, label]) => (
+                      <th key={difficulty} className="px-2 py-1 text-right">
+                        {label}
+                      </th>
+                    ))}
+                    <th className="px-2 py-1 text-right">Tổng</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {levels.map((level) => {
+                    const cells = plan.levelDifficultyCounts.filter(
+                      (item) => item.minimumLevelId === level.id,
+                    );
+                    const levelTotal = cells.reduce((sum, item) => sum + item.questionCount, 0);
+                    return (
+                      <tr key={level.id} className="border-t">
+                        <th className="px-2 py-1">{level.code}</th>
+                        {DIFFICULTIES.map(([difficulty]) => (
+                          <td key={difficulty} className="px-2 py-1 text-right">
+                            {cells.find((item) => item.difficulty === difficulty)?.questionCount ?? 0}
+                          </td>
+                        ))}
+                        <td className="px-2 py-1 text-right font-medium">
+                          {levelTotal}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+                <tfoot className="border-t font-semibold">
+                  <tr>
+                    <th className="px-2 py-1">Tổng</th>
+                    {DIFFICULTIES.map(([difficulty]) => (
+                      <td key={difficulty} className="px-2 py-1 text-right">
+                        {plan.difficultyCounts.find((item) => item.difficulty === difficulty)
+                          ?.questionCount ?? 0}
+                      </td>
+                    ))}
+                    <td className="px-2 py-1 text-right">{plan.totalQuestions}</td>
+                  </tr>
+                </tfoot>
+              </table>
             </div>
             <p className="text-sm text-muted-foreground">
               Pool phù hợp: {plan.poolCapacity} câu · {plan.rules.length} nhóm cấu hình không giao

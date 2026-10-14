@@ -253,9 +253,17 @@ questionBankRouter.post('/smart-mix/plan', async (req, res) => {
     const categoryIds = [...new Set(body.categoryIds ?? [])];
     const levelIds = [...new Set((body.levelMix ?? []).map((item) => item.minimumLevelId))];
     const selectedDifficulties = body.selectedDifficulties;
-    const difficultyFilter = Array.isArray(selectedDifficulties);
-    const filteredDifficulties = difficultyFilter ? selectedDifficulties : [];
-    if (difficultyFilter && selectedDifficulties.length === 0) {
+    const selectedDifficultiesByLevel = body.selectedDifficultiesByLevel;
+    const difficultyFilter =
+      Array.isArray(selectedDifficulties) ||
+      (selectedDifficultiesByLevel !== null && selectedDifficultiesByLevel !== undefined);
+    const filteredDifficulties = Array.isArray(selectedDifficulties)
+      ? selectedDifficulties
+      : [...new Set(Object.values(selectedDifficultiesByLevel ?? {}).flat())];
+    const queryDifficulties = filteredDifficulties.length
+      ? filteredDifficulties
+      : (['easy', 'medium', 'hard'] as QuestionDifficulty[]);
+    if (Array.isArray(selectedDifficulties) && selectedDifficulties.length === 0) {
       throw new SmartMixPlanError('Vui lòng chọn ít nhất một mức độ khó.', 'SMART_MIX_INVALID');
     }
     if (
@@ -303,10 +311,10 @@ questionBankRouter.post('/smart-mix/plan', async (req, res) => {
          WHERE bq.is_enabled = 1 AND qc.is_active = 1
            AND bq.category_id IN (${categoryPlaceholders})
            AND bq.minimum_level_id IN (${levelPlaceholders})
-           ${difficultyFilter ? `AND bq.difficulty IN (${filteredDifficulties.map(() => '?').join(', ')})` : ''}
+           ${difficultyFilter ? `AND bq.difficulty IN (${queryDifficulties.map(() => '?').join(', ')})` : ''}
          GROUP BY bq.category_id, bq.minimum_level_id,
                   ${difficultyFilter ? 'bq.difficulty,' : ''} bq.critical`,
-        [...categoryIds, ...levelIds, ...filteredDifficulties],
+        [...categoryIds, ...levelIds, ...queryDifficulties],
       ),
     ]);
     if (
@@ -332,7 +340,7 @@ questionBankRouter.post('/smart-mix/plan', async (req, res) => {
     );
     const capacities = categories.flatMap((category) =>
       levels.flatMap((level) =>
-        (difficultyFilter ? filteredDifficulties : [null]).flatMap((difficulty) =>
+        (difficultyFilter ? queryDifficulties : [null]).flatMap((difficulty) =>
           [false, true].map((critical) => ({
             categoryId: category.id,
             categoryName: category.name,

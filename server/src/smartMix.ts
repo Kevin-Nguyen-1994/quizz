@@ -16,6 +16,7 @@ export interface SmartMixRequest {
   categoryWeights?: SmartMixCategoryWeight[];
   criticalMinimum?: number;
   selectedDifficulties?: Array<'easy' | 'medium' | 'hard'> | null;
+  selectedDifficultiesByLevel?: Record<string, Array<'easy' | 'medium' | 'hard'>> | null;
 }
 
 export interface SmartMixCapacity {
@@ -68,6 +69,12 @@ export interface SmartMixPlan {
     percentage: number;
   }>;
   difficultyCounts: Array<{
+    difficulty: 'easy' | 'medium' | 'hard';
+    questionCount: number;
+  }>;
+  levelDifficultyCounts: Array<{
+    minimumLevelId: number;
+    minimumLevelCode: string;
     difficulty: 'easy' | 'medium' | 'hard';
     questionCount: number;
   }>;
@@ -158,6 +165,7 @@ export function planSmartMix(raw: SmartMixRequest, capacities: SmartMixCapacity[
   }
   const allowedDifficulties = ['easy', 'medium', 'hard'] as const;
   const selectedDifficulties = raw.selectedDifficulties;
+  const selectedDifficultiesByLevel = raw.selectedDifficultiesByLevel;
   if (Array.isArray(selectedDifficulties)) {
     if (selectedDifficulties.length === 0) {
       throw new SmartMixPlanError('Vui lòng chọn ít nhất một mức độ khó.', 'SMART_MIX_INVALID');
@@ -169,6 +177,37 @@ export function planSmartMix(raw: SmartMixRequest, capacities: SmartMixCapacity[
       throw new SmartMixPlanError('Mức độ khó không hợp lệ.', 'SMART_MIX_INVALID');
     }
   }
+  if (selectedDifficultiesByLevel !== null && selectedDifficultiesByLevel !== undefined) {
+    if (
+      typeof selectedDifficultiesByLevel !== 'object' ||
+      Array.isArray(selectedDifficultiesByLevel)
+    ) {
+      throw new SmartMixPlanError('Cấu hình độ khó theo bậc không hợp lệ.', 'SMART_MIX_INVALID');
+    }
+    for (const level of levelMix) {
+      const values = selectedDifficultiesByLevel[String(level.minimumLevelId)];
+      if (!Array.isArray(values) || values.length === 0) {
+        const code =
+          capacities.find((item) => item.minimumLevelId === level.minimumLevelId)
+            ?.minimumLevelCode ?? `#${level.minimumLevelId}`;
+        throw new SmartMixPlanError(
+          `${code} phải chọn ít nhất một mức độ khó.`,
+          'SMART_MIX_INVALID',
+        );
+      }
+      if (
+        new Set(values).size !== values.length ||
+        values.some((value) => !allowedDifficulties.includes(value))
+      ) {
+        throw new SmartMixPlanError('Mức độ khó không hợp lệ.', 'SMART_MIX_INVALID');
+      }
+    }
+  }
+
+  const difficultiesForLevel = (minimumLevelId: number) =>
+    selectedDifficultiesByLevel !== null && selectedDifficultiesByLevel !== undefined
+      ? selectedDifficultiesByLevel[String(minimumLevelId)] ?? []
+      : selectedDifficulties;
 
   const categoryWeight = new Map<number, number>();
   if (raw.categoryDistribution === 'custom') {
@@ -199,8 +238,9 @@ export function planSmartMix(raw: SmartMixRequest, capacities: SmartMixCapacity[
     (item) =>
       selectedCategories.has(item.categoryId) &&
       selectedLevels.has(item.minimumLevelId) &&
-      (!Array.isArray(selectedDifficulties) ||
-        (item.difficulty !== null && selectedDifficulties.includes(item.difficulty))),
+      (!Array.isArray(difficultiesForLevel(item.minimumLevelId)) ||
+        (item.difficulty !== null &&
+          difficultiesForLevel(item.minimumLevelId)?.includes(item.difficulty))),
   );
   const cellMap = new Map<string, Cell>();
   for (const item of relevant) {
@@ -436,6 +476,22 @@ export function planSmartMix(raw: SmartMixRequest, capacities: SmartMixCapacity[
         .filter((cell) => cell.difficulty === difficulty)
         .reduce((sum, cell) => sum + cell.allocated, 0),
     })),
+    levelDifficultyCounts: levelMix.flatMap((level) => {
+      const code =
+        cells.find((cell) => cell.minimumLevelId === level.minimumLevelId)?.minimumLevelCode ??
+        `#${level.minimumLevelId}`;
+      return allowedDifficulties.map((difficulty) => ({
+        minimumLevelId: level.minimumLevelId,
+        minimumLevelCode: code,
+        difficulty,
+        questionCount: usedCells
+          .filter(
+            (cell) =>
+              cell.minimumLevelId === level.minimumLevelId && cell.difficulty === difficulty,
+          )
+          .reduce((sum, cell) => sum + cell.allocated, 0),
+      }));
+    }),
     warnings,
   };
 }

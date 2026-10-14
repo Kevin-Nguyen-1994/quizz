@@ -405,6 +405,10 @@ export interface Quiz {
 }
 
 export type QuestionDifficulty = 'easy' | 'medium' | 'hard';
+export type SmartMixDifficultyConfig =
+  | QuestionDifficulty[]
+  | Record<string, QuestionDifficulty[]>
+  | null;
 export type QuestionCompetency = 'must_remember' | 'know_where_to_lookup' | 'application';
 
 export interface QuestionCategory {
@@ -532,6 +536,12 @@ export interface SmartMixPlan {
     percentage: number;
   }>;
   difficultyCounts: Array<{
+    difficulty: QuestionDifficulty;
+    questionCount: number;
+  }>;
+  levelDifficultyCounts: Array<{
+    minimumLevelId: number;
+    minimumLevelCode: string;
     difficulty: QuestionDifficulty;
     questionCount: number;
   }>;

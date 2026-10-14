@@ -319,12 +319,11 @@ adminRouter.get('/quizzes/:id', requireAuth, async (req: Request, res: Response)
 });
 
 const SMART_MIX_DIFFICULTIES = ['easy', 'medium', 'hard'] as const;
+type SmartMixDifficulty = (typeof SMART_MIX_DIFFICULTIES)[number];
+type SmartMixDifficultyConfig = SmartMixDifficulty[] | Record<string, SmartMixDifficulty[]> | null;
 
-function normalizeSmartMixDifficulties(
-  value: unknown,
-): Array<(typeof SMART_MIX_DIFFICULTIES)[number]> | null {
-  if (value === null || value === undefined) return null;
-  if (!Array.isArray(value) || value.length === 0) {
+function normalizeDifficultyList(value: unknown, allowEmpty: boolean): SmartMixDifficulty[] {
+  if (!Array.isArray(value) || (!allowEmpty && value.length === 0)) {
     throw new QuestionGenerationError(
       'Vui lòng chọn ít nhất một mức độ khó.',
       400,
@@ -344,9 +343,32 @@ function normalizeSmartMixDifficulties(
   return SMART_MIX_DIFFICULTIES.filter((item) => value.includes(item));
 }
 
-function parseSmartMixDifficulties(
-  value: string | null,
-): Array<(typeof SMART_MIX_DIFFICULTIES)[number]> | null {
+function normalizeSmartMixDifficulties(value: unknown): SmartMixDifficultyConfig {
+  if (value === null || value === undefined) return null;
+  if (Array.isArray(value)) return normalizeDifficultyList(value, false);
+  if (typeof value !== 'object') {
+    throw new QuestionGenerationError(
+      'Mức độ khó Smart Mix không hợp lệ.',
+      400,
+      'SMART_MIX_DIFFICULTIES_INVALID',
+    );
+  }
+  const entries = Object.entries(value as Record<string, unknown>);
+  if (entries.some(([key]) => !/^\d+$/.test(key) || Number(key) < 1)) {
+    throw new QuestionGenerationError(
+      'Bậc trong cấu hình độ khó Smart Mix không hợp lệ.',
+      400,
+      'SMART_MIX_DIFFICULTIES_INVALID',
+    );
+  }
+  return Object.fromEntries(
+    entries
+      .sort(([left], [right]) => Number(left) - Number(right))
+      .map(([key, difficulties]) => [key, normalizeDifficultyList(difficulties, true)]),
+  );
+}
+
+function parseSmartMixDifficulties(value: string | null): SmartMixDifficultyConfig {
   if (value === null) return null;
   try {
     return normalizeSmartMixDifficulties(JSON.parse(value));
@@ -361,13 +383,19 @@ function parseSmartMixDifficulties(
 }
 
 function validateSmartMixRules(
-  selected: Array<(typeof SMART_MIX_DIFFICULTIES)[number]> | null,
+  selected: SmartMixDifficultyConfig,
   rules: ReturnType<typeof normalizeGenerationRules>,
 ): void {
-  if (
-    selected !== null &&
-    rules.some((rule) => rule.difficulty === null || !selected.includes(rule.difficulty))
-  ) {
+  const mismatch = rules.some((rule) => {
+    if (selected === null) return false;
+    const allowed = Array.isArray(selected)
+      ? selected
+      : rule.minimumLevelId === null
+        ? undefined
+        : selected[String(rule.minimumLevelId)];
+    return !allowed || rule.difficulty === null || !allowed.includes(rule.difficulty);
+  });
+  if (mismatch) {
     throw new QuestionGenerationError(
       'Cấu hình rule không khớp với độ khó Smart Mix đã chọn.',
       400,

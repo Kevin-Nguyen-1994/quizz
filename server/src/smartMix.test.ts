@@ -227,4 +227,125 @@ describe('Phase 7C.1 Smart Mix planner', () => {
     );
     assert.equal(legacy.rules[0].difficulty, null);
   });
+
+  it('filters difficulty independently per level and reports the actual matrix', () => {
+    const matrixCapacities: SmartMixCapacity[] = [1, 2].flatMap((minimumLevelId) =>
+      (['easy', 'medium', 'hard'] as const).map((difficulty) => ({
+        categoryId: 1,
+        categoryName: 'Nhóm 1',
+        minimumLevelId,
+        minimumLevelCode: minimumLevelId === 1 ? 'CS1' : 'CS2',
+        difficulty,
+        critical: false,
+        availableCount: 10,
+      })),
+    );
+    const plan = planSmartMix(
+      {
+        totalQuestions: 10,
+        categoryIds: [1],
+        levelMix: [
+          { minimumLevelId: 1, percentage: 60 },
+          { minimumLevelId: 2, percentage: 40 },
+        ],
+        categoryDistribution: 'balanced',
+        selectedDifficultiesByLevel: { '1': ['easy'], '2': ['hard'] },
+      },
+      matrixCapacities,
+    );
+
+    assert.ok(
+      plan.rules.every(
+        (rule) =>
+          (rule.minimumLevelId === 1 && rule.difficulty === 'easy') ||
+          (rule.minimumLevelId === 2 && rule.difficulty === 'hard'),
+      ),
+    );
+    assert.equal(
+      plan.levelDifficultyCounts.find(
+        (item) => item.minimumLevelId === 1 && item.difficulty === 'easy',
+      )?.questionCount,
+      6,
+    );
+    assert.equal(
+      plan.levelDifficultyCounts.find(
+        (item) => item.minimumLevelId === 2 && item.difficulty === 'hard',
+      )?.questionCount,
+      4,
+    );
+  });
+
+  it('requires difficulties only for levels above zero and never falls back on shortage', () => {
+    const matrixCapacities: SmartMixCapacity[] = [
+      {
+        categoryId: 1,
+        categoryName: 'Nhóm 1',
+        minimumLevelId: 1,
+        minimumLevelCode: 'CS1',
+        difficulty: 'easy',
+        critical: false,
+        availableCount: 10,
+      },
+      {
+        categoryId: 1,
+        categoryName: 'Nhóm 1',
+        minimumLevelId: 2,
+        minimumLevelCode: 'CS2',
+        difficulty: 'hard',
+        critical: false,
+        availableCount: 1,
+      },
+    ];
+    const base = {
+      totalQuestions: 10,
+      categoryIds: [1],
+      categoryDistribution: 'balanced' as const,
+    };
+
+    assert.doesNotThrow(() =>
+      planSmartMix(
+        {
+          ...base,
+          levelMix: [
+            { minimumLevelId: 1, percentage: 100 },
+            { minimumLevelId: 2, percentage: 0 },
+          ],
+          selectedDifficultiesByLevel: { '1': ['easy'], '2': [] },
+        },
+        matrixCapacities,
+      ),
+    );
+    assert.throws(
+      () =>
+        planSmartMix(
+          {
+            ...base,
+            levelMix: [
+              { minimumLevelId: 1, percentage: 50 },
+              { minimumLevelId: 2, percentage: 50 },
+            ],
+            selectedDifficultiesByLevel: { '1': ['easy'], '2': [] },
+          },
+          matrixCapacities,
+        ),
+      (error: unknown) =>
+        error instanceof SmartMixPlanError && /CS2 phải chọn/.test(error.message),
+    );
+    assert.throws(
+      () =>
+        planSmartMix(
+          {
+            ...base,
+            levelMix: [
+              { minimumLevelId: 1, percentage: 50 },
+              { minimumLevelId: 2, percentage: 50 },
+            ],
+            selectedDifficultiesByLevel: { '1': ['easy'], '2': ['hard'] },
+          },
+          matrixCapacities,
+        ),
+      (error: unknown) =>
+        error instanceof SmartMixPlanError && error.code === 'SMART_MIX_LEVEL_INSUFFICIENT',
+    );
+  });
 });
