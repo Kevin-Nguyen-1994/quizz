@@ -101,6 +101,7 @@ export interface QuizImportPayload {
   quizMode?: QuizMode;
   selectionMode?: QuestionSelectionMode;
   generationRules?: QuizGenerationRuleInput[];
+  smartMixDifficulties?: QuestionDifficulty[] | null;
   questions?: QuizQuestion[];
 }
 
@@ -170,6 +171,7 @@ export interface DbQuiz {
   quiz_mode: QuizMode;
   selection_mode: QuestionSelectionMode;
   blueprint_revision: number;
+  smart_mix_difficulties_json: string | null;
 }
 
 export interface DbQuestionCategory {

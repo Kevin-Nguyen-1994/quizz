@@ -15,9 +15,20 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useAuthFetch } from '@/hooks/useAuthFetch';
-import type { EmployeeLevel, QuestionCategory, QuizGenerationRule, SmartMixPlan } from '@/types';
+import type {
+  EmployeeLevel,
+  QuestionCategory,
+  QuestionDifficulty,
+  QuizGenerationRule,
+  SmartMixPlan,
+} from '@/types';
 
 type Distribution = 'balanced' | 'custom';
+const DIFFICULTIES: Array<[QuestionDifficulty, string]> = [
+  ['easy', 'Dễ'],
+  ['medium', 'Trung bình'],
+  ['hard', 'Khó'],
+];
 
 function suggestedLevelMix(levels: EmployeeLevel[], targetId: string): Record<number, number> {
   const target = levels.find((level) => String(level.id) === targetId);
@@ -32,12 +43,18 @@ export function SmartMixBuilder({
   categories,
   levels,
   recommendedLevelId,
+  initialDifficulties,
   onApply,
 }: {
   categories: QuestionCategory[];
   levels: EmployeeLevel[];
   recommendedLevelId: string;
-  onApply(rules: QuizGenerationRule[], targetLevelId: string): void;
+  initialDifficulties?: QuestionDifficulty[];
+  onApply(
+    rules: QuizGenerationRule[],
+    targetLevelId: string,
+    selectedDifficulties: QuestionDifficulty[],
+  ): void;
 }) {
   const api = useAuthFetch();
   const initialized = useRef(false);
@@ -48,6 +65,9 @@ export function SmartMixBuilder({
   const [distribution, setDistribution] = useState<Distribution>('balanced');
   const [categoryWeights, setCategoryWeights] = useState<Record<number, number>>({});
   const [criticalMinimum, setCriticalMinimum] = useState(4);
+  const [selectedDifficulties, setSelectedDifficulties] = useState<QuestionDifficulty[]>(
+    initialDifficulties?.length ? initialDifficulties : DIFFICULTIES.map(([value]) => value),
+  );
   const [planning, setPlanning] = useState(false);
   const [error, setError] = useState('');
   const [plan, setPlan] = useState<SmartMixPlan | null>(null);
@@ -77,6 +97,10 @@ export function SmartMixBuilder({
       setError('Tổng tỷ lệ bậc câu hỏi phải bằng 100%.');
       return;
     }
+    if (selectedDifficulties.length === 0) {
+      setError('Vui lòng chọn ít nhất một mức độ khó.');
+      return;
+    }
     setPlanning(true);
     setError('');
     setPlan(null);
@@ -98,6 +122,7 @@ export function SmartMixBuilder({
               }))
             : undefined,
         criticalMinimum,
+        selectedDifficulties,
       },
     );
     setPlanning(false);
@@ -256,6 +281,44 @@ export function SmartMixBuilder({
             </div>
           </section>
 
+          <section className="space-y-3" aria-labelledby="smart-mix-difficulties">
+            <div>
+              <h3 id="smart-mix-difficulties" className="font-medium">
+                Mức độ khó được phép
+              </h3>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Hệ thống chỉ chọn câu thuộc các mức đã đánh dấu; đây không phải tỷ lệ phân bổ.
+              </p>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-3">
+              {DIFFICULTIES.map(([difficulty, label]) => {
+                const checked = selectedDifficulties.includes(difficulty);
+                return (
+                  <label
+                    key={difficulty}
+                    htmlFor={`smart-mix-difficulty-${difficulty}`}
+                    className="flex min-h-11 cursor-pointer items-center gap-3 rounded-lg border px-3 py-2"
+                  >
+                    <Checkbox
+                      id={`smart-mix-difficulty-${difficulty}`}
+                      checked={checked}
+                      onCheckedChange={(value) => {
+                        setSelectedDifficulties((current) =>
+                          value
+                            ? [...current, difficulty]
+                            : current.filter((item) => item !== difficulty),
+                        );
+                        setPlan(null);
+                        setError('');
+                      }}
+                    />
+                    <span className="text-sm">{label}</span>
+                  </label>
+                );
+              })}
+            </div>
+          </section>
+
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label>Kiểu phân bổ nhóm nghiệp vụ</Label>
@@ -320,7 +383,12 @@ export function SmartMixBuilder({
             <Button
               type="button"
               onClick={createPlan}
-              disabled={planning || selectedCategories.length === 0 || percentageTotal !== 100}
+              disabled={
+                planning ||
+                selectedCategories.length === 0 ||
+                selectedDifficulties.length === 0 ||
+                percentageTotal !== 100
+              }
             >
               <Sparkles className="size-4" />
               {planning ? 'Đang lập phương án…' : 'Lập phương án đề xuất'}
@@ -407,6 +475,27 @@ export function SmartMixBuilder({
                 <strong className="block text-xl">{plan.totalScore.toLocaleString('vi-VN')}</strong>
               </div>
             </div>
+            <div className="rounded-lg border p-3 text-sm">
+              <p>
+                <span className="text-muted-foreground">Độ khó cho phép: </span>
+                <strong>
+                  {selectedDifficulties
+                    .map((difficulty) => DIFFICULTIES.find(([value]) => value === difficulty)?.[1])
+                    .join(', ')}
+                </strong>
+              </p>
+              <p className="mt-1">
+                <span className="text-muted-foreground">Số câu thực tế theo độ khó: </span>
+                <strong>
+                  {plan.difficultyCounts
+                    .map((item) => {
+                      const label = DIFFICULTIES.find(([value]) => value === item.difficulty)?.[1];
+                      return `${label}: ${item.questionCount}`;
+                    })
+                    .join(' · ')}
+                </strong>
+              </p>
+            </div>
             <p className="text-sm text-muted-foreground">
               Pool phù hợp: {plan.poolCapacity} câu · {plan.rules.length} nhóm cấu hình không giao
               nhau
@@ -415,7 +504,10 @@ export function SmartMixBuilder({
               <Button type="button" variant="ghost" onClick={() => setPlan(null)}>
                 Hủy
               </Button>
-              <Button type="button" onClick={() => onApply(plan.rules, targetLevelId)}>
+              <Button
+                type="button"
+                onClick={() => onApply(plan.rules, targetLevelId, selectedDifficulties)}
+              >
                 Áp dụng cấu hình
               </Button>
             </div>

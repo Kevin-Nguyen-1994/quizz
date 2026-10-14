@@ -172,6 +172,48 @@ describe('Phase 7B Question Bank and dynamic assignment generation', () => {
       });
       assert.equal(login.status, 200);
       const token = ((await login.json()) as { token: string }).token;
+      const smartMixCreate = await fetch(`${baseUrl}/api/admin/quizzes`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+        body: JSON.stringify({
+          title: 'Smart Mix difficulty persistence',
+          quizMode: 'bank_generated',
+          selectionMode: 'per_assignment',
+          smartMixDifficulties: ['medium', 'hard'],
+          generationRules: [
+            {
+              categoryId,
+              minimumLevelId: cs1Id,
+              difficulty: 'medium',
+              questionCount: 2,
+              pointsOverride: 100,
+            },
+          ],
+        }),
+      });
+      assert.equal(smartMixCreate.status, 201);
+      const smartMixQuizId = ((await smartMixCreate.json()) as { id: number }).id;
+      const smartMixRead = await fetch(`${baseUrl}/api/admin/quizzes/${smartMixQuizId}`, {
+        headers: { authorization: `Bearer ${token}` },
+      });
+      assert.equal(smartMixRead.status, 200);
+      assert.deepEqual(
+        ((await smartMixRead.json()) as { smartMixDifficulties: string[] }).smartMixDifficulties,
+        ['medium', 'hard'],
+      );
+      const invalidSmartMix = await fetch(`${baseUrl}/api/admin/quizzes`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+        body: JSON.stringify({
+          title: 'Invalid Smart Mix',
+          quizMode: 'bank_generated',
+          smartMixDifficulties: [],
+          generationRules: [
+            { categoryId, minimumLevelId: cs1Id, difficulty: 'medium', questionCount: 1 },
+          ],
+        }),
+      });
+      assert.equal(invalidSmartMix.status, 400);
       const response = await fetch(`${baseUrl}/api/admin/quizzes`, {
         headers: { authorization: `Bearer ${token}` },
       });
@@ -394,6 +436,18 @@ describe('Phase 7B Question Bank and dynamic assignment generation', () => {
   });
 
   it('migrates twice without changing legacy data and seeds the 12 categories', async () => {
+    const quizColumns = await databaseModule.db.all<Array<{ name: string }>>(
+      'PRAGMA table_info(quizzes)',
+    );
+    assert.ok(quizColumns.some((column) => column.name === 'smart_mix_difficulties_json'));
+    assert.equal(
+      (
+        await databaseModule.db.get<{ smart_mix_difficulties_json: string | null }>(
+          'SELECT smart_mix_difficulties_json FROM quizzes ORDER BY id LIMIT 1',
+        )
+      )?.smart_mix_difficulties_json,
+      null,
+    );
     assert.equal(
       (
         await databaseModule.db.get<{ count: number }>(

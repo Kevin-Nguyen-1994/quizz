@@ -86,6 +86,7 @@ export function DynamicQuizEditor({
     title: string;
     description: string;
     recommendedLevelId: number | null;
+    smartMixDifficulties: QuestionDifficulty[] | null;
     rules: Record<string, unknown>[];
   };
   onCancel(): void;
@@ -110,6 +111,9 @@ export function DynamicQuizEditor({
   const [checking, setChecking] = useState(false);
   const [error, setError] = useState('');
   const [builderMode, setBuilderMode] = useState<'smart' | 'manual'>(quizId ? 'manual' : 'smart');
+  const [smartMixDifficulties, setSmartMixDifficulties] = useState<QuestionDifficulty[] | null>(
+    initial?.smartMixDifficulties ?? null,
+  );
   useEffect(() => {
     Promise.all([
       api.get<{ categories: QuestionCategory[] }>('/api/admin/question-bank/categories'),
@@ -190,6 +194,7 @@ export function DynamicQuizEditor({
       recommendedLevelId: recommendedLevelId ? Number(recommendedLevelId) : null,
       quizMode: 'bank_generated',
       selectionMode: 'per_assignment',
+      smartMixDifficulties,
       generationRules: rules.map((r, i) => ({ ...r, sortOrder: i, availableCount: undefined })),
     };
     const result = quizId
@@ -291,8 +296,10 @@ export function DynamicQuizEditor({
             categories={categories}
             levels={levels}
             recommendedLevelId={recommendedLevelId}
-            onApply={(plannedRules, targetLevelId) => {
+            initialDifficulties={smartMixDifficulties ?? undefined}
+            onApply={(plannedRules, targetLevelId, selectedDifficulties) => {
               setRules(plannedRules);
+              setSmartMixDifficulties(selectedDifficulties);
               setPointsTouched(plannedRules.map(() => true));
               setRecommendedLevelId(targetLevelId);
               setBuilderMode('manual');

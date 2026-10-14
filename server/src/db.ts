@@ -23,6 +23,7 @@ export async function initDb(): Promise<void> {
       id          INTEGER PRIMARY KEY AUTOINCREMENT,
       title       TEXT NOT NULL,
       description TEXT NOT NULL DEFAULT '',
+      smart_mix_difficulties_json TEXT,
       created_at  TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
@@ -467,6 +468,11 @@ async function migrateQuestionBank(): Promise<void> {
       'quizzes',
       'blueprint_revision',
       'blueprint_revision INTEGER NOT NULL DEFAULT 1',
+    );
+    await addColumnIfMissing(
+      'quizzes',
+      'smart_mix_difficulties_json',
+      'smart_mix_difficulties_json TEXT',
     );
 
     await addColumnIfMissing(

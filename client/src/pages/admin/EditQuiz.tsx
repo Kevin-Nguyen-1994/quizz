@@ -36,6 +36,9 @@ export default function EditQuiz() {
   const [translationsOpen, setTranslationsOpen] = useState(false);
   const [quizMode, setQuizMode] = useState<'static' | 'bank_generated'>('static');
   const [generationRules, setGenerationRules] = useState<Record<string, unknown>[]>([]);
+  const [smartMixDifficulties, setSmartMixDifficulties] = useState<Array<
+    'easy' | 'medium' | 'hard'
+  > | null>(null);
 
   useEffect(() => {
     api
@@ -48,6 +51,7 @@ export default function EditQuiz() {
         recommended_level_id?: number | null;
         quiz_mode?: 'static' | 'bank_generated';
         generationRules?: Record<string, unknown>[];
+        smartMixDifficulties?: Array<'easy' | 'medium' | 'hard'> | null;
         questions: unknown[];
       }>(`/api/admin/quizzes/${id}`)
       .then(({ ok, data }) => {
@@ -64,6 +68,7 @@ export default function EditQuiz() {
         setRecommendedLevelId(data.recommended_level_id ?? null);
         setQuizMode(data.quiz_mode ?? 'static');
         setGenerationRules(data.generationRules ?? []);
+        setSmartMixDifficulties(data.smartMixDifficulties ?? null);
         setQuestions(
           (data.questions ?? []).map((q) =>
             mapDbQuestionToImport(q as Parameters<typeof mapDbQuestionToImport>[0]),
@@ -104,7 +109,13 @@ export default function EditQuiz() {
     return (
       <DynamicQuizEditor
         quizId={id}
-        initial={{ title, description, recommendedLevelId, rules: generationRules }}
+        initial={{
+          title,
+          description,
+          recommendedLevelId,
+          smartMixDifficulties,
+          rules: generationRules,
+        }}
         onCancel={() => navigate(basePath)}
         onSaved={() => navigate(basePath)}
       />

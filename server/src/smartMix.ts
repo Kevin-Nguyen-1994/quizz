@@ -15,6 +15,7 @@ export interface SmartMixRequest {
   categoryDistribution: 'balanced' | 'custom';
   categoryWeights?: SmartMixCategoryWeight[];
   criticalMinimum?: number;
+  selectedDifficulties?: Array<'easy' | 'medium' | 'hard'> | null;
 }
 
 export interface SmartMixCapacity {
@@ -22,6 +23,7 @@ export interface SmartMixCapacity {
   categoryName: string;
   minimumLevelId: number;
   minimumLevelCode: string;
+  difficulty: 'easy' | 'medium' | 'hard' | null;
   critical: boolean;
   availableCount: number;
 }
@@ -29,7 +31,7 @@ export interface SmartMixCapacity {
 export interface SmartMixRule {
   categoryId: number;
   minimumLevelId: number;
-  difficulty: null;
+  difficulty: 'easy' | 'medium' | 'hard' | null;
   questionType: null;
   critical: boolean | null;
   questionCount: number;
@@ -44,6 +46,7 @@ export interface SmartMixAllocation {
   categoryName: string;
   minimumLevelId: number;
   minimumLevelCode: string;
+  difficulty: 'easy' | 'medium' | 'hard' | null;
   questionCount: number;
   criticalCount: number;
   availableCount: number;
@@ -63,6 +66,10 @@ export interface SmartMixPlan {
     minimumLevelCode: string;
     questionCount: number;
     percentage: number;
+  }>;
+  difficultyCounts: Array<{
+    difficulty: 'easy' | 'medium' | 'hard';
+    questionCount: number;
   }>;
   warnings: string[];
 }
@@ -112,6 +119,7 @@ type Cell = {
   categoryName: string;
   minimumLevelId: number;
   minimumLevelCode: string;
+  difficulty: 'easy' | 'medium' | 'hard' | null;
   criticalCapacity: number;
   nonCriticalCapacity: number;
   allocated: number;
@@ -148,6 +156,19 @@ export function planSmartMix(raw: SmartMixRequest, capacities: SmartMixCapacity[
   ) {
     throw new SmartMixPlanError('Số câu trọng yếu không hợp lệ.', 'SMART_MIX_INVALID');
   }
+  const allowedDifficulties = ['easy', 'medium', 'hard'] as const;
+  const selectedDifficulties = raw.selectedDifficulties;
+  if (Array.isArray(selectedDifficulties)) {
+    if (selectedDifficulties.length === 0) {
+      throw new SmartMixPlanError('Vui lòng chọn ít nhất một mức độ khó.', 'SMART_MIX_INVALID');
+    }
+    if (
+      new Set(selectedDifficulties).size !== selectedDifficulties.length ||
+      selectedDifficulties.some((value) => !allowedDifficulties.includes(value))
+    ) {
+      throw new SmartMixPlanError('Mức độ khó không hợp lệ.', 'SMART_MIX_INVALID');
+    }
+  }
 
   const categoryWeight = new Map<number, number>();
   if (raw.categoryDistribution === 'custom') {
@@ -175,16 +196,21 @@ export function planSmartMix(raw: SmartMixRequest, capacities: SmartMixCapacity[
   const selectedLevels = new Set(levelMix.map((item) => item.minimumLevelId));
   const selectedCategories = new Set(categoryIds);
   const relevant = capacities.filter(
-    (item) => selectedCategories.has(item.categoryId) && selectedLevels.has(item.minimumLevelId),
+    (item) =>
+      selectedCategories.has(item.categoryId) &&
+      selectedLevels.has(item.minimumLevelId) &&
+      (!Array.isArray(selectedDifficulties) ||
+        (item.difficulty !== null && selectedDifficulties.includes(item.difficulty))),
   );
   const cellMap = new Map<string, Cell>();
   for (const item of relevant) {
-    const key = `${item.categoryId}:${item.minimumLevelId}`;
+    const key = `${item.categoryId}:${item.minimumLevelId}:${item.difficulty ?? 'any'}`;
     const cell = cellMap.get(key) ?? {
       categoryId: item.categoryId,
       categoryName: item.categoryName,
       minimumLevelId: item.minimumLevelId,
       minimumLevelCode: item.minimumLevelCode,
+      difficulty: item.difficulty,
       criticalCapacity: 0,
       nonCriticalCapacity: 0,
       allocated: 0,
@@ -257,7 +283,8 @@ export function planSmartMix(raw: SmartMixRequest, capacities: SmartMixCapacity[
           return (
             leftRatio - rightRatio ||
             left.allocated - right.allocated ||
-            categoryIds.indexOf(left.categoryId) - categoryIds.indexOf(right.categoryId)
+            categoryIds.indexOf(left.categoryId) - categoryIds.indexOf(right.categoryId) ||
+            String(left.difficulty).localeCompare(String(right.difficulty))
           );
         });
       const chosen = candidates[0];
@@ -321,6 +348,7 @@ export function planSmartMix(raw: SmartMixRequest, capacities: SmartMixCapacity[
       categoryName: cell.categoryName,
       minimumLevelId: cell.minimumLevelId,
       minimumLevelCode: cell.minimumLevelCode,
+      difficulty: cell.difficulty,
       questionCount: cell.allocated,
       criticalCount: cell.criticalAllocated,
       availableCount: cell.criticalCapacity + cell.nonCriticalCapacity,
@@ -333,7 +361,7 @@ export function planSmartMix(raw: SmartMixRequest, capacities: SmartMixCapacity[
       rules.push({
         categoryId: cell.categoryId,
         minimumLevelId: cell.minimumLevelId,
-        difficulty: null,
+        difficulty: cell.difficulty,
         questionType: null,
         critical: null,
         questionCount: cell.allocated,
@@ -348,7 +376,7 @@ export function planSmartMix(raw: SmartMixRequest, capacities: SmartMixCapacity[
       rules.push({
         categoryId: cell.categoryId,
         minimumLevelId: cell.minimumLevelId,
-        difficulty: null,
+        difficulty: cell.difficulty,
         questionType: null,
         critical: true,
         questionCount: cell.criticalAllocated,
@@ -363,7 +391,7 @@ export function planSmartMix(raw: SmartMixRequest, capacities: SmartMixCapacity[
       rules.push({
         categoryId: cell.categoryId,
         minimumLevelId: cell.minimumLevelId,
-        difficulty: null,
+        difficulty: cell.difficulty,
         questionType: null,
         critical: false,
         questionCount: nonCriticalCount,
@@ -402,6 +430,12 @@ export function planSmartMix(raw: SmartMixRequest, capacities: SmartMixCapacity[
         percentage: item.percentage,
       };
     }),
+    difficultyCounts: allowedDifficulties.map((difficulty) => ({
+      difficulty,
+      questionCount: usedCells
+        .filter((cell) => cell.difficulty === difficulty)
+        .reduce((sum, cell) => sum + cell.allocated, 0),
+    })),
     warnings,
   };
 }

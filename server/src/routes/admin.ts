@@ -312,10 +312,69 @@ adminRouter.get('/quizzes/:id', requireAuth, async (req: Request, res: Response)
       : [];
   res.json({
     ...quiz,
+    smartMixDifficulties: parseSmartMixDifficulties(quiz.smart_mix_difficulties_json),
     questions: questions.map(parseQuestionRow),
     generationRules,
   });
 });
+
+const SMART_MIX_DIFFICULTIES = ['easy', 'medium', 'hard'] as const;
+
+function normalizeSmartMixDifficulties(
+  value: unknown,
+): Array<(typeof SMART_MIX_DIFFICULTIES)[number]> | null {
+  if (value === null || value === undefined) return null;
+  if (!Array.isArray(value) || value.length === 0) {
+    throw new QuestionGenerationError(
+      'Vui lòng chọn ít nhất một mức độ khó.',
+      400,
+      'SMART_MIX_DIFFICULTIES_INVALID',
+    );
+  }
+  if (
+    new Set(value).size !== value.length ||
+    value.some((item) => !SMART_MIX_DIFFICULTIES.includes(item))
+  ) {
+    throw new QuestionGenerationError(
+      'Mức độ khó Smart Mix không hợp lệ.',
+      400,
+      'SMART_MIX_DIFFICULTIES_INVALID',
+    );
+  }
+  return SMART_MIX_DIFFICULTIES.filter((item) => value.includes(item));
+}
+
+function parseSmartMixDifficulties(
+  value: string | null,
+): Array<(typeof SMART_MIX_DIFFICULTIES)[number]> | null {
+  if (value === null) return null;
+  try {
+    return normalizeSmartMixDifficulties(JSON.parse(value));
+  } catch (error) {
+    if (error instanceof QuestionGenerationError) throw error;
+    throw new QuestionGenerationError(
+      'Cấu hình độ khó Smart Mix đã lưu không hợp lệ.',
+      500,
+      'SMART_MIX_DIFFICULTIES_INVALID',
+    );
+  }
+}
+
+function validateSmartMixRules(
+  selected: Array<(typeof SMART_MIX_DIFFICULTIES)[number]> | null,
+  rules: ReturnType<typeof normalizeGenerationRules>,
+): void {
+  if (
+    selected !== null &&
+    rules.some((rule) => rule.difficulty === null || !selected.includes(rule.difficulty))
+  ) {
+    throw new QuestionGenerationError(
+      'Cấu hình rule không khớp với độ khó Smart Mix đã chọn.',
+      400,
+      'SMART_MIX_DIFFICULTIES_MISMATCH',
+    );
+  }
+}
 
 /** Validate a client-supplied theme against the allowlist, defaulting to 'default'. */
 function normalizeTheme(theme: unknown): ThemeId {
@@ -377,12 +436,18 @@ adminRouter.post('/quizzes', requireAuth, async (req: Request, res: Response) =>
     if (quizMode === 'static') await validateStaticQuestionSources(db, body.questions);
     const rules =
       quizMode === 'bank_generated' ? normalizeGenerationRules(body.generationRules) : [];
+    const smartMixDifficulties =
+      quizMode === 'bank_generated'
+        ? normalizeSmartMixDifficulties(body.smartMixDifficulties)
+        : null;
+    validateSmartMixRules(smartMixDifficulties, rules);
     const quizId = await withImmediateTransaction(async (database) => {
       const quizResult = await database.run(
         `INSERT INTO quizzes (
            title, description, cover_image, theme, language, owner_id, owner_kind,
-           recommended_level_id, quiz_mode, selection_mode, blueprint_revision
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'per_assignment', 1)`,
+           recommended_level_id, quiz_mode, selection_mode, blueprint_revision,
+           smart_mix_difficulties_json
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'per_assignment', 1, ?)`,
         body.title.trim(),
         body.description ?? '',
         normalizeImageUrl(body.coverImage) ?? null,
@@ -392,6 +457,7 @@ adminRouter.post('/quizzes', requireAuth, async (req: Request, res: Response) =>
         ownerKind,
         levelId,
         quizMode,
+        smartMixDifficulties === null ? null : JSON.stringify(smartMixDifficulties),
       );
       const createdId = Number(quizResult.lastID);
       if (quizMode === 'static') {
@@ -453,10 +519,17 @@ adminRouter.put('/quizzes/:id', requireAuth, async (req: Request, res: Response)
     if (quiz.quiz_mode === 'static') await validateStaticQuestionSources(db, body.questions);
     const rules =
       quiz.quiz_mode === 'bank_generated' ? normalizeGenerationRules(body.generationRules) : [];
+    const smartMixDifficulties =
+      quiz.quiz_mode === 'bank_generated'
+        ? body.smartMixDifficulties === undefined
+          ? parseSmartMixDifficulties(quiz.smart_mix_difficulties_json)
+          : normalizeSmartMixDifficulties(body.smartMixDifficulties)
+        : null;
+    validateSmartMixRules(smartMixDifficulties, rules);
     await withImmediateTransaction(async (database) => {
       await database.run(
         `UPDATE quizzes SET title = ?, description = ?, cover_image = ?, theme = ?,
-         language = ?, recommended_level_id = ?,
+         language = ?, recommended_level_id = ?, smart_mix_difficulties_json = ?,
          blueprint_revision = blueprint_revision + ? WHERE id = ?`,
         body.title.trim(),
         body.description ?? '',
@@ -464,6 +537,7 @@ adminRouter.put('/quizzes/:id', requireAuth, async (req: Request, res: Response)
         normalizeTheme(body.theme),
         normalizeLanguage(body.language),
         levelId,
+        smartMixDifficulties === null ? null : JSON.stringify(smartMixDifficulties),
         quiz.quiz_mode === 'bank_generated' ? 1 : 0,
         req.params.id,
       );

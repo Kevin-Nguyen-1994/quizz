@@ -514,6 +514,7 @@ export interface SmartMixPlan {
     categoryName: string;
     minimumLevelId: number;
     minimumLevelCode: string;
+    difficulty: QuestionDifficulty | null;
     questionCount: number;
     criticalCount: number;
     availableCount: number;
@@ -529,6 +530,10 @@ export interface SmartMixPlan {
     minimumLevelCode: string;
     questionCount: number;
     percentage: number;
+  }>;
+  difficultyCounts: Array<{
+    difficulty: QuestionDifficulty;
+    questionCount: number;
   }>;
   warnings: string[];
 }

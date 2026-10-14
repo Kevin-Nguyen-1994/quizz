@@ -252,6 +252,18 @@ questionBankRouter.post('/smart-mix/plan', async (req, res) => {
     const body = req.body as SmartMixRequest;
     const categoryIds = [...new Set(body.categoryIds ?? [])];
     const levelIds = [...new Set((body.levelMix ?? []).map((item) => item.minimumLevelId))];
+    const selectedDifficulties = body.selectedDifficulties;
+    const difficultyFilter = Array.isArray(selectedDifficulties);
+    const filteredDifficulties = difficultyFilter ? selectedDifficulties : [];
+    if (difficultyFilter && selectedDifficulties.length === 0) {
+      throw new SmartMixPlanError('Vui lòng chọn ít nhất một mức độ khó.', 'SMART_MIX_INVALID');
+    }
+    if (
+      difficultyFilter &&
+      filteredDifficulties.some((value) => !['easy', 'medium', 'hard'].includes(value))
+    ) {
+      throw new SmartMixPlanError('Mức độ khó không hợp lệ.', 'SMART_MIX_INVALID');
+    }
     if (
       categoryIds.length === 0 ||
       levelIds.length === 0 ||
@@ -278,19 +290,23 @@ questionBankRouter.post('/smart-mix/plan', async (req, res) => {
         Array<{
           category_id: number;
           minimum_level_id: number;
+          difficulty: QuestionDifficulty | null;
           critical: number;
           available_count: number;
         }>
       >(
-        `SELECT bq.category_id, bq.minimum_level_id, bq.critical,
+        `SELECT bq.category_id, bq.minimum_level_id,
+                ${difficultyFilter ? 'bq.difficulty' : 'NULL'} AS difficulty, bq.critical,
                 COUNT(*) AS available_count
          FROM bank_questions bq
          JOIN question_categories qc ON qc.id = bq.category_id
          WHERE bq.is_enabled = 1 AND qc.is_active = 1
            AND bq.category_id IN (${categoryPlaceholders})
            AND bq.minimum_level_id IN (${levelPlaceholders})
-         GROUP BY bq.category_id, bq.minimum_level_id, bq.critical`,
-        [...categoryIds, ...levelIds],
+           ${difficultyFilter ? `AND bq.difficulty IN (${filteredDifficulties.map(() => '?').join(', ')})` : ''}
+         GROUP BY bq.category_id, bq.minimum_level_id,
+                  ${difficultyFilter ? 'bq.difficulty,' : ''} bq.critical`,
+        [...categoryIds, ...levelIds, ...filteredDifficulties],
       ),
     ]);
     if (
@@ -310,20 +326,26 @@ questionBankRouter.post('/smart-mix/plan', async (req, res) => {
     }
     const countMap = new Map(
       counts.map((item) => [
-        `${item.category_id}:${item.minimum_level_id}:${item.critical}`,
+        `${item.category_id}:${item.minimum_level_id}:${item.difficulty ?? 'any'}:${item.critical}`,
         item.available_count,
       ]),
     );
     const capacities = categories.flatMap((category) =>
       levels.flatMap((level) =>
-        [false, true].map((critical) => ({
-          categoryId: category.id,
-          categoryName: category.name,
-          minimumLevelId: level.id,
-          minimumLevelCode: level.code,
-          critical,
-          availableCount: countMap.get(`${category.id}:${level.id}:${critical ? 1 : 0}`) ?? 0,
-        })),
+        (difficultyFilter ? filteredDifficulties : [null]).flatMap((difficulty) =>
+          [false, true].map((critical) => ({
+            categoryId: category.id,
+            categoryName: category.name,
+            minimumLevelId: level.id,
+            minimumLevelCode: level.code,
+            difficulty,
+            critical,
+            availableCount:
+              countMap.get(
+                `${category.id}:${level.id}:${difficulty ?? 'any'}:${critical ? 1 : 0}`,
+              ) ?? 0,
+          })),
+        ),
       ),
     );
     res.json({ plan: planSmartMix(body, capacities) });

@@ -21,6 +21,7 @@ function capacities(
             categoryName: `Nhóm ${categoryId}`,
             minimumLevelId,
             minimumLevelCode: minimumLevelId === 1 ? 'CS1' : 'CS2',
+            difficulty: null,
             critical: false,
             availableCount: nonCritical,
           },
@@ -29,6 +30,7 @@ function capacities(
             categoryName: `Nhóm ${categoryId}`,
             minimumLevelId,
             minimumLevelCode: minimumLevelId === 1 ? 'CS1' : 'CS2',
+            difficulty: null,
             critical: true,
             availableCount: critical,
           },
@@ -140,5 +142,89 @@ describe('Phase 7C.1 Smart Mix planner', () => {
       (error: unknown) =>
         error instanceof SmartMixPlanError && error.code === 'SMART_MIX_CRITICAL_INSUFFICIENT',
     );
+  });
+
+  it('filters the pool by the allowed difficulty set and reports actual counts', () => {
+    const difficultyCapacities: SmartMixCapacity[] = ['easy', 'medium', 'hard'].flatMap(
+      (difficulty, index) => [
+        {
+          categoryId: 1,
+          categoryName: 'Nhóm 1',
+          minimumLevelId: 1,
+          minimumLevelCode: 'CS1',
+          difficulty: difficulty as 'easy' | 'medium' | 'hard',
+          critical: false,
+          availableCount: 2 + index,
+        },
+        {
+          categoryId: 1,
+          categoryName: 'Nhóm 1',
+          minimumLevelId: 1,
+          minimumLevelCode: 'CS1',
+          difficulty: difficulty as 'easy' | 'medium' | 'hard',
+          critical: true,
+          availableCount: 1,
+        },
+      ],
+    );
+    const request = {
+      totalQuestions: 3,
+      categoryIds: [1],
+      levelMix: [{ minimumLevelId: 1, percentage: 100 }],
+      categoryDistribution: 'balanced' as const,
+      criticalMinimum: 0,
+    };
+
+    const easy = planSmartMix({ ...request, selectedDifficulties: ['easy'] }, difficultyCapacities);
+    assert.ok(easy.rules.every((rule) => rule.difficulty === 'easy'));
+    assert.equal(
+      easy.difficultyCounts.find((item) => item.difficulty === 'easy')?.questionCount,
+      3,
+    );
+
+    const mediumHard = planSmartMix(
+      { ...request, totalQuestions: 5, selectedDifficulties: ['medium', 'hard'] },
+      difficultyCapacities,
+    );
+    assert.ok(mediumHard.rules.every((rule) => rule.difficulty !== 'easy'));
+    assert.equal(
+      mediumHard.difficultyCounts.reduce((sum, item) => sum + item.questionCount, 0),
+      5,
+    );
+
+    const all = planSmartMix(
+      { ...request, selectedDifficulties: ['easy', 'medium', 'hard'] },
+      difficultyCapacities,
+    );
+    assert.equal(all.totalQuestions, 3);
+    assert.ok(all.rules.every((rule) => rule.difficulty !== null));
+  });
+
+  it('rejects an empty difficulty selection and keeps legacy null as no filter', () => {
+    assert.throws(
+      () =>
+        planSmartMix(
+          {
+            totalQuestions: 1,
+            categoryIds: [1],
+            levelMix: [{ minimumLevelId: 1, percentage: 100 }],
+            categoryDistribution: 'balanced',
+            selectedDifficulties: [],
+          },
+          capacities(1),
+        ),
+      (error: unknown) => error instanceof SmartMixPlanError && error.code === 'SMART_MIX_INVALID',
+    );
+    const legacy = planSmartMix(
+      {
+        totalQuestions: 1,
+        categoryIds: [1],
+        levelMix: [{ minimumLevelId: 1, percentage: 100 }],
+        categoryDistribution: 'balanced',
+        selectedDifficulties: null,
+      },
+      capacities(1),
+    );
+    assert.equal(legacy.rules[0].difficulty, null);
   });
 });
