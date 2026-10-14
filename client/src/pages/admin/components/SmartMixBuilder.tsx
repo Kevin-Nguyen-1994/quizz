@@ -228,6 +228,44 @@ export function SmartMixBuilder({
             </div>
           </section>
 
+          <section className="space-y-3" aria-labelledby="smart-mix-difficulties">
+            <div>
+              <h3 id="smart-mix-difficulties" className="font-medium">
+                Mức độ khó được phép
+              </h3>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Hệ thống chỉ chọn câu thuộc các mức đã đánh dấu; đây không phải tỷ lệ phân bổ.
+              </p>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-3">
+              {DIFFICULTIES.map(([difficulty, label]) => {
+                const checked = selectedDifficulties.includes(difficulty);
+                return (
+                  <label
+                    key={difficulty}
+                    htmlFor={`smart-mix-difficulty-${difficulty}`}
+                    className="flex min-h-11 cursor-pointer items-center gap-3 rounded-lg border px-3 py-2"
+                  >
+                    <Checkbox
+                      id={`smart-mix-difficulty-${difficulty}`}
+                      checked={checked}
+                      onCheckedChange={(value) => {
+                        setSelectedDifficulties((current) =>
+                          value
+                            ? [...current, difficulty]
+                            : current.filter((item) => item !== difficulty),
+                        );
+                        setPlan(null);
+                        setError('');
+                      }}
+                    />
+                    <span className="text-sm">{label}</span>
+                  </label>
+                );
+              })}
+            </div>
+          </section>
+
           <section className="space-y-3" aria-labelledby="smart-mix-categories">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <h3 id="smart-mix-categories" className="font-medium">
@@ -275,44 +313,6 @@ export function SmartMixBuilder({
                     />
                     <span className="min-w-0 flex-1 text-sm">{category.name}</span>
                     <span className="text-xs text-muted-foreground">{category.question_count}</span>
-                  </label>
-                );
-              })}
-            </div>
-          </section>
-
-          <section className="space-y-3" aria-labelledby="smart-mix-difficulties">
-            <div>
-              <h3 id="smart-mix-difficulties" className="font-medium">
-                Mức độ khó được phép
-              </h3>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Hệ thống chỉ chọn câu thuộc các mức đã đánh dấu; đây không phải tỷ lệ phân bổ.
-              </p>
-            </div>
-            <div className="grid gap-2 sm:grid-cols-3">
-              {DIFFICULTIES.map(([difficulty, label]) => {
-                const checked = selectedDifficulties.includes(difficulty);
-                return (
-                  <label
-                    key={difficulty}
-                    htmlFor={`smart-mix-difficulty-${difficulty}`}
-                    className="flex min-h-11 cursor-pointer items-center gap-3 rounded-lg border px-3 py-2"
-                  >
-                    <Checkbox
-                      id={`smart-mix-difficulty-${difficulty}`}
-                      checked={checked}
-                      onCheckedChange={(value) => {
-                        setSelectedDifficulties((current) =>
-                          value
-                            ? [...current, difficulty]
-                            : current.filter((item) => item !== difficulty),
-                        );
-                        setPlan(null);
-                        setError('');
-                      }}
-                    />
-                    <span className="text-sm">{label}</span>
                   </label>
                 );
               })}
