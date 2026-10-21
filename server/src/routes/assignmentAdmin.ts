@@ -16,10 +16,12 @@ import {
 } from '../assignmentService';
 import {
   buildAssignmentCsv,
+  getAssignmentAnalytics,
   getAdminAttemptDetail,
   getAdminQuestionDetail,
   getAssignmentReport,
 } from '../assignmentReporting';
+import { applyResultAdjustment, previewAcceptedVariantTargets } from '../assessmentAdjustments';
 import { getRequestUser, requireAuth } from '../middleware';
 import { createAssignmentQuestionPreview, QuestionGenerationError } from '../questionGeneration';
 
@@ -101,6 +103,77 @@ assignmentAdminRouter.get(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       res.json(await getAssignmentReport(actor(req), assignmentId(req)));
+    } catch (error) {
+      handleError(error, res, next);
+    }
+  },
+);
+
+assignmentAdminRouter.get(
+  '/:id/analytics',
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      res.json(await getAssignmentAnalytics(actor(req), assignmentId(req)));
+    } catch (error) {
+      handleError(error, res, next);
+    }
+  },
+);
+
+assignmentAdminRouter.post(
+  '/:id/adjustments/preview-accepted-variants',
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const body = req.body as { assignmentQuestionId?: unknown; adjudicationPayload?: unknown };
+      const questionId = Number(body.assignmentQuestionId);
+      if (!Number.isInteger(questionId) || questionId < 1) throw new AssignmentServiceError('Invalid assignmentQuestionId');
+      const id = assignmentId(req);
+      await getAssignmentForAdmin(actor(req), id);
+      res.json({ targets: await previewAcceptedVariantTargets(id, questionId, body.adjudicationPayload) });
+    } catch (error) {
+      handleError(error, res, next);
+    }
+  },
+);
+
+assignmentAdminRouter.post(
+  '/:id/adjustments',
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const body = req.body as Record<string, unknown>;
+      const assignmentQuestionId = Number(body.assignmentQuestionId);
+      if (!Number.isInteger(assignmentQuestionId) || assignmentQuestionId < 1) {
+        throw new AssignmentServiceError('Invalid assignmentQuestionId');
+      }
+      const scope = body.scope;
+      const reasonCode = body.reasonCode;
+      const reasonText = body.reasonText;
+      const source = body.source;
+      const targets = body.targets;
+      if (!['individual', 'question_regrade', 'full_credit_all'].includes(String(scope)) ||
+          !['MISSING_ACCEPTED_ANSWER', 'WRONG_ANSWER_KEY', 'AMBIGUOUS_QUESTION', 'MANUAL_REVIEW', 'ADMIN_SCORE_CORRECTION'].includes(String(reasonCode)) ||
+          !['employee_appeal', 'admin_review', 'analytics_flag'].includes(String(source)) ||
+          typeof reasonText !== 'string' || !Array.isArray(targets)) {
+        throw new AssignmentServiceError('Invalid adjustment payload');
+      }
+      const parsedTargets = targets.map((target) => {
+        const value = target as Record<string, unknown>;
+        return {
+          attemptId: Number(value.attemptId),
+          adjustedIsCorrect: value.adjustedIsCorrect === null ? null : Boolean(value.adjustedIsCorrect),
+          adjustedScore: Number(value.adjustedScore),
+        };
+      });
+      res.status(201).json(await applyResultAdjustment(actor(req), {
+        assignmentId: assignmentId(req), assignmentQuestionId,
+        scope: scope as 'individual' | 'question_regrade' | 'full_credit_all',
+        reasonCode: reasonCode as 'MISSING_ACCEPTED_ANSWER' | 'WRONG_ANSWER_KEY' | 'AMBIGUOUS_QUESTION' | 'MANUAL_REVIEW' | 'ADMIN_SCORE_CORRECTION',
+        reasonText, source: source as 'employee_appeal' | 'admin_review' | 'analytics_flag',
+        adjudicationPayload: body.adjudicationPayload,
+        targets: parsedTargets,
+        expectedCurrentAdjustmentIds: body.expectedCurrentAdjustmentIds as Record<string, number | null> | undefined,
+        supersedesBatchId: typeof body.supersedesBatchId === 'number' ? body.supersedesBatchId : null,
+      }));
     } catch (error) {
       handleError(error, res, next);
     }

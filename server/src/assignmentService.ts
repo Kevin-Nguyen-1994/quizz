@@ -26,6 +26,7 @@ import { withImmediateTransaction as withAssignmentTransaction } from './transac
 import type {
   AssignmentKind,
   AssignmentAudienceMode,
+  AssessmentPurpose,
   AssignmentResultPolicy,
   AssignmentReviewPolicy,
   AssignmentTargetMode,
@@ -71,6 +72,7 @@ export interface AssignmentDraftInput {
   targetMode?: AssignmentTargetMode;
   targetLevelId?: number | null;
   promotionTargetLevelId?: number | null;
+  assessmentPurpose?: AssessmentPurpose | null;
 }
 
 export interface ParticipantAttemptState {
@@ -134,6 +136,7 @@ const RESULT_POLICIES = new Set<AssignmentResultPolicy>(['highest_score', 'lates
 const REVIEW_POLICIES = new Set<AssignmentReviewPolicy>(['after_deadline', 'after_close']);
 const ASSIGNMENT_KINDS = new Set<AssignmentKind>(['general', 'periodic', 'promotion']);
 const TARGET_MODES = new Set<AssignmentTargetMode>(['manual', 'current_level', 'promotion']);
+const ASSESSMENT_PURPOSES = new Set<AssessmentPurpose>(['baseline', 'practice', 'periodic', 'promotion']);
 const QUESTION_TYPES = new Set<QuestionType>([
   'multiple_choice',
   'true_false',
@@ -224,6 +227,17 @@ function validateDraftInput(input: AssignmentDraftInput): Required<AssignmentDra
   }
   const targetLevelId = input.targetLevelId ?? null;
   const promotionTargetLevelId = input.promotionTargetLevelId ?? null;
+  const assessmentPurpose = input.assessmentPurpose ?? null;
+  if (assessmentPurpose !== null && !ASSESSMENT_PURPOSES.has(assessmentPurpose)) {
+    throw new AssignmentServiceError('assessmentPurpose is invalid');
+  }
+  if (
+    (assignmentKind === 'promotion' && assessmentPurpose !== null && assessmentPurpose !== 'promotion') ||
+    (assignmentKind === 'periodic' && assessmentPurpose !== null && assessmentPurpose !== 'periodic') ||
+    (assignmentKind === 'general' && (assessmentPurpose === 'periodic' || assessmentPurpose === 'promotion'))
+  ) {
+    throw new AssignmentServiceError('assessmentPurpose conflicts with assignmentKind');
+  }
   if (targetLevelId !== null) requireFiniteInteger(targetLevelId, 'targetLevelId', 1);
   if (promotionTargetLevelId !== null) {
     requireFiniteInteger(promotionTargetLevelId, 'promotionTargetLevelId', 1);
@@ -263,6 +277,7 @@ function validateDraftInput(input: AssignmentDraftInput): Required<AssignmentDra
     targetMode,
     targetLevelId,
     promotionTargetLevelId,
+    assessmentPurpose,
   };
 }
 
@@ -304,8 +319,8 @@ export async function createDraftAssignment(
         quiz_id, owner_kind, owner_id, title, audience_mode, opens_at_ms,
         deadline_at_ms, max_attempts, result_policy, review_policy,
         shuffle_questions, shuffle_options, assignment_kind, target_mode,
-        target_level_id, promotion_target_level_id, created_at_ms, updated_at_ms
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        target_level_id, promotion_target_level_id, assessment_purpose, created_at_ms, updated_at_ms
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       normalized.quizId,
       actor.role === 'super_admin' ? 'admin' : 'user',
       actor.role === 'super_admin' ? null : actor.id,
@@ -322,6 +337,7 @@ export async function createDraftAssignment(
       normalized.targetMode,
       normalized.targetLevelId,
       normalized.promotionTargetLevelId,
+      normalized.assessmentPurpose,
       now,
       now,
     );
@@ -364,6 +380,8 @@ export async function updateDraftAssignment(
         patch.promotionTargetLevelId === undefined
           ? current.promotion_target_level_id
           : patch.promotionTargetLevelId,
+      assessmentPurpose:
+        patch.assessmentPurpose === undefined ? current.assessment_purpose : patch.assessmentPurpose,
     });
     await requireAccessibleQuiz(database, actor, normalized.quizId);
     await validateSmartTargetLevels(database, actor, normalized);
@@ -371,7 +389,7 @@ export async function updateDraftAssignment(
       `UPDATE assignments SET quiz_id = ?, title = ?, audience_mode = ?, opens_at_ms = ?,
        deadline_at_ms = ?, max_attempts = ?, result_policy = ?, review_policy = ?,
        shuffle_questions = ?, shuffle_options = ?, assignment_kind = ?, target_mode = ?,
-       target_level_id = ?, promotion_target_level_id = ?, updated_at_ms = ? WHERE id = ?`,
+       target_level_id = ?, promotion_target_level_id = ?, assessment_purpose = ?, updated_at_ms = ? WHERE id = ?`,
       normalized.quizId,
       normalized.title,
       normalized.audienceMode,
@@ -386,6 +404,7 @@ export async function updateDraftAssignment(
       normalized.targetMode,
       normalized.targetLevelId,
       normalized.promotionTargetLevelId,
+      normalized.assessmentPurpose,
       Date.now(),
       assignmentId,
     );

@@ -2,6 +2,12 @@ import type { Database } from 'sqlite';
 import { db } from './db';
 import { getAssignmentQuestionOrder } from './assignmentScoring';
 import {
+  effectiveAttemptScore,
+  effectiveResultKey,
+  effectiveResultsForAttempts,
+  type EffectiveAnswerResult,
+} from './assessmentAdjustments';
+import {
   AssignmentServiceError,
   getParticipantAttemptState,
   reconcileAssignmentDeadlineForReport,
@@ -122,6 +128,9 @@ export interface AttemptQuestionDetail {
   timeLimitSec: number;
   explanation: string | null;
   answerStatus: DbAttemptAnswer['status'] | 'not_answered';
+  originalScore: number;
+  originalIsCorrect: boolean | null;
+  isAdjusted: boolean;
 }
 
 export interface AttemptDetailDto {
@@ -145,6 +154,7 @@ interface LoadedReportData {
   members: DbAssignmentMember[];
   attempts: DbAssignmentAttempt[];
   answers: DbAttemptAnswer[];
+  effectiveResults: Map<string, EffectiveAnswerResult>;
 }
 
 function round(value: number, digits = 2): number {
@@ -207,7 +217,8 @@ async function loadOwnedReportData(
       [assignmentId],
     ),
   ]);
-  return { assignment, questions, members, attempts, answers };
+  const effectiveResults = await effectiveResultsForAttempts(attempts, answers, questions);
+  return { assignment, questions, members, attempts, answers, effectiveResults };
 }
 
 /** Select the one attempt used by aggregate metrics without hiding other attempts from admins. */
@@ -224,8 +235,8 @@ export function selectPrimaryAttempt(
       );
     }
     return completed.reduce((best, attempt) => {
-      if (attempt.total_score !== best.total_score) {
-        return attempt.total_score > best.total_score ? attempt : best;
+      if (effectiveAttemptScore(attempt) !== effectiveAttemptScore(best)) {
+        return effectiveAttemptScore(attempt) > effectiveAttemptScore(best) ? attempt : best;
       }
       return attempt.attempt_number > best.attempt_number ? attempt : best;
     });
@@ -252,17 +263,24 @@ function calculateAttemptMetrics(
   questions: DbAssignmentQuestion[],
   answers: DbAttemptAnswer[],
   isSelected: boolean,
+  effectiveResults?: Map<string, EffectiveAnswerResult>,
 ): AttemptReportRow {
   const questionById = new Map(questions.map((question) => [question.id, question]));
   const answered = answers.filter((answer) => answer.status === 'answered');
-  const timedOut = answers.filter((answer) => answer.status === 'timed_out');
-  const correct = answered.filter((answer) => answer.is_correct === 1).length;
-  const incorrect = answered.filter((answer) => answer.is_correct === 0).length;
-  const recordedQuestionIds = new Set(answers.map((answer) => answer.assignment_question_id));
-  const missingFinalAnswers =
-    attempt.status === 'completed' || attempt.status === 'expired'
-      ? questions.filter((question) => !recordedQuestionIds.has(question.id)).length
-      : 0;
+  const answerByQuestion = new Map(answers.map((answer) => [answer.assignment_question_id, answer]));
+  let correct = 0;
+  let incorrect = 0;
+  let noAnswer = 0;
+  for (const question of questions) {
+    const answer = answerByQuestion.get(question.id);
+    if (!answer || answer.status === 'timed_out') {
+      if (attempt.status === 'completed' || attempt.status === 'expired' || answer?.status === 'timed_out') noAnswer++;
+      continue;
+    }
+    const effective = effectiveResults?.get(effectiveResultKey(attempt.id, question.id));
+    if ((effective?.effectiveIsCorrect ?? answer.is_correct) === 1) correct++;
+    else incorrect++;
+  }
   const activeAnsweringTimeMs = answers.reduce((sum, answer) => {
     if (answer.status === 'timed_out') {
       return sum + (questionById.get(answer.assignment_question_id)?.time_sec ?? 0) * 1000;
@@ -273,7 +291,9 @@ function calculateAttemptMetrics(
     answer.response_time_ms === null ? [] : [answer.response_time_ms],
   );
   const maxScore = questions.reduce((sum, question) => sum + question.base_score, 0);
-  const score = answers.reduce((sum, answer) => sum + answer.score, 0);
+  const score = effectiveResults
+    ? effectiveAttemptScore(attempt)
+    : answers.reduce((sum, answer) => sum + answer.score, 0);
   return {
     id: attempt.id,
     attemptNumber: attempt.attempt_number,
@@ -283,7 +303,7 @@ function calculateAttemptMetrics(
     completedAtMs: attempt.completed_at_ms,
     correct,
     incorrect,
-    noAnswer: timedOut.length + missingFinalAnswers,
+    noAnswer,
     score,
     maxScore,
     scorePercent: maxScore > 0 ? round((score / maxScore) * 100) : 0,
@@ -295,7 +315,7 @@ function calculateAttemptMetrics(
 }
 
 export function buildAssignmentReport(data: LoadedReportData): AssignmentReportDto {
-  const { assignment, questions, members, attempts, answers } = data;
+  const { assignment, questions, members, attempts, answers, effectiveResults } = data;
   const maxScore = questions.reduce((sum, question) => sum + question.base_score, 0);
   const groupedAnswers = answersByAttempt(answers);
   const attemptsByUser = new Map<number, DbAssignmentAttempt[]>();
@@ -327,6 +347,7 @@ export function buildAssignmentReport(data: LoadedReportData): AssignmentReportD
             questions,
             groupedAnswers.get(attempt.id) ?? [],
             attempt.id === selected?.id,
+            effectiveResults,
           ),
         ),
     };
@@ -364,11 +385,12 @@ export function buildAssignmentReport(data: LoadedReportData): AssignmentReportD
     for (const member of members) {
       const selected = selectedByMember.get(member.id);
       const answer = selected ? answerMaps.get(selected.id)?.get(question.id) : undefined;
+      const effective = selected ? effectiveResults.get(effectiveResultKey(selected.id, question.id)) : undefined;
       if (answer?.status === 'answered') {
         sampleSize++;
         answeredCount++;
-        scoreTotal += answer.score;
-        if (answer.is_correct === 1) correct++;
+        scoreTotal += effective?.effectiveScore ?? answer.score;
+        if ((effective?.effectiveIsCorrect ?? answer.is_correct) === 1) correct++;
         else incorrect++;
         if (answer.response_time_ms !== null) responseTimes.push(answer.response_time_ms);
       } else if (
@@ -440,6 +462,176 @@ export function buildAssignmentReport(data: LoadedReportData): AssignmentReportD
   };
 }
 
+const ANALYTICS_MINIMUM_RESPONSES = 5;
+
+function median(values: number[]): number {
+  if (!values.length) return 0;
+  const sorted = [...values].sort((left, right) => left - right);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+}
+
+function questionFlags(question: {
+  wrongRate: number;
+  timeoutRate: number;
+  critical: boolean;
+}): string[] {
+  const flags: string[] = [];
+  if (question.wrongRate >= 50 && question.timeoutRate >= 30) flags.push('QUESTION_REVIEW');
+  if (question.critical && question.wrongRate >= 20) flags.push('CRITICAL_REVIEW');
+  if (question.timeoutRate >= 30) flags.push('TIMER_REVIEW');
+  if (question.wrongRate >= 50 && question.timeoutRate < 30) flags.push('HIGH_PRIORITY_GROUP_REVIEW');
+  else if (question.wrongRate >= 30 && question.timeoutRate < 30) flags.push('NEEDS_GROUP_REVIEW');
+  return flags;
+}
+
+/** Read-only aggregate used by the Phase 7E Admin analytics screen. */
+export async function getAssignmentAnalytics(
+  actor: AssignmentActor,
+  assignmentId: number,
+): Promise<unknown> {
+  await reconcileAssignmentDeadlineForReport(actor, assignmentId);
+  const data = await loadOwnedReportData(db, actor, assignmentId);
+  const report = buildAssignmentReport(data);
+  const attemptsByUser = new Map<number, DbAssignmentAttempt[]>();
+  for (const attempt of data.attempts) {
+    if (attempt.user_id === null) continue;
+    const list = attemptsByUser.get(attempt.user_id) ?? [];
+    list.push(attempt);
+    attemptsByUser.set(attempt.user_id, list);
+  }
+  const selectedByMember = new Map<number, DbAssignmentAttempt | null>();
+  for (const member of data.members) {
+    selectedByMember.set(
+      member.id,
+      member.user_id === null
+        ? null
+        : selectPrimaryAttempt(attemptsByUser.get(member.user_id) ?? [], data.assignment.result_policy),
+    );
+  }
+  const answerByAttemptQuestion = new Map(
+    data.answers.map((answer) => [effectiveResultKey(answer.attempt_id, answer.assignment_question_id), answer]),
+  );
+  const questionRows = data.questions.map((question, index) => {
+    let encountered = 0;
+    let correct = 0;
+    let wrong = 0;
+    let timeout = 0;
+    let scoreTotal = 0;
+    const wrongText = new Map<string, number>();
+    for (const member of data.members) {
+      const attempt = selectedByMember.get(member.id);
+      if (!attempt || (attempt.status !== 'completed' && attempt.status !== 'expired')) continue;
+      encountered++;
+      const answer = answerByAttemptQuestion.get(effectiveResultKey(attempt.id, question.id));
+      const effective = data.effectiveResults.get(effectiveResultKey(attempt.id, question.id));
+      scoreTotal += effective?.effectiveScore ?? answer?.score ?? 0;
+      if (!answer || answer.status === 'timed_out') {
+        timeout++;
+        continue;
+      }
+      if ((effective?.effectiveIsCorrect ?? answer.is_correct) === 1) correct++;
+      else {
+        wrong++;
+        const submitted = formatSubmittedAnswer(question, answer);
+        wrongText.set(submitted, (wrongText.get(submitted) ?? 0) + 1);
+      }
+    }
+    const correctRate = encountered ? round((correct / encountered) * 100) : 0;
+    const wrongRate = encountered ? round((wrong / encountered) * 100) : 0;
+    const timeoutRate = encountered ? round((timeout / encountered) * 100) : 0;
+    const critical = question.critical_snapshot === 1;
+    return {
+      questionId: question.id,
+      questionNumber: index + 1,
+      text: question.text,
+      categoryCode: question.source_category_code,
+      categoryName: question.source_category_name,
+      levelCode: question.minimum_level_code_snapshot,
+      difficulty: question.difficulty_snapshot,
+      critical,
+      competency: question.competency_snapshot,
+      topic: question.source_topic,
+      questionType: question.question_type,
+      timeSec: question.time_sec,
+      maxScore: question.base_score,
+      encountered,
+      correct,
+      wrong,
+      timeout,
+      correctRate,
+      wrongRate,
+      timeoutRate,
+      averageAwardedScore: encountered ? round(scoreTotal / encountered) : 0,
+      averageScoreRatio: question.base_score > 0 && encountered ? round((scoreTotal / encountered / question.base_score) * 100) : 0,
+      flags: questionFlags({ wrongRate, timeoutRate, critical }),
+      commonWrongAnswers: [...wrongText.entries()]
+        .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0], 'vi'))
+        .map(([answer, count]) => ({ answer, count })),
+      historicalMetadataAvailable: question.source_bank_question_id !== null,
+    };
+  });
+  const completedRows = report.participants.flatMap((participant) =>
+    participant.attempts.filter((attempt) => attempt.isSelected && (attempt.status === 'completed' || attempt.status === 'expired')),
+  );
+  const criticalQuestions = questionRows.filter((question) => question.critical);
+  const categoryMap = new Map<string, { name: string; responses: number; correct: number; wrong: number; timeout: number; criticalResponses: number; criticalCorrect: number }>();
+  const matrix = new Map<string, { level: string; difficulty: string; responses: number; correct: number }>();
+  for (const row of questionRows) {
+    if (row.categoryCode) {
+      const bucket = categoryMap.get(row.categoryCode) ?? { name: row.categoryName ?? row.categoryCode, responses: 0, correct: 0, wrong: 0, timeout: 0, criticalResponses: 0, criticalCorrect: 0 };
+      bucket.responses += row.encountered; bucket.correct += row.correct; bucket.wrong += row.wrong; bucket.timeout += row.timeout;
+      if (row.critical) { bucket.criticalResponses += row.encountered; bucket.criticalCorrect += row.correct; }
+      categoryMap.set(row.categoryCode, bucket);
+    }
+    if (row.levelCode && row.difficulty) {
+      const matrixKey = `${row.levelCode}:${row.difficulty}`;
+      const bucket = matrix.get(matrixKey) ?? { level: row.levelCode, difficulty: row.difficulty, responses: 0, correct: 0 };
+      bucket.responses += row.encountered; bucket.correct += row.correct; matrix.set(matrixKey, bucket);
+    }
+  }
+  const employees = data.members.map((member) => {
+    const attempt = selectedByMember.get(member.id);
+    const metric = report.participants.find((participant) => participant.memberId === member.id)?.attempts.find((item) => item.isSelected);
+    let criticalCorrect = 0; let criticalTotal = 0;
+    if (attempt) for (const question of data.questions.filter((item) => item.critical_snapshot === 1)) {
+      const effective = data.effectiveResults.get(effectiveResultKey(attempt.id, question.id));
+      const answer = answerByAttemptQuestion.get(effectiveResultKey(attempt.id, question.id));
+      if (attempt.status === 'completed' || attempt.status === 'expired') {
+        criticalTotal++;
+        if ((effective?.effectiveIsCorrect ?? answer?.is_correct) === 1 && answer?.status === 'answered') criticalCorrect++;
+      }
+    }
+    return {
+      memberId: member.id, userId: member.user_id, name: member.display_name_snapshot,
+      loginName: member.login_name_snapshot, levelCode: member.level_code_snapshot,
+      status: metric?.status ?? 'not_started', score: metric?.score ?? null, scorePercent: metric?.scorePercent ?? null,
+      correct: metric?.correct ?? 0, total: data.questions.length, wrong: metric?.incorrect ?? 0,
+      timeout: metric?.noAnswer ?? 0, criticalCorrect, criticalTotal,
+      criticalAccuracy: criticalTotal ? round((criticalCorrect / criticalTotal) * 100) : null,
+    };
+  });
+  return {
+    assignment: { id: data.assignment.id, title: data.assignment.title, assessmentPurpose: data.assignment.assessment_purpose ?? null, resultPolicy: data.assignment.result_policy },
+    overview: {
+      ...report.overview,
+      medianScore: median(completedRows.map((row) => row.score)),
+      highestScore: completedRows.length ? Math.max(...completedRows.map((row) => row.score)) : 0,
+      lowestScore: completedRows.length ? Math.min(...completedRows.map((row) => row.score)) : 0,
+      averageCorrectRate: completedRows.length ? round(average(completedRows.map((row) => (data.questions.length > 0 ? row.correct / data.questions.length * 100 : 0))) ?? 0) : 0,
+      totalNoAnswer: questionRows.reduce((sum, row) => sum + row.timeout, 0),
+      criticalQuestionCount: criticalQuestions.length,
+      criticalAccuracy: criticalQuestions.reduce((sum, row) => sum + row.encountered, 0) ? round((criticalQuestions.reduce((sum, row) => sum + row.correct, 0) / criticalQuestions.reduce((sum, row) => sum + row.encountered, 0)) * 100) : null,
+    },
+    priorityQuestions: [...questionRows].filter((row) => row.encountered > 0).sort((left, right) => Number(right.critical && right.wrong > 0) - Number(left.critical && left.wrong > 0) || left.correctRate - right.correctRate || right.wrongRate - left.wrongRate || right.timeoutRate - left.timeoutRate),
+    questions: questionRows,
+    categories: [...categoryMap.entries()].map(([code, value]) => ({ code, ...value, accuracy: value.responses ? round(value.correct / value.responses * 100) : 0, criticalAccuracy: value.criticalResponses ? round(value.criticalCorrect / value.criticalResponses * 100) : null, sufficientData: value.responses >= ANALYTICS_MINIMUM_RESPONSES })),
+    levelDifficulty: [...matrix.values()].map((value) => ({ ...value, accuracy: value.responses ? round(value.correct / value.responses * 100) : 0 })),
+    employees,
+    historicalMetadata: { complete: questionRows.every((row) => row.historicalMetadataAvailable), missingQuestionCount: questionRows.filter((row) => !row.historicalMetadataAvailable).length },
+  };
+}
+
 function formatPoint(raw: string | null): string {
   try {
     const point = JSON.parse(raw ?? '') as { lat?: unknown; lng?: unknown };
@@ -505,9 +697,15 @@ function formatCorrectAnswer(question: DbAssignmentQuestion): string {
   return question.correct_answer ?? '—';
 }
 
-function resultFor(answer: DbAttemptAnswer | undefined): ReportResult {
+function effectiveResultFor(
+  attemptId: number,
+  questionId: number,
+  answer: DbAttemptAnswer | undefined,
+  effectiveResults?: Map<string, EffectiveAnswerResult>,
+): ReportResult {
   if (!answer || answer.status === 'timed_out') return 'no_answer';
-  return answer.is_correct === 1 ? 'correct' : 'incorrect';
+  const effective = effectiveResults?.get(effectiveResultKey(attemptId, questionId));
+  return (effective?.effectiveIsCorrect ?? answer.is_correct) === 1 ? 'correct' : 'incorrect';
 }
 
 function buildAttemptDetail(
@@ -516,6 +714,7 @@ function buildAttemptDetail(
   attempt: DbAssignmentAttempt,
   answers: DbAttemptAnswer[],
   reviewAvailable: boolean,
+  effectiveResults?: Map<string, EffectiveAnswerResult>,
 ): AttemptDetailDto {
   const order = getAssignmentQuestionOrder(
     questions.length,
@@ -534,9 +733,10 @@ function buildAttemptDetail(
       loginName: attempt.participant_login_name?.trim() || attempt.participant_email || '',
       email: attempt.participant_email || null,
     },
-    attempt: calculateAttemptMetrics(attempt, questions, answers, true),
+    attempt: calculateAttemptMetrics(attempt, questions, answers, true, effectiveResults),
     questions: presentedQuestions.map((question, index) => {
       const answer = answerByQuestion.get(question.id);
+      const effective = effectiveResults?.get(effectiveResultKey(attempt.id, question.id));
       return {
         questionId: question.id,
         questionNumber: index + 1,
@@ -544,13 +744,16 @@ function buildAttemptDetail(
         questionType: question.question_type,
         submittedAnswer: formatSubmittedAnswer(question, answer),
         correctAnswer: formatCorrectAnswer(question),
-        result: resultFor(answer),
-        score: answer?.score ?? 0,
+        result: effectiveResultFor(attempt.id, question.id, answer, effectiveResults),
+        score: effective?.effectiveScore ?? answer?.score ?? 0,
         maxScore: question.base_score,
         responseTimeMs: answer?.status === 'answered' ? answer.response_time_ms : null,
         timeLimitSec: question.time_sec,
         explanation: question.explanation ?? null,
         answerStatus: answer?.status ?? 'not_answered',
+        originalScore: answer?.score ?? 0,
+        originalIsCorrect: answer ? answer.is_correct === 1 : null,
+        isAdjusted: effective?.isAdjusted ?? false,
       };
     }),
   };
@@ -579,6 +782,7 @@ export async function getAdminAttemptDetail(
     attempt,
     data.answers.filter((answer) => answer.attempt_id === attemptId),
     true,
+    data.effectiveResults,
   );
 }
 
@@ -610,6 +814,12 @@ export async function getAdminQuestionDetail(
       maxScore: question.base_score,
       timeLimitSec: question.time_sec,
       explanation: question.explanation ?? null,
+      categoryCode: question.source_category_code ?? null,
+      categoryName: question.source_category_name ?? null,
+      levelCode: question.minimum_level_code_snapshot ?? null,
+      difficulty: question.difficulty_snapshot ?? null,
+      critical: question.critical_snapshot === 1,
+      competency: question.competency_snapshot ?? null,
     },
     participants: data.members.map((member) => {
       const selected = selectPrimaryAttempt(
@@ -630,11 +840,26 @@ export async function getAdminQuestionDetail(
         attemptNumber: selected?.attempt_number ?? null,
         attemptStatus: selected?.status ?? 'not_started',
         submittedAnswer: formatSubmittedAnswer(question, answer),
-        result: resultFor(answer),
+        result: effectiveResultFor(selected?.id ?? 0, question.id, answer, data.effectiveResults),
         responseTimeMs: answer?.status === 'answered' ? answer.response_time_ms : null,
-        score: answer?.score ?? 0,
+        score: selected ? (data.effectiveResults.get(effectiveResultKey(selected.id, question.id))?.effectiveScore ?? answer?.score ?? 0) : 0,
+        originalScore: answer?.score ?? 0,
+        originalIsCorrect: answer ? answer.is_correct === 1 : null,
+        isAdjusted: selected ? (data.effectiveResults.get(effectiveResultKey(selected.id, question.id))?.isAdjusted ?? false) : false,
+        expectedCurrentAdjustmentId: selected ? (data.effectiveResults.get(effectiveResultKey(selected.id, question.id))?.adjustmentId ?? null) : null,
       };
     }),
+    adjustments: await db.all<{
+      id: number; scope: string; reason_code: string; reason_text: string; source: string;
+      actor_name_snapshot: string; created_at_ms: number; affected_count: number;
+    }[]>(
+      `SELECT b.id,b.scope,b.reason_code,b.reason_text,b.source,b.actor_name_snapshot,b.created_at_ms,COUNT(a.id) AS affected_count
+       FROM assignment_answer_adjustment_batches b
+       LEFT JOIN assignment_answer_adjustments a ON a.batch_id=b.id
+       WHERE b.assignment_id=? AND b.assignment_question_id=?
+       GROUP BY b.id ORDER BY b.created_at_ms DESC,b.id DESC`,
+      [assignmentId, questionId],
+    ),
   };
 }
 
@@ -685,7 +910,8 @@ export async function getParticipantAttemptReview(
     ),
     db.all<DbAttemptAnswer[]>('SELECT * FROM attempt_answers WHERE attempt_id = ?', [attemptId]),
   ]);
-  return buildAttemptDetail(assignment, questions, attempt, answers, true);
+  const effectiveResults = await effectiveResultsForAttempts([attempt], answers, questions);
+  return buildAttemptDetail(assignment, questions, attempt, answers, true, effectiveResults);
 }
 
 function csvEscape(value: unknown): string {
@@ -717,6 +943,23 @@ export async function buildAssignmentCsv(
     list.push(attempt);
     attemptsByUser.set(attempt.user_id, list);
   }
+  const adjustmentRows = await db.all<{
+    attempt_id: number;
+    assignment_question_id: number;
+    reason_code: string;
+    reason_text: string;
+    created_at_ms: number;
+  }[]>(
+    `SELECT a.attempt_id,a.assignment_question_id,b.reason_code,b.reason_text,a.created_at_ms
+     FROM assignment_answer_adjustments a
+     JOIN assignment_answer_adjustment_batches b ON b.id=a.batch_id
+     WHERE a.assignment_id=?
+       AND NOT EXISTS (SELECT 1 FROM assignment_answer_adjustments successor WHERE successor.supersedes_adjustment_id=a.id)`,
+    [assignmentId],
+  );
+  const adjustmentByAttemptQuestion = new Map(
+    adjustmentRows.map((row) => [effectiveResultKey(row.attempt_id, row.assignment_question_id), row]),
+  );
   const headers = [
     'Assignment',
     'Login name',
@@ -742,6 +985,15 @@ export async function buildAssignmentCsv(
     'Attempt total score',
     'Attempt max score',
     'Attempt score percent',
+    'Original status',
+    'Original correct',
+    'Original score',
+    'Effective correct',
+    'Effective score',
+    'Adjusted',
+    'Adjustment reason code',
+    'Adjustment reason text',
+    'Adjusted at',
   ];
   const rows: unknown[][] = [headers];
   for (const member of data.members) {
@@ -756,7 +1008,7 @@ export async function buildAssignmentCsv(
         attemptAnswers.map((answer) => [answer.assignment_question_id, answer]),
       );
       const metrics = attempt
-        ? calculateAttemptMetrics(attempt, data.questions, attemptAnswers, false)
+        ? calculateAttemptMetrics(attempt, data.questions, attemptAnswers, false, data.effectiveResults)
         : null;
       const questionOrder = attempt
         ? getAssignmentQuestionOrder(
@@ -769,6 +1021,12 @@ export async function buildAssignmentCsv(
       questionOrder.forEach((questionIndex, displayIndex) => {
         const question = data.questions[questionIndex];
         const answer = answerMap.get(question.id);
+        const effective = attempt
+          ? data.effectiveResults.get(effectiveResultKey(attempt.id, question.id))
+          : undefined;
+        const adjustment = attempt
+          ? adjustmentByAttemptQuestion.get(effectiveResultKey(attempt.id, question.id))
+          : undefined;
         rows.push([
           data.assignment.title,
           member.login_name_snapshot?.trim() || member.email_snapshot || '',
@@ -787,17 +1045,26 @@ export async function buildAssignmentCsv(
           question.question_type,
           formatSubmittedAnswer(question, answer),
           formatCorrectAnswer(question),
-          resultLabel(resultFor(answer)),
+          resultLabel(effectiveResultFor(attempt?.id ?? 0, question.id, answer, data.effectiveResults)),
           answer?.status === 'answered' ? (answer.response_time_ms ?? '') : '',
           answer?.status === 'answered' && answer.response_time_ms !== null
             ? round(answer.response_time_ms / 1000)
             : '',
           question.time_sec,
-          answer?.score ?? 0,
+          effective?.effectiveScore ?? answer?.score ?? 0,
           question.base_score,
           metrics?.score ?? 0,
           metrics?.maxScore ?? data.questions.reduce((sum, item) => sum + item.base_score, 0),
           metrics?.scorePercent ?? 0,
+          answer?.status ?? 'not_answered',
+          answer?.is_correct ?? '',
+          answer?.score ?? 0,
+          effective?.effectiveIsCorrect ?? answer?.is_correct ?? '',
+          effective?.effectiveScore ?? answer?.score ?? 0,
+          effective?.isAdjusted ? 'Yes' : 'No',
+          adjustment?.reason_code ?? '',
+          adjustment?.reason_text ?? '',
+          adjustment ? csvDate(adjustment.created_at_ms) : '',
         ]);
       });
     }

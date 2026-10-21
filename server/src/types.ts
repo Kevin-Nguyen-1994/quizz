@@ -327,6 +327,15 @@ export type AttemptAnswerStatus = 'answered' | 'timed_out';
 export type AssignmentKind = 'general' | 'periodic' | 'promotion';
 export type AssignmentTargetMode = 'manual' | 'current_level' | 'promotion';
 export type AssignmentTargetOverrideAction = 'include' | 'exclude';
+export type AssessmentPurpose = 'baseline' | 'practice' | 'periodic' | 'promotion';
+export type AdjustmentScope = 'individual' | 'question_regrade' | 'full_credit_all';
+export type AdjustmentReasonCode =
+  | 'MISSING_ACCEPTED_ANSWER'
+  | 'WRONG_ANSWER_KEY'
+  | 'AMBIGUOUS_QUESTION'
+  | 'MANUAL_REVIEW'
+  | 'ADMIN_SCORE_CORRECTION';
+export type AdjustmentSource = 'employee_appeal' | 'admin_review' | 'analytics_flag';
 
 export interface DbAssignment {
   id: number;
@@ -360,6 +369,7 @@ export interface DbAssignment {
   question_selection_fingerprint: string | null;
   quiz_blueprint_revision_snapshot: number | null;
   question_selection_mode_snapshot: QuestionSelectionMode | null;
+  assessment_purpose: AssessmentPurpose | null;
 }
 
 export interface DbAssignmentTargetOverride {
@@ -427,6 +437,9 @@ export interface DbAssignmentAttempt {
   recipient_entitlement_version: number;
   termination_reason: 'revoked_by_admin' | null;
   terminated_at_ms: number | null;
+  effective_correct_count: number | null;
+  effective_total_score: number | null;
+  results_adjusted_at_ms: number | null;
 }
 
 export interface DbAttemptAnswer {
@@ -442,6 +455,41 @@ export interface DbAttemptAnswer {
   question_started_at_ms: number;
   response_time_ms: number | null;
   answered_at_ms: number;
+}
+
+export interface DbAssignmentAnswerAdjustmentBatch {
+  id: number;
+  assignment_id: number;
+  assignment_question_id: number;
+  scope: AdjustmentScope;
+  reason_code: AdjustmentReasonCode;
+  reason_text: string;
+  source: AdjustmentSource;
+  adjudication_payload_json: string | null;
+  actor_id: number | null;
+  actor_role: string;
+  actor_name_snapshot: string;
+  created_at_ms: number;
+  supersedes_batch_id: number | null;
+}
+
+export interface DbAssignmentAnswerAdjustment {
+  id: number;
+  batch_id: number;
+  assignment_id: number;
+  assignment_question_id: number;
+  attempt_id: number;
+  answer_id: number | null;
+  user_id: number | null;
+  original_status: AttemptAnswerStatus | 'not_answered';
+  original_is_correct: number | null;
+  original_score: number;
+  before_effective_is_correct: number | null;
+  before_effective_score: number;
+  adjusted_is_correct: number | null;
+  adjusted_score: number;
+  supersedes_adjustment_id: number | null;
+  created_at_ms: number;
 }
 
 // Socket payloads

@@ -263,6 +263,7 @@ export async function initDb(): Promise<void> {
   await migrateInternalUserIdentifiers();
   await migrateEmployeeLevelsAndTargeting();
   await migrateAssignmentRecipientLifecycle();
+  await migrateAssessmentAnalyticsAndAdjustments();
   await migrateQuestionBank();
 
   // Migrate admin from config to database if needed
@@ -753,6 +754,82 @@ async function migrateAssignmentRecipientLifecycle(): Promise<void> {
       CREATE INDEX IF NOT EXISTS idx_assignment_recipient_events_created
         ON assignment_recipient_events(created_at_ms DESC);
       UPDATE assignment_members SET updated_at_ms = assigned_at_ms WHERE updated_at_ms IS NULL;
+    `);
+    await db.run('COMMIT');
+  } catch (error) {
+    await db.run('ROLLBACK').catch(() => undefined);
+    throw error;
+  }
+}
+
+/**
+ * Phase 7E additive analytics and adjudication schema.  Original answers and
+ * original attempt totals remain untouched; this stores only an immutable
+ * effective-result overlay.
+ */
+async function migrateAssessmentAnalyticsAndAdjustments(): Promise<void> {
+  await db.run('BEGIN IMMEDIATE');
+  try {
+    await addColumnIfMissing('assignments', 'assessment_purpose', 'assessment_purpose TEXT');
+    for (const [column, definition] of [
+      ['effective_correct_count', 'effective_correct_count INTEGER'],
+      ['effective_total_score', 'effective_total_score INTEGER'],
+      ['results_adjusted_at_ms', 'results_adjusted_at_ms INTEGER'],
+    ] as const) {
+      await addColumnIfMissing('assignment_attempts', column, definition);
+    }
+    await db.exec(`
+      CREATE TABLE IF NOT EXISTS assignment_answer_adjustment_batches (
+        id                        INTEGER PRIMARY KEY AUTOINCREMENT,
+        assignment_id             INTEGER NOT NULL REFERENCES assignments(id) ON DELETE CASCADE,
+        assignment_question_id    INTEGER NOT NULL REFERENCES assignment_questions(id) ON DELETE CASCADE,
+        scope                     TEXT NOT NULL CHECK(scope IN ('individual', 'question_regrade', 'full_credit_all')),
+        reason_code               TEXT NOT NULL CHECK(reason_code IN ('MISSING_ACCEPTED_ANSWER', 'WRONG_ANSWER_KEY', 'AMBIGUOUS_QUESTION', 'MANUAL_REVIEW', 'ADMIN_SCORE_CORRECTION')),
+        reason_text               TEXT NOT NULL CHECK(trim(reason_text) <> ''),
+        source                    TEXT NOT NULL CHECK(source IN ('employee_appeal', 'admin_review', 'analytics_flag')),
+        adjudication_payload_json TEXT,
+        actor_id                  INTEGER,
+        actor_role                TEXT NOT NULL,
+        actor_name_snapshot       TEXT NOT NULL,
+        created_at_ms             INTEGER NOT NULL,
+        supersedes_batch_id       INTEGER REFERENCES assignment_answer_adjustment_batches(id) ON DELETE RESTRICT
+      );
+
+      CREATE TABLE IF NOT EXISTS assignment_answer_adjustments (
+        id                          INTEGER PRIMARY KEY AUTOINCREMENT,
+        batch_id                    INTEGER NOT NULL REFERENCES assignment_answer_adjustment_batches(id) ON DELETE CASCADE,
+        assignment_id               INTEGER NOT NULL REFERENCES assignments(id) ON DELETE CASCADE,
+        assignment_question_id      INTEGER NOT NULL REFERENCES assignment_questions(id) ON DELETE CASCADE,
+        attempt_id                  INTEGER NOT NULL REFERENCES assignment_attempts(id) ON DELETE CASCADE,
+        answer_id                   INTEGER REFERENCES attempt_answers(id) ON DELETE SET NULL,
+        user_id                     INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        original_status             TEXT NOT NULL CHECK(original_status IN ('answered', 'timed_out', 'not_answered')),
+        original_is_correct         INTEGER CHECK(original_is_correct IN (0, 1)),
+        original_score              INTEGER NOT NULL,
+        before_effective_is_correct INTEGER CHECK(before_effective_is_correct IN (0, 1)),
+        before_effective_score      INTEGER NOT NULL,
+        adjusted_is_correct         INTEGER CHECK(adjusted_is_correct IN (0, 1)),
+        adjusted_score              INTEGER NOT NULL,
+        supersedes_adjustment_id    INTEGER REFERENCES assignment_answer_adjustments(id) ON DELETE RESTRICT,
+        created_at_ms               INTEGER NOT NULL
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_adjustment_batches_assignment_created
+        ON assignment_answer_adjustment_batches(assignment_id, created_at_ms DESC);
+      CREATE INDEX IF NOT EXISTS idx_adjustment_batches_question_created
+        ON assignment_answer_adjustment_batches(assignment_question_id, created_at_ms DESC);
+      CREATE INDEX IF NOT EXISTS idx_adjustment_batches_supersedes
+        ON assignment_answer_adjustment_batches(supersedes_batch_id);
+      CREATE INDEX IF NOT EXISTS idx_answer_adjustments_batch
+        ON assignment_answer_adjustments(batch_id);
+      CREATE INDEX IF NOT EXISTS idx_answer_adjustments_attempt
+        ON assignment_answer_adjustments(attempt_id);
+      CREATE INDEX IF NOT EXISTS idx_answer_adjustments_answer
+        ON assignment_answer_adjustments(answer_id);
+      CREATE INDEX IF NOT EXISTS idx_answer_adjustments_question_user
+        ON assignment_answer_adjustments(assignment_question_id, user_id);
+      CREATE INDEX IF NOT EXISTS idx_answer_adjustments_supersedes
+        ON assignment_answer_adjustments(supersedes_adjustment_id);
     `);
     await db.run('COMMIT');
   } catch (error) {

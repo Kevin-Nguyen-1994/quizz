@@ -25,6 +25,7 @@ export type AuthRole = 'super_admin' | 'user';
 export type AssignmentStatus = 'draft' | 'published' | 'closed' | 'archived';
 export type AssignmentAttemptStatus = 'in_progress' | 'completed' | 'expired';
 export type AssignmentKind = 'general' | 'periodic' | 'promotion';
+export type AssessmentPurpose = 'baseline' | 'practice' | 'periodic' | 'promotion';
 export type AssignmentTargetMode = 'manual' | 'current_level' | 'promotion';
 
 export interface EmployeeLevel {
@@ -97,6 +98,7 @@ export interface AdminAssignmentDetail {
     target_level_name_snapshot: string | null;
     promotion_target_level_code_snapshot: string | null;
     promotion_target_level_name_snapshot: string | null;
+    assessment_purpose: AssessmentPurpose | null;
   };
   questions: Array<{ id: number; text: string; order_index: number; time_sec: number }>;
   members: AdminAssignmentMember[];
@@ -328,6 +330,9 @@ export interface AssignmentAttemptQuestionDetail {
   timeLimitSec: number;
   explanation: string | null;
   answerStatus: 'answered' | 'timed_out' | 'not_answered';
+  originalScore: number;
+  originalIsCorrect: boolean | null;
+  isAdjusted: boolean;
 }
 
 export interface AssignmentAttemptDetail {
@@ -347,6 +352,12 @@ export interface AssignmentQuestionDetail {
     maxScore: number;
     timeLimitSec: number;
     explanation: string | null;
+    categoryCode?: string | null;
+    categoryName?: string | null;
+    levelCode?: string | null;
+    difficulty?: string | null;
+    critical?: boolean;
+    competency?: string | null;
   };
   participants: Array<{
     memberId: number;
@@ -360,7 +371,12 @@ export interface AssignmentQuestionDetail {
     result: AssignmentReportResult;
     responseTimeMs: number | null;
     score: number;
+    originalScore?: number;
+    originalIsCorrect?: boolean | null;
+    isAdjusted?: boolean;
+    expectedCurrentAdjustmentId?: number | null;
   }>;
+  adjustments?: Array<{ id: number; scope: string; reason_code: string; reason_text: string; source: string; actor_name_snapshot: string; created_at_ms: number; affected_count: number }>;
 }
 
 export interface AuthUser {

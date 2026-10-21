@@ -21,6 +21,7 @@ import { useDialog } from '@/context/DialogContext';
 import { useAuthFetch } from '@/hooks/useAuthFetch';
 import type {
   AdminAssignmentDetail,
+  AssessmentPurpose,
   AssignmentKind,
   AssignmentTargetMode,
   AssignmentTargetOverride,
@@ -82,6 +83,7 @@ export default function AssignmentEditor() {
   const [shuffleQuestions, setShuffleQuestions] = useState(true);
   const [shuffleOptions, setShuffleOptions] = useState(true);
   const [assignmentKind, setAssignmentKind] = useState<AssignmentKind>('general');
+  const [assessmentPurpose, setAssessmentPurpose] = useState<AssessmentPurpose | ''>('');
   const [targetMode, setTargetMode] = useState<AssignmentTargetMode>('manual');
   const [targetLevelId, setTargetLevelId] = useState('');
   const [promotionTargetLevelId, setPromotionTargetLevelId] = useState('');
@@ -138,6 +140,7 @@ export default function AssignmentEditor() {
           setShuffleQuestions(assignment.shuffle_questions === 1);
           setShuffleOptions(assignment.shuffle_options === 1);
           setAssignmentKind(assignment.assignment_kind);
+          setAssessmentPurpose(assignment.assessment_purpose ?? '');
           setTargetMode(assignment.target_mode);
           setTargetLevelId(assignment.target_level_id ? String(assignment.target_level_id) : '');
           setPromotionTargetLevelId(
@@ -316,6 +319,7 @@ export default function AssignmentEditor() {
       shuffleQuestions,
       shuffleOptions,
       assignmentKind,
+      assessmentPurpose: assessmentPurpose || null,
       targetMode,
       targetLevelId: targetMode === 'manual' ? null : Number(targetLevelId),
       promotionTargetLevelId: targetMode === 'promotion' ? Number(promotionTargetLevelId) : null,
@@ -620,7 +624,13 @@ export default function AssignmentEditor() {
                 <Label>Loại bài</Label>
                 <Select
                   value={assignmentKind}
-                  onValueChange={(value) => setAssignmentKind(value as AssignmentKind)}
+                  onValueChange={(value) => {
+                    const next = value as AssignmentKind;
+                    setAssignmentKind(next);
+                    if ((next === 'general' && (assessmentPurpose === 'periodic' || assessmentPurpose === 'promotion')) ||
+                        (next === 'periodic' && assessmentPurpose !== 'periodic') ||
+                        (next === 'promotion' && assessmentPurpose !== 'promotion')) setAssessmentPurpose('');
+                  }}
                   disabled={targetMode === 'promotion'}
                 >
                   <SelectTrigger>
@@ -630,6 +640,21 @@ export default function AssignmentEditor() {
                     <SelectItem value="general">Thông thường</SelectItem>
                     <SelectItem value="periodic">Kiểm tra định kỳ</SelectItem>
                     <SelectItem value="promotion">Thi lên bậc</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Mục đích đào tạo</Label>
+                <Select
+                  value={assessmentPurpose || 'none'}
+                  onValueChange={(value) => setAssessmentPurpose(value === 'none' ? '' : value as AssessmentPurpose)}
+                >
+                  <SelectTrigger><SelectValue placeholder="Chưa gắn nhãn" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Chưa gắn nhãn</SelectItem>
+                    {assignmentKind === 'general' && <><SelectItem value="baseline">Baseline</SelectItem><SelectItem value="practice">Luyện tập</SelectItem></>}
+                    {assignmentKind === 'periodic' && <SelectItem value="periodic">Định kỳ</SelectItem>}
+                    {assignmentKind === 'promotion' && <SelectItem value="promotion">Thi lên bậc</SelectItem>}
                   </SelectContent>
                 </Select>
               </div>

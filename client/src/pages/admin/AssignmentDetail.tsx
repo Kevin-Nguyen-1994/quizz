@@ -25,6 +25,8 @@ import { useDialog } from '@/context/DialogContext';
 import { useAuthFetch } from '@/hooks/useAuthFetch';
 import { authHeaders } from '@/lib/api';
 import { cn } from '@/lib/utils';
+import { AssessmentAnalytics } from './components/AssessmentAnalytics';
+import { ResultAdjustmentDialog } from './components/ResultAdjustmentDialog';
 import type {
   AssignmentAttemptDetail,
   AssignmentAttemptReportRow,
@@ -101,6 +103,7 @@ export default function AssignmentDetail() {
   const [questionOpen, setQuestionOpen] = useState(false);
   const [questionDetail, setQuestionDetail] = useState<AssignmentQuestionDetail | null>(null);
   const [questionError, setQuestionError] = useState('');
+  const [adjustmentOpen, setAdjustmentOpen] = useState(false);
   const [detail, setDetail] = useState<AdminAssignmentDetail | null>(null);
   const [users, setUsers] = useState<UserAccount[]>([]);
   const [addOpen, setAddOpen] = useState(false);
@@ -607,6 +610,8 @@ export default function AssignmentDetail() {
             </div>
           </Card>
         )}
+
+        <AssessmentAnalytics assignmentId={id} />
       </MainContent>
 
       <Dialog open={attemptOpen} onOpenChange={setAttemptOpen}>
@@ -661,6 +666,23 @@ export default function AssignmentDetail() {
                   </p>
                 )}
               </div>
+              {questionDetail.adjustments && questionDetail.adjustments.length > 0 && (
+                <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-sm">
+                  <strong className="block">Lịch sử rà soát kết quả</strong>
+                  <div className="mt-2 space-y-1 text-muted-foreground">
+                    {questionDetail.adjustments.map((adjustment) => (
+                      <p key={adjustment.id}>
+                        {dateTime(adjustment.created_at_ms)} · {adjustment.actor_name_snapshot} · {adjustment.reason_text} · {adjustment.affected_count} kết quả
+                      </p>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <div className="flex justify-end">
+                <Button variant="secondary" onClick={() => setAdjustmentOpen(true)}>
+                  Điều chỉnh kết quả
+                </Button>
+              </div>
               <div className="overflow-x-auto rounded-lg border border-border">
                 <table className="w-full min-w-[800px] text-sm">
                   <thead>
@@ -697,6 +719,7 @@ export default function AssignmentDetail() {
                         </td>
                         <td className="px-3 py-2">
                           {participant.score}/{questionDetail.question.maxScore}
+                          {participant.isAdjusted && <span className="ml-1 text-xs text-amber-300">(đã rà soát; gốc {participant.originalScore ?? 0})</span>}
                         </td>
                         <td className="px-3 py-2">
                           {formatDurationMs(participant.responseTimeMs)}
@@ -712,6 +735,16 @@ export default function AssignmentDetail() {
           )}
         </DialogContent>
       </Dialog>
+      <ResultAdjustmentDialog
+        assignmentId={id}
+        detail={questionDetail}
+        open={adjustmentOpen}
+        onOpenChange={setAdjustmentOpen}
+        onApplied={async () => {
+          if (questionDetail) await openQuestion(questionDetail.question.id);
+          await load();
+        }}
+      />
     </Page>
   );
 }
