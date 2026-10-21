@@ -342,6 +342,20 @@ export interface AssignmentAttemptDetail {
   questions: AssignmentAttemptQuestionDetail[];
 }
 
+export type AssignmentAppealStatus = 'pending' | 'in_review' | 'resolved';
+export interface AssignmentAnswerAppeal {
+  id: number;
+  assignment_question_id: number;
+  reason_code: 'ANSWER_MARKED_WRONG' | 'ANSWER_KEY_DISPUTE' | 'QUESTION_AMBIGUOUS' | 'TIMER_OR_SYSTEM_ISSUE' | 'OTHER';
+  message: string;
+  status: AssignmentAppealStatus;
+  resolution_outcome: 'adjusted' | 'accepted_no_score_change' | 'rejected' | null;
+  resolution_note: string | null;
+  submitted_at_ms: number;
+  updated_at_ms: number;
+  resolved_at_ms: number | null;
+}
+
 export interface AssignmentQuestionDetail {
   question: {
     id: number;

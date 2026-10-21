@@ -1,11 +1,13 @@
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import type {
   AssignmentAttemptDetail,
   AssignmentAttemptQuestionDetail,
   AssignmentReportResult,
   QuestionType,
+  AssignmentAnswerAppeal,
 } from '@/types';
 
 export const questionTypeLabels: Record<QuestionType, string> = {
@@ -51,7 +53,8 @@ export function ResultBadge({ result }: { result: AssignmentReportResult }) {
   );
 }
 
-function QuestionCard({ question }: { question: AssignmentAttemptQuestionDetail }) {
+const appealLabels = { pending: 'Đã gửi', in_review: 'Đang xem xét', resolved: 'Đã xử lý' } as const;
+function QuestionCard({ question, appeal, onAppeal }: { question: AssignmentAttemptQuestionDetail; appeal?: AssignmentAnswerAppeal; onAppeal?: (question: AssignmentAttemptQuestionDetail) => void }) {
   return (
     <Card>
       <CardContent className="space-y-3 p-4">
@@ -88,12 +91,13 @@ function QuestionCard({ question }: { question: AssignmentAttemptQuestionDetail 
             <p className="mt-1 whitespace-pre-wrap">{question.explanation}</p>
           </div>
         )}
+        {onAppeal && <div className="flex items-center justify-between gap-3 border-t pt-3"><div className="text-sm text-muted-foreground">{appeal ? <><strong>{appealLabels[appeal.status]}</strong>{appeal.status === 'resolved' && appeal.resolution_note ? ` · ${appeal.resolution_note}` : ''}</> : 'Nếu có nội dung cần xem xét, hãy gửi phản hồi cho Admin.'}</div>{!appeal && <Button variant="secondary" size="sm" onClick={() => onAppeal(question)}>Khiếu nại / phản hồi</Button>}</div>}
       </CardContent>
     </Card>
   );
 }
 
-export function AssignmentAttemptReview({ detail }: { detail: AssignmentAttemptDetail }) {
+export function AssignmentAttemptReview({ detail, appeals = [], onAppeal }: { detail: AssignmentAttemptDetail; appeals?: AssignmentAnswerAppeal[]; onAppeal?: (question: AssignmentAttemptQuestionDetail) => void }) {
   return (
     <div className="space-y-4">
       <div className="grid gap-2 rounded-lg bg-muted p-4 text-sm sm:grid-cols-3 lg:grid-cols-6">
@@ -124,7 +128,7 @@ export function AssignmentAttemptReview({ detail }: { detail: AssignmentAttemptD
       </div>
       <div className="grid gap-3">
         {detail.questions.map((question) => (
-          <QuestionCard key={question.questionId} question={question} />
+          <QuestionCard key={question.questionId} question={question} appeal={appeals.find((appeal) => appeal.assignment_question_id === question.questionId)} onAppeal={onAppeal} />
         ))}
       </div>
     </div>

@@ -42,6 +42,8 @@ export interface ApplyAdjustmentInput {
   /** Leaf adjustment ids seen by the preview.  Prevents a stale screen branching history. */
   expectedCurrentAdjustmentIds?: Record<string, number | null>;
   supersedesBatchId?: number | null;
+  /** When supplied, resolving this appeal is part of the same transaction. */
+  appealId?: number;
 }
 
 export interface AcceptedVariantPreview {
@@ -244,6 +246,13 @@ export async function applyResultAdjustment(
       [input.assignmentQuestionId, input.assignmentId],
     );
     if (!question) throw new AssignmentServiceError('Question not found', 404);
+    const linkedAppeal = input.appealId === undefined ? undefined : await db.get<{ id: number; attempt_id: number; status: string }>(
+      'SELECT id, attempt_id, status FROM assignment_answer_appeals WHERE id = ? AND assignment_id = ? AND assignment_question_id = ?',
+      [input.appealId, input.assignmentId, input.assignmentQuestionId],
+    );
+    if (input.appealId !== undefined && (!linkedAppeal || linkedAppeal.status === 'resolved')) {
+      throw new AssignmentServiceError('Appeal already resolved', 409, 'APPEAL_ALREADY_RESOLVED');
+    }
     if (input.scope === 'individual' && input.targets.length !== 1) {
       throw new AssignmentServiceError('Individual adjustment requires exactly one target');
     }
@@ -274,6 +283,9 @@ export async function applyResultAdjustment(
       if (!targets.length) throw new AssignmentServiceError('No completed or expired attempts to regrade');
     }
     const targetIds = [...new Set(targets.map((target) => target.attemptId))];
+    if (linkedAppeal && !targetIds.includes(linkedAppeal.attempt_id)) {
+      throw new AssignmentServiceError('Linked appeal attempt must be included in the adjustment');
+    }
     const placeholders = targetIds.map(() => '?').join(',');
     const attempts = await db.all<DbAssignmentAttempt[]>(
       `SELECT * FROM assignment_attempts WHERE assignment_id = ? AND id IN (${placeholders})`,
@@ -337,6 +349,17 @@ export async function applyResultAdjustment(
       if (!inserted.lastID) throw new AssignmentServiceError('Could not create adjustment');
     }
     for (const attemptId of targetIds) await recomputeEffectiveAttempt(attemptId);
+    if (linkedAppeal) {
+      const now = Date.now();
+      const resolved = await db.run(
+        `UPDATE assignment_answer_appeals
+         SET status = 'resolved', resolution_outcome = 'adjusted', linked_adjustment_batch_id = ?,
+             resolved_at_ms = ?, updated_at_ms = ?, resolved_by_actor_id = ?, resolved_by_actor_role = ?, resolved_by_actor_name_snapshot = ?
+         WHERE id = ? AND status IN ('pending','in_review')`,
+        [batchId, now, now, actor.id, actor.role, actorName(actor), linkedAppeal.id],
+      );
+      if (resolved.changes !== 1) throw new AssignmentServiceError('Appeal already resolved', 409, 'APPEAL_ALREADY_RESOLVED');
+    }
     await db.run('COMMIT');
     return { batchId, affectedAttemptIds: targetIds };
   } catch (error) {

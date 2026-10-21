@@ -27,6 +27,7 @@ import { authHeaders } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { AssessmentAnalytics } from './components/AssessmentAnalytics';
 import { ResultAdjustmentDialog } from './components/ResultAdjustmentDialog';
+import { AssignmentAppealsPanel, type AdminAppeal } from './components/AssignmentAppealsPanel';
 import type {
   AssignmentAttemptDetail,
   AssignmentAttemptReportRow,
@@ -111,6 +112,8 @@ export default function AssignmentDetail() {
   const [questionDetail, setQuestionDetail] = useState<AssignmentQuestionDetail | null>(null);
   const [questionError, setQuestionError] = useState('');
   const [adjustmentOpen, setAdjustmentOpen] = useState(false);
+  const [appealForAdjustment, setAppealForAdjustment] = useState<AdminAppeal | null>(null);
+  const [appealRefreshKey, setAppealRefreshKey] = useState(0);
   const [detail, setDetail] = useState<AdminAssignmentDetail | null>(null);
   const [users, setUsers] = useState<UserAccount[]>([]);
   const [addOpen, setAddOpen] = useState(false);
@@ -671,6 +674,10 @@ export default function AssignmentDetail() {
         )}
 
         <AssessmentAnalytics assignmentId={id} />
+        {id && <AssignmentAppealsPanel key={appealRefreshKey} assignmentId={id} onAdjust={(appeal) => {
+          setAppealForAdjustment(appeal);
+          void openQuestion(appeal.assignment_question_id).then(() => setAdjustmentOpen(true));
+        }} />}
       </MainContent>
 
       <Dialog open={attemptOpen} onOpenChange={setAttemptOpen}>
@@ -738,7 +745,7 @@ export default function AssignmentDetail() {
                 </div>
               )}
               <div className="flex justify-end">
-                <Button variant="secondary" onClick={() => setAdjustmentOpen(true)}>
+                <Button variant="secondary" onClick={() => { setAppealForAdjustment(null); setAdjustmentOpen(true); }}>
                   Điều chỉnh kết quả
                 </Button>
               </div>
@@ -798,10 +805,12 @@ export default function AssignmentDetail() {
         assignmentId={id}
         detail={questionDetail}
         open={adjustmentOpen}
-        onOpenChange={setAdjustmentOpen}
+        onOpenChange={(open) => { setAdjustmentOpen(open); if (!open) setAppealForAdjustment(null); }}
+        appeal={appealForAdjustment ? { id: appealForAdjustment.id, attemptId: appealForAdjustment.attempt_id, reasonCode: appealForAdjustment.reason_code } : null}
         onApplied={async () => {
           if (questionDetail) await openQuestion(questionDetail.question.id);
           await load();
+          setAppealRefreshKey((value) => value + 1);
         }}
       />
     </Page>

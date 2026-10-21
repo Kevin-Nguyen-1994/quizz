@@ -264,6 +264,7 @@ export async function initDb(): Promise<void> {
   await migrateEmployeeLevelsAndTargeting();
   await migrateAssignmentRecipientLifecycle();
   await migrateAssessmentAnalyticsAndAdjustments();
+  await migrateAssignmentAppeals();
   await migrateQuestionBank();
 
   // Migrate admin from config to database if needed
@@ -293,6 +294,28 @@ export async function initDb(): Promise<void> {
       hashedPassword,
     ]);
   }
+}
+
+async function migrateAssignmentAppeals(): Promise<void> {
+  await db.exec(`CREATE TABLE IF NOT EXISTS assignment_answer_appeals (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    assignment_id INTEGER NOT NULL REFERENCES assignments(id) ON DELETE CASCADE,
+    assignment_question_id INTEGER NOT NULL REFERENCES assignment_questions(id) ON DELETE CASCADE,
+    attempt_id INTEGER NOT NULL REFERENCES assignment_attempts(id) ON DELETE CASCADE,
+    answer_id INTEGER REFERENCES attempt_answers(id) ON DELETE SET NULL,
+    user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    participant_login_name_snapshot TEXT, participant_name_snapshot TEXT NOT NULL,
+    reason_code TEXT NOT NULL CHECK(reason_code IN ('ANSWER_MARKED_WRONG','ANSWER_KEY_DISPUTE','QUESTION_AMBIGUOUS','TIMER_OR_SYSTEM_ISSUE','OTHER')),
+    message TEXT NOT NULL CHECK(length(trim(message)) >= 10),
+    status TEXT NOT NULL CHECK(status IN ('pending','in_review','resolved')) DEFAULT 'pending',
+    resolution_outcome TEXT CHECK(resolution_outcome IN ('adjusted','accepted_no_score_change','rejected')),
+    resolution_note TEXT, linked_adjustment_batch_id INTEGER REFERENCES assignment_answer_adjustment_batches(id) ON DELETE RESTRICT,
+    submitted_at_ms INTEGER NOT NULL, updated_at_ms INTEGER NOT NULL, resolved_at_ms INTEGER,
+    resolved_by_actor_id INTEGER, resolved_by_actor_role TEXT, resolved_by_actor_name_snapshot TEXT
+  );
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_appeals_one_open ON assignment_answer_appeals(attempt_id,assignment_question_id) WHERE status IN ('pending','in_review');
+  CREATE INDEX IF NOT EXISTS idx_appeals_assignment_status_created ON assignment_answer_appeals(assignment_id,status,submitted_at_ms DESC);
+  CREATE INDEX IF NOT EXISTS idx_appeals_attempt ON assignment_answer_appeals(attempt_id);`);
 }
 
 const QUESTION_CATEGORY_SEEDS = [

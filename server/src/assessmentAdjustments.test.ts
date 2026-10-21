@@ -105,4 +105,28 @@ describe('assessment adjustments', () => {
     const originals = await database.db.get<{ total_score: number }>('SELECT total_score FROM assignment_attempts WHERE id=?',[attemptA]);
     assert.equal(originals?.total_score, 0);
   });
+
+  it('resolves a linked appeal in the same transaction as its adjustment', async () => {
+    const now = Date.now();
+    const appeal = await database.db.run(
+      `INSERT INTO assignment_answer_appeals
+       (assignment_id,assignment_question_id,attempt_id,answer_id,user_id,participant_name_snapshot,reason_code,message,status,submitted_at_ms,updated_at_ms)
+       VALUES (?,?,?,?,?,'A','ANSWER_MARKED_WRONG','Please review this answer carefully','pending',?,?)`,
+      [assignmentId, questionId, attemptA, answerA, 1, now, now],
+    );
+    const current = await database.db.get<{ id: number }>(
+      `SELECT id FROM assignment_answer_adjustments WHERE attempt_id=? AND assignment_question_id=? AND NOT EXISTS (SELECT 1 FROM assignment_answer_adjustments successor WHERE successor.supersedes_adjustment_id=assignment_answer_adjustments.id)`,
+      [attemptA, questionId],
+    );
+    const result = await adjustments.applyResultAdjustment(actor, {
+      assignmentId, assignmentQuestionId: questionId, scope: 'individual', reasonCode: 'MANUAL_REVIEW',
+      reasonText: 'Appeal review confirms a scoring correction', source: 'employee_appeal',
+      targets: [{ attemptId: attemptA, adjustedIsCorrect: true, adjustedScore: 100 }],
+      expectedCurrentAdjustmentIds: { [String(attemptA)]: current?.id ?? null }, appealId: Number(appeal.lastID),
+    });
+    const resolved = await database.db.get<{ status: string; resolution_outcome: string; linked_adjustment_batch_id: number }>(
+      'SELECT status,resolution_outcome,linked_adjustment_batch_id FROM assignment_answer_appeals WHERE id=?', [appeal.lastID],
+    );
+    assert.deepEqual(resolved, { status: 'resolved', resolution_outcome: 'adjusted', linked_adjustment_batch_id: result.batchId });
+  });
 });

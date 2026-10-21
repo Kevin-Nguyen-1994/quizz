@@ -4,6 +4,7 @@ import { Link, useParams } from 'react-router-dom';
 import { AppAlert } from '@/components/AppAlert';
 import { BrandLogo } from '@/components/BrandLogo';
 import { AssignmentAttemptReview } from '@/components/AssignmentAttemptReview';
+import { AssignmentAppealDialog } from '@/components/AssignmentAppealDialog';
 import { AssignmentStatusBadge } from '@/components/AssignmentStatusBadge';
 import { Page } from '@/components/layout';
 import { Button } from '@/components/ui/button';
@@ -14,6 +15,8 @@ import { useAuthFetch } from '@/hooks/useAuthFetch';
 import type {
   AssignmentAnswerSubmission,
   AssignmentAttemptDetail,
+  AssignmentAnswerAppeal,
+  AssignmentAttemptQuestionDetail,
   ParticipantAssignmentLookup,
   ParticipantAttemptState,
 } from '@/types';
@@ -63,6 +66,8 @@ export default function AssignmentPage() {
   const [notice, setNotice] = useState('');
   const [review, setReview] = useState<AssignmentAttemptDetail | null>(null);
   const [reviewLoading, setReviewLoading] = useState(false);
+  const [appeals, setAppeals] = useState<AssignmentAnswerAppeal[]>([]);
+  const [appealQuestion, setAppealQuestion] = useState<AssignmentAttemptQuestionDetail | null>(null);
   const [timeLeft, setTimeLeft] = useState(0);
   const [revoked, setRevoked] = useState(false);
   const timeoutSentFor = useRef<number | null>(null);
@@ -212,13 +217,26 @@ export default function AssignmentPage() {
       const result = await api.get<AssignmentAttemptDetail & { error?: string }>(
         `/api/assignments/attempts/${attempt.attempt.id}/review`,
       );
-      if (result.ok && result.data?.attempt) setReview(result.data);
+      if (result.ok && result.data?.attempt) {
+        setReview(result.data);
+        const appealsResult = await api.get<{ appeals?: AssignmentAnswerAppeal[] } & { error?: string }>(`/api/assignments/attempts/${attempt.attempt.id}/appeals`);
+        if (appealsResult.ok) setAppeals(appealsResult.data?.appeals ?? []);
+      }
       else handleFailure(result.data?.error);
     } catch {
       setError('Không thể kết nối máy chủ để tải phần xem lại.');
     } finally {
       setReviewLoading(false);
     }
+  }
+
+  async function submitAppeal(reasonCode: string, message: string): Promise<string | null> {
+    if (!attempt || !appealQuestion) return 'Không thể xác định câu hỏi cần phản hồi.';
+    const result = await api.post<{ id?: number; error?: string }>(`/api/assignments/attempts/${attempt.attempt.id}/questions/${appealQuestion.questionId}/appeals`, { reasonCode, message });
+    if (!result.ok) return result.data?.error ?? 'Không thể gửi phản hồi.';
+    const appealsResult = await api.get<{ appeals?: AssignmentAnswerAppeal[] }>(`/api/assignments/attempts/${attempt.attempt.id}/appeals`);
+    if (appealsResult.ok) setAppeals(appealsResult.data?.appeals ?? []);
+    return null;
   }
 
   const header = (
@@ -360,7 +378,8 @@ export default function AssignmentPage() {
           {review && (
             <div className="mt-6 text-left">
               <h2 className="mb-3 text-xl">Xem lại bài</h2>
-              <AssignmentAttemptReview detail={review} />
+              <AssignmentAttemptReview detail={review} appeals={appeals} onAppeal={setAppealQuestion} />
+              <AssignmentAppealDialog open={appealQuestion !== null} onOpenChange={(open) => { if (!open) setAppealQuestion(null); }} question={appealQuestion} onSubmit={submitAppeal} />
             </div>
           )}
         </main>

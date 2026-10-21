@@ -22,6 +22,7 @@ import {
   getAssignmentReport,
 } from '../assignmentReporting';
 import { applyResultAdjustment, previewAcceptedVariantTargets } from '../assessmentAdjustments';
+import { getAdminAppeal, listAdminAppeals, transitionAppeal } from '../assignmentAppeals';
 import { getRequestUser, requireAuth } from '../middleware';
 import { createAssignmentQuestionPreview, QuestionGenerationError } from '../questionGeneration';
 
@@ -120,6 +121,30 @@ assignmentAdminRouter.get(
   },
 );
 
+assignmentAdminRouter.get('/:id/appeals', async (req, res, next) => {
+  try { res.json({ appeals: await listAdminAppeals(actor(req), assignmentId(req)) }); }
+  catch (error) { handleError(error, res, next); }
+});
+
+assignmentAdminRouter.get('/:id/appeals/:appealId', async (req, res, next) => {
+  try { res.json({ appeal: await getAdminAppeal(actor(req), assignmentId(req), positiveParam(req, 'appealId')) }); }
+  catch (error) { handleError(error, res, next); }
+});
+
+assignmentAdminRouter.post('/:id/appeals/:appealId/start-review', async (req, res, next) => {
+  try { await transitionAppeal(actor(req), assignmentId(req), positiveParam(req, 'appealId'), 'review'); res.status(204).end(); }
+  catch (error) { handleError(error, res, next); }
+});
+
+assignmentAdminRouter.post('/:id/appeals/:appealId/resolve', async (req, res, next) => {
+  try {
+    const body = req.body as { outcome?: unknown; note?: unknown };
+    if (body.outcome !== 'accepted_no_score_change' && body.outcome !== 'rejected') throw new AssignmentServiceError('Invalid resolution outcome');
+    await transitionAppeal(actor(req), assignmentId(req), positiveParam(req, 'appealId'), body.outcome === 'rejected' ? 'reject' : 'accept', body.note);
+    res.status(204).end();
+  } catch (error) { handleError(error, res, next); }
+});
+
 assignmentAdminRouter.post(
   '/:id/adjustments/preview-accepted-variants',
   async (req: Request, res: Response, next: NextFunction) => {
@@ -164,6 +189,8 @@ assignmentAdminRouter.post(
           adjustedScore: Number(value.adjustedScore),
         };
       });
+      const appealId = body.appealId === undefined ? undefined : Number(body.appealId);
+      if (appealId !== undefined && (!Number.isInteger(appealId) || appealId < 1)) throw new AssignmentServiceError('Invalid appealId');
       res.status(201).json(await applyResultAdjustment(actor(req), {
         assignmentId: assignmentId(req), assignmentQuestionId,
         scope: scope as 'individual' | 'question_regrade' | 'full_credit_all',
@@ -173,6 +200,7 @@ assignmentAdminRouter.post(
         targets: parsedTargets,
         expectedCurrentAdjustmentIds: body.expectedCurrentAdjustmentIds as Record<string, number | null> | undefined,
         supersedesBatchId: typeof body.supersedesBatchId === 'number' ? body.supersedesBatchId : null,
+        appealId,
       }));
     } catch (error) {
       handleError(error, res, next);

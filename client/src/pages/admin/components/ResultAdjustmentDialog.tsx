@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { AppAlert } from '@/components/AppAlert';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -13,7 +13,7 @@ type Scope = 'individual' | 'question_regrade' | 'full_credit_all';
 type Source = 'employee_appeal' | 'admin_review' | 'analytics_flag';
 type Reason = 'MISSING_ACCEPTED_ANSWER' | 'WRONG_ANSWER_KEY' | 'AMBIGUOUS_QUESTION' | 'MANUAL_REVIEW' | 'ADMIN_SCORE_CORRECTION';
 
-export function ResultAdjustmentDialog({ assignmentId, detail, open, onOpenChange, onApplied }: { assignmentId: string | undefined; detail: AssignmentQuestionDetail | null; open: boolean; onOpenChange: (open: boolean) => void; onApplied: () => Promise<void>; }) {
+export function ResultAdjustmentDialog({ assignmentId, detail, open, onOpenChange, onApplied, appeal }: { assignmentId: string | undefined; detail: AssignmentQuestionDetail | null; open: boolean; onOpenChange: (open: boolean) => void; onApplied: () => Promise<void>; appeal?: { id: number; attemptId: number; reasonCode: string } | null; }) {
   const api = useAuthFetch();
   const candidates = useMemo(() => detail?.participants.filter((item) => item.attemptId !== null) ?? [], [detail]);
   const [scope, setScope] = useState<Scope>('individual');
@@ -27,6 +27,14 @@ export function ResultAdjustmentDialog({ assignmentId, detail, open, onOpenChang
   const [preview, setPreview] = useState<Array<{ attemptId: number; name: string; before: number; after: number; timeout: boolean }>>([]);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    if (!open || !appeal) return;
+    setSource('employee_appeal');
+    setScope('individual');
+    setTargetAttemptId(String(appeal.attemptId));
+    setReasonCode(appeal.reasonCode === 'ANSWER_KEY_DISPUTE' ? 'WRONG_ANSWER_KEY' : appeal.reasonCode === 'QUESTION_AMBIGUOUS' ? 'AMBIGUOUS_QUESTION' : appeal.reasonCode === 'ANSWER_MARKED_WRONG' ? 'MISSING_ACCEPTED_ANSWER' : 'MANUAL_REVIEW');
+    setPreview([]);
+  }, [appeal, open]);
   const currentDetail = detail;
   if (!currentDetail) return null;
   const max = currentDetail.question.maxScore;
@@ -62,6 +70,7 @@ export function ResultAdjustmentDialog({ assignmentId, detail, open, onOpenChang
       adjudicationPayload: { previewedAt: Date.now(), mode: scope, acceptedVariants },
       targets: preview.map((item) => ({ attemptId: item.attemptId, adjustedIsCorrect: scope === 'full_credit_all' ? true : isCorrect === 'true', adjustedScore: item.after })),
       expectedCurrentAdjustmentIds: Object.fromEntries(preview.map((item) => [String(item.attemptId), participantByAttempt.get(item.attemptId)?.expectedCurrentAdjustmentId ?? null])),
+      ...(appeal ? { appealId: appeal.id } : {}),
     });
     setBusy(false);
     if (!result.ok) { setError(result.data?.error ?? 'Không thể điều chỉnh kết quả.'); return; }

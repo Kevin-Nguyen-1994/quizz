@@ -10,6 +10,7 @@ import {
   timeoutAssignmentQuestion,
 } from '../assignmentService';
 import { getParticipantAttemptReview } from '../assignmentReporting';
+import { createAppeal, listOwnAppeals } from '../assignmentAppeals';
 import { getRequestUser, requireAuth } from '../middleware';
 
 export const assignmentsRouter = Router();
@@ -76,6 +77,20 @@ assignmentsRouter.get(
     }
   },
 );
+
+assignmentsRouter.get('/attempts/:attemptId/appeals', async (req, res, next) => {
+  try { res.json({ appeals: await listOwnAppeals(participantId(req), attemptId(req)) }); }
+  catch (error) { handleError(error, res, next); }
+});
+
+assignmentsRouter.post('/attempts/:attemptId/questions/:questionId/appeals', async (req, res, next) => {
+  try {
+    const questionId = Number(req.params.questionId);
+    if (!Number.isInteger(questionId) || questionId < 1) throw new AssignmentServiceError('Invalid question id');
+    const body = req.body as { reasonCode?: unknown; message?: unknown };
+    res.status(201).json(await createAppeal(participantId(req), attemptId(req), questionId, body.reasonCode, body.message));
+  } catch (error) { handleError(error, res, next); }
+});
 
 assignmentsRouter.post(
   '/attempts/:attemptId/answers',
