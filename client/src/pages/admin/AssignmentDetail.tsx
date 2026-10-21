@@ -1,4 +1,4 @@
-import { ArrowLeft, Check, Copy, Download, ExternalLink, Eye, UserPlus } from 'lucide-react';
+import { ArrowDown, ArrowLeft, ArrowUp, Check, Copy, Download, ExternalLink, Eye, UserPlus } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { AppAlert } from '@/components/AppAlert';
@@ -89,6 +89,13 @@ type ParticipantAttemptRow = {
   attempt: AssignmentAttemptReportRow | null;
 };
 
+type ParticipantSort = 'name' | 'completed' | 'correct' | 'incorrect' | 'noAnswer' | 'score' | 'percent' | 'activeTime';
+type SortDirection = 'asc' | 'desc';
+
+function searchKey(value: string): string {
+  return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toLocaleLowerCase('vi-VN');
+}
+
 export default function AssignmentDetail() {
   const { id } = useParams();
   const api = useAuthFetch();
@@ -108,6 +115,10 @@ export default function AssignmentDetail() {
   const [users, setUsers] = useState<UserAccount[]>([]);
   const [addOpen, setAddOpen] = useState(false);
   const [selectedUsers, setSelectedUsers] = useState<number[]>([]);
+  const [participantSearch, setParticipantSearch] = useState('');
+  const [participantStatus, setParticipantStatus] = useState('all');
+  const [participantSort, setParticipantSort] = useState<ParticipantSort>('name');
+  const [participantDirection, setParticipantDirection] = useState<SortDirection>('asc');
 
   const load = useCallback(async () => {
     setError('');
@@ -151,6 +162,47 @@ export default function AssignmentDetail() {
       ),
     [report],
   );
+
+  const visibleParticipantRows = useMemo(() => {
+    const query = searchKey(participantSearch.trim());
+    const filtered = participantRows.filter(({ participant, attempt }) => {
+      const status = attempt?.status ?? participant.status;
+      return (participantStatus === 'all' || status === participantStatus) && (!query || searchKey(`${participant.name} ${participant.loginName} ${participant.email ?? ''}`).includes(query));
+    });
+    const numeric = (row: ParticipantAttemptRow) => {
+      const attempt = row.attempt;
+      if (!attempt) return null;
+      if (participantSort === 'completed') return attempt.completedAtMs;
+      if (participantSort === 'correct') return attempt.correct;
+      if (participantSort === 'incorrect') return attempt.incorrect;
+      if (participantSort === 'noAnswer') return attempt.noAnswer;
+      if (participantSort === 'score') return attempt.score;
+      if (participantSort === 'percent') return attempt.scorePercent;
+      if (participantSort === 'activeTime') return attempt.activeAnsweringTimeMs;
+      return null;
+    };
+    return filtered.map((row, index) => ({ row, index })).sort((left, right) => {
+      if (participantSort === 'name') {
+        const compared = left.row.participant.name.localeCompare(right.row.participant.name, 'vi');
+        return participantDirection === 'asc' ? compared || left.index - right.index : -compared || left.index - right.index;
+      }
+      const a = numeric(left.row); const b = numeric(right.row);
+      if (a === null) return b === null ? left.index - right.index : 1;
+      if (b === null) return -1;
+      const compared = a - b;
+      return participantDirection === 'asc' ? compared || left.index - right.index : -compared || left.index - right.index;
+    }).map(({ row }) => row);
+  }, [participantRows, participantSearch, participantStatus, participantSort, participantDirection]);
+
+  function setSort(next: ParticipantSort, defaultDirection: SortDirection = 'desc') {
+    if (participantSort === next) setParticipantDirection((value) => value === 'asc' ? 'desc' : 'asc');
+    else { setParticipantSort(next); setParticipantDirection(next === 'name' ? 'asc' : defaultDirection); }
+  }
+
+  function SortHeader({ label, value, defaultDirection }: { label: string; value: ParticipantSort; defaultDirection?: SortDirection }) {
+    const active = participantSort === value;
+    return <th className="px-3 py-3"><button type="button" className="inline-flex items-center gap-1 hover:text-foreground" onClick={() => setSort(value, defaultDirection)}>{label}{active && (participantDirection === 'asc' ? <ArrowUp className="size-3" /> : <ArrowDown className="size-3" />)}</button></th>;
+  }
 
   async function closeAssignment() {
     if (!report) return;
@@ -427,21 +479,28 @@ export default function AssignmentDetail() {
           </Card>
         ) : (
           <Card className="mb-7 overflow-hidden">
+            <div className="flex flex-col gap-2 border-b p-4 lg:flex-row lg:items-center">
+              <input value={participantSearch} onChange={(event) => setParticipantSearch(event.target.value)} placeholder="Tìm nhân viên..." className="h-10 min-w-0 flex-1 rounded-md border bg-background px-3 text-sm" />
+              <select value={participantStatus} onChange={(event) => setParticipantStatus(event.target.value)} className="h-10 rounded-md border bg-background px-3 text-sm"><option value="all">Tất cả trạng thái</option><option value="completed">Hoàn thành</option><option value="in_progress">Đang làm</option><option value="not_started">Chưa bắt đầu</option><option value="expired">Hết hạn</option></select>
+              <select value={`${participantSort}:${participantDirection}`} onChange={(event) => { const [sort, direction] = event.target.value.split(':') as [ParticipantSort, SortDirection]; setParticipantSort(sort); setParticipantDirection(direction); }} className="h-10 rounded-md border bg-background px-3 text-sm"><option value="name:asc">Tên A → Z</option><option value="name:desc">Tên Z → A</option><option value="score:desc">Điểm cao → thấp</option><option value="score:asc">Điểm thấp → cao</option><option value="percent:desc">% cao → thấp</option><option value="percent:asc">% thấp → cao</option><option value="correct:desc">Số câu đúng cao → thấp</option><option value="noAnswer:desc">Timeout nhiều → ít</option><option value="completed:desc">Hoàn thành mới nhất</option><option value="completed:asc">Hoàn thành cũ nhất</option></select>
+              <span className="text-sm text-muted-foreground">Hiển thị {visibleParticipantRows.length} / {participantRows.length} kết quả</span>
+            </div>
+            {visibleParticipantRows.length === 0 ? <CardContent className="p-8 text-center text-muted-foreground">Không tìm thấy nhân viên phù hợp.</CardContent> :
             <div className="overflow-x-auto">
               <table className="w-full min-w-[1500px] text-sm">
                 <thead>
                   <tr className="border-b border-border text-left text-muted-foreground">
-                    <th className="px-3 py-3">Họ tên / Tên đăng nhập</th>
+                    <SortHeader label="Họ tên / Tên đăng nhập" value="name" defaultDirection="asc" />
                     <th className="px-3 py-3">Trạng thái</th>
                     <th className="px-3 py-3">Lượt làm</th>
                     <th className="px-3 py-3">Bắt đầu</th>
-                    <th className="px-3 py-3">Hoàn thành</th>
-                    <th className="px-3 py-3">Đúng</th>
-                    <th className="px-3 py-3">Sai</th>
-                    <th className="px-3 py-3">Bỏ câu</th>
-                    <th className="px-3 py-3">Điểm</th>
+                    <SortHeader label="Hoàn thành" value="completed" />
+                    <SortHeader label="Đúng" value="correct" />
+                    <SortHeader label="Sai" value="incorrect" />
+                    <SortHeader label="Bỏ câu" value="noAnswer" />
+                    <SortHeader label="Điểm" value="score" />
                     <th className="px-3 py-3">Tối đa</th>
-                    <th className="px-3 py-3">%</th>
+                    <SortHeader label="%" value="percent" />
                     <th className="px-3 py-3" title="Bao gồm cả thời gian nhân viên rời khỏi bài">
                       Từ bắt đầu đến nộp
                     </th>
@@ -449,7 +508,7 @@ export default function AssignmentDetail() {
                       className="px-3 py-3"
                       title="Tổng thời gian xử lý câu hỏi; câu hết giờ tính theo giới hạn thời gian"
                     >
-                      Thời gian làm thực tế
+                      <button type="button" className="inline-flex items-center gap-1 hover:text-foreground" onClick={() => setSort('activeTime')}>Thời gian làm thực tế{participantSort === 'activeTime' && (participantDirection === 'asc' ? <ArrowUp className="size-3" /> : <ArrowDown className="size-3" />)}</button>
                     </th>
                     <th className="px-3 py-3" title="Chỉ tính các câu thực sự đã trả lời">
                       Trả lời TB/câu
@@ -458,7 +517,7 @@ export default function AssignmentDetail() {
                   </tr>
                 </thead>
                 <tbody>
-                  {participantRows.map(({ participant, attempt }) => (
+                  {visibleParticipantRows.map(({ participant, attempt }) => (
                     <tr
                       key={`${participant.memberId}-${attempt?.id ?? 'none'}`}
                       className="border-b border-border last:border-0"
@@ -519,7 +578,7 @@ export default function AssignmentDetail() {
                   ))}
                 </tbody>
               </table>
-            </div>
+            </div>}
           </Card>
         )}
 
