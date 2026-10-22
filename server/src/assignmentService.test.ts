@@ -204,6 +204,36 @@ describe('assignment attempt state machine', () => {
     assert.equal(listed?.quiz_title, 'Assignment source');
     assert.equal(listed?.question_count, 2);
     assert.equal(listed?.started_count, 1);
+    assert.equal(listed?.assessment_purpose, null);
+    assert.equal(listed?.target_level_code_snapshot, null);
+    assert.equal(listed?.open_appeal_count, 0);
+
+    const firstQuestion = await databaseModule.db.get<{ id: number }>(
+      'SELECT id FROM assignment_questions WHERE assignment_id = ? ORDER BY order_index LIMIT 1',
+      [firstStart.assignment.id],
+    );
+    await databaseModule.db.run(
+      `INSERT INTO assignment_answer_appeals (
+         assignment_id, assignment_question_id, attempt_id, answer_id, user_id,
+         participant_name_snapshot, reason_code, message, status, submitted_at_ms, updated_at_ms
+       ) VALUES (?, ?, ?, NULL, ?, 'Nhân viên A', 'OTHER', 'Please review', 'pending', ?, ?)`,
+      [firstStart.assignment.id, firstQuestion?.id, firstStart.attempt.id, userId, startedAt, startedAt],
+    );
+    await databaseModule.db.run(
+      `INSERT INTO assignment_answer_appeals (
+         assignment_id, assignment_question_id, attempt_id, answer_id, user_id,
+         participant_name_snapshot, reason_code, message, status, submitted_at_ms, updated_at_ms
+       ) VALUES (?, ?, ?, NULL, ?, 'Nhân viên A', 'OTHER', 'Already resolved', 'resolved', ?, ?)`,
+      [firstStart.assignment.id, firstQuestion?.id, firstStart.attempt.id, userId, startedAt, startedAt],
+    );
+    const listWithAppeal = (await service.listAssignmentsForAdmin({
+      id: 0,
+      role: 'super_admin',
+    })) as Array<Record<string, unknown>>;
+    assert.equal(
+      listWithAppeal.find((item) => item.id === firstStart.assignment.id)?.open_appeal_count,
+      1,
+    );
 
     const participantJson = JSON.stringify(firstStart);
     for (const secret of [
@@ -308,6 +338,22 @@ describe('assignment attempt state machine', () => {
     assert.equal(reviewState.reviewAvailable, true);
     assert.equal(reviewState.attempt.totalScore, 500);
     assert.equal(reviewState.attempt.correctCount, 1);
+
+    await databaseModule.db.run(
+      `UPDATE assignments
+       SET status = 'archived', assessment_purpose = 'baseline', target_mode = 'current_level',
+           target_level_code_snapshot = 'CS1', target_level_name_snapshot = 'Cấp 1'
+       WHERE id = ?`,
+      [firstStart.assignment.id],
+    );
+    const archivedList = (await service.listAssignmentsForAdmin({
+      id: 0,
+      role: 'super_admin',
+    })) as Array<Record<string, unknown>>;
+    const archived = archivedList.find((item) => item.id === firstStart.assignment.id);
+    assert.equal(archived?.status, 'archived');
+    assert.equal(archived?.assessment_purpose, 'baseline');
+    assert.equal(archived?.target_level_code_snapshot, 'CS1');
   });
 
   it('expires at the deadline and records only an already-open timed-out question', async () => {

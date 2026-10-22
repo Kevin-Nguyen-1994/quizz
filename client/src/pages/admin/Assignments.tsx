@@ -1,213 +1,72 @@
-import { ClipboardList, Plus } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Archive, CalendarClock, ChevronRight, ClipboardList, Ellipsis, Flag, Plus, Search, X } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { AppAlert } from '@/components/AppAlert';
 import { AssignmentStatusBadge } from '@/components/AssignmentStatusBadge';
 import AdminNav from '@/components/AdminNav';
-import { EmptyState, MainContent, Page, PageHeader } from '@/components/layout';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
 import { useDialog } from '@/context/DialogContext';
 import { useAuthFetch } from '@/hooks/useAuthFetch';
-import type { AdminAssignmentListItem } from '@/types';
+import { EmptyState, MainContent, Page, PageHeader } from '@/components/layout';
+import type { AdminAssignmentListItem, AssignmentStatus, AssessmentPurpose } from '@/types';
 
-function dateTime(value: number | null) {
-  return value === null ? 'Không giới hạn' : new Date(value).toLocaleString('vi-VN');
+type HubTab = 'active' | 'closed' | 'draft' | 'archived' | 'all';
+type TimeFilter = 'all' | 'this_month' | 'last_month' | 'last_3_months' | 'range';
+type SortOption = 'newest' | 'oldest' | 'deadline_soon' | 'deadline_late' | 'completion_high' | 'completion_low' | 'title_asc' | 'title_desc' | 'appeals_high';
+
+const tabs: Array<[HubTab, string]> = [['active', 'Đang hoạt động'], ['closed', 'Đã kết thúc'], ['draft', 'Nháp'], ['archived', 'Lưu trữ'], ['all', 'Tất cả']];
+const purposes: Record<AssessmentPurpose, string> = { baseline: 'Baseline', practice: 'Luyện tập', periodic: 'Định kỳ', promotion: 'Thi lên bậc' };
+
+function dateTime(value: number | null) { return value === null ? 'Không giới hạn' : new Date(value).toLocaleString('vi-VN'); }
+function normalized(value: string) { return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').toLowerCase(); }
+function completion(item: AdminAssignmentListItem) { return item.member_count > 0 ? Math.round((item.completed_count / item.member_count) * 100) : 0; }
+function level(item: AdminAssignmentListItem) {
+  if (item.target_mode === 'current_level') return item.target_level_code_snapshot ?? 'Chưa gắn level';
+  if (item.target_mode === 'promotion') return item.target_level_code_snapshot && item.promotion_target_level_code_snapshot ? `${item.target_level_code_snapshot} → ${item.promotion_target_level_code_snapshot}` : 'Thi lên bậc';
+  return 'Thủ công';
+}
+function openNow(item: AdminAssignmentListItem, now: number) { return item.status === 'published' && item.opens_at_ms <= now && (item.deadline_at_ms === null || item.deadline_at_ms >= now); }
+function timeMatches(item: AdminAssignmentListItem, filter: TimeFilter, from: string, to: string, now: Date) {
+  if (filter === 'all') return true;
+  const opened = item.opens_at_ms; const start = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+  if (filter === 'this_month') return opened >= start;
+  if (filter === 'last_month') { const previous = new Date(now.getFullYear(), now.getMonth() - 1, 1).getTime(); return opened >= previous && opened < start; }
+  if (filter === 'last_3_months') return opened >= new Date(now.getFullYear(), now.getMonth() - 2, 1).getTime();
+  const fromMs = from ? new Date(`${from}T00:00:00`).getTime() : null; const toMs = to ? new Date(`${to}T23:59:59.999`).getTime() : null;
+  return (fromMs === null || opened >= fromMs) && (toMs === null || opened <= toMs);
+}
+
+function AssignmentMeta({ item }: { item: AdminAssignmentListItem }) {
+  return <div className="mt-2 flex flex-wrap gap-1.5"><AssignmentStatusBadge status={item.status} /><Badge variant="outline">{level(item)}</Badge><Badge variant="outline">{item.assessment_purpose ? purposes[item.assessment_purpose] : 'Chưa gắn nhãn'}</Badge>{item.open_appeal_count > 0 && <Badge variant="destructive">Khiếu nại: {item.open_appeal_count}</Badge>}</div>;
+}
+function Progress({ item }: { item: AdminAssignmentListItem }) {
+  const percent = completion(item);
+  return <div className="min-w-40"><div className="flex items-center justify-between gap-2 text-sm"><span>{item.completed_count} / {item.member_count} hoàn thành</span><strong>{percent}%</strong></div><div className="mt-1.5 h-2 overflow-hidden rounded-full bg-muted" role="progressbar" aria-label="Tiến độ hoàn thành" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent}><div className="h-full rounded-full bg-primary transition-[width]" style={{ width: `${percent}%` }} /></div></div>;
 }
 
 export default function Assignments() {
-  const api = useAuthFetch();
-  const { confirm } = useDialog();
-  const [items, setItems] = useState<AdminAssignmentListItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [busyId, setBusyId] = useState<number | null>(null);
-
-  const load = useCallback(async () => {
-    setError('');
-    const { ok, data } = await api.get<{ assignments?: AdminAssignmentListItem[]; error?: string }>(
-      '/api/admin/assignments',
-    );
-    if (ok) setItems(data?.assignments ?? []);
-    else setError(data?.error ?? 'Không thể tải danh sách bài kiểm tra.');
-    setLoading(false);
-  }, [api]);
-
-  useEffect(() => {
-    load().catch(() => {
-      setError('Không thể kết nối máy chủ.');
-      setLoading(false);
-    });
-  }, [load]);
-
-  async function closeAssignment(item: AdminAssignmentListItem) {
-    const proceed = await confirm({
-      title: 'Đóng bài kiểm tra?',
-      message: `Những lượt đang làm “${item.title}” sẽ kết thúc và không thể bắt đầu lượt mới.`,
-      confirmText: 'Đóng bài kiểm tra',
-      cancelText: 'Hủy',
-      variant: 'danger',
-    });
-    if (!proceed) return;
-    setBusyId(item.id);
-    try {
-      const { ok, data } = await api.post<{ error?: string }>(
-        `/api/admin/assignments/${item.id}/close`,
-        {},
-      );
-      if (!ok) setError(data?.error ?? 'Không thể đóng bài kiểm tra.');
-      else await load();
-    } catch {
-      setError('Không thể kết nối máy chủ.');
-    } finally {
-      setBusyId(null);
-    }
-  }
-
-  return (
-    <Page>
-      <AdminNav />
-      <MainContent>
-        <PageHeader
-          title="Bài kiểm tra"
-          description="Tạo và theo dõi các bài kiểm tra dành cho nhân viên."
-          actions={<Button asChild>
-            <Link to="/admin/assignments/new">
-              <Plus className="size-4" /> Tạo bài kiểm tra
-            </Link>
-          </Button>}
-        />
-
-        {error && <AppAlert variant="error">{error}</AppAlert>}
-        {loading ? (
-          <p className="text-muted-foreground">Đang tải…</p>
-        ) : items.length === 0 ? (
-          <EmptyState
-            icon={<ClipboardList className="size-10" />}
-            title="Chưa có bài kiểm tra"
-            description="Tạo bài kiểm tra từ một bộ câu hỏi đã có."
-            action={<Button asChild><Link to="/admin/assignments/new">Tạo bài kiểm tra</Link></Button>}
-          />
-        ) : (
-          <>
-            <div className="grid gap-3 md:hidden">
-              {items.map((item) => (
-                <Card key={item.id}>
-                  <CardContent className="p-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <h2 className="truncate text-base">{item.title}</h2>
-                        <p className="truncate text-sm text-muted-foreground">
-                          {item.quiz_title ?? 'Bộ câu hỏi đã xóa'}
-                        </p>
-                      </div>
-                      <AssignmentStatusBadge status={item.status} />
-                    </div>
-                    <div className="mt-3 grid grid-cols-3 gap-2 text-center text-sm">
-                      <div>
-                        <strong className="block">{item.member_count}</strong>
-                        <span className="text-xs text-muted-foreground">Được giao</span>
-                      </div>
-                      <div>
-                        <strong className="block">{item.started_count}</strong>
-                        <span className="text-xs text-muted-foreground">Đã bắt đầu</span>
-                      </div>
-                      <div>
-                        <strong className="block">{item.completed_count}</strong>
-                        <span className="text-xs text-muted-foreground">Hoàn thành</span>
-                      </div>
-                    </div>
-                    <p className="mt-3 text-xs text-muted-foreground">
-                      Mở: {dateTime(item.opens_at_ms)} · Hạn: {dateTime(item.deadline_at_ms)}
-                    </p>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      <Button size="sm" asChild>
-                        <Link to={`/admin/assignments/${item.id}`}>Chi tiết</Link>
-                      </Button>
-                      {item.status === 'draft' && (
-                        <Button size="sm" variant="secondary" asChild>
-                          <Link to={`/admin/assignments/${item.id}/edit`}>Chỉnh sửa</Link>
-                        </Button>
-                      )}
-                      {item.status === 'published' && (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          disabled={busyId === item.id}
-                          onClick={() => closeAssignment(item)}
-                        >
-                          Đóng bài
-                        </Button>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-
-            <Card className="hidden overflow-hidden md:block">
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-border text-left text-muted-foreground">
-                      <th className="px-4 py-3 font-medium">Bài kiểm tra</th>
-                      <th className="px-4 py-3 font-medium">Trạng thái</th>
-                      <th className="px-4 py-3 font-medium">Thời gian</th>
-                      <th className="px-4 py-3 font-medium">Tiến độ</th>
-                      <th className="px-4 py-3 font-medium" />
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {items.map((item) => (
-                      <tr key={item.id} className="border-b border-border last:border-0">
-                        <td className="px-4 py-3">
-                          <strong className="block">{item.title}</strong>
-                          <span className="text-xs text-muted-foreground">
-                            {item.quiz_title ?? 'Bộ câu hỏi đã xóa'}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3">
-                          <AssignmentStatusBadge status={item.status} />
-                        </td>
-                        <td className="px-4 py-3 text-xs text-muted-foreground">
-                          <span className="block">Mở: {dateTime(item.opens_at_ms)}</span>
-                          <span className="block">Hạn: {dateTime(item.deadline_at_ms)}</span>
-                        </td>
-                        <td className="px-4 py-3">
-                          {item.member_count} nhân viên · {item.started_count} đã bắt đầu ·{' '}
-                          {item.completed_count} hoàn thành
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex justify-end gap-2">
-                            <Button size="sm" variant="ghost" asChild>
-                              <Link to={`/admin/assignments/${item.id}`}>Chi tiết</Link>
-                            </Button>
-                            {item.status === 'draft' && (
-                              <Button size="sm" variant="secondary" asChild>
-                                <Link to={`/admin/assignments/${item.id}/edit`}>Chỉnh sửa</Link>
-                              </Button>
-                            )}
-                            {item.status === 'published' && (
-                              <Button
-                                size="sm"
-                                variant="destructive"
-                                disabled={busyId === item.id}
-                                onClick={() => closeAssignment(item)}
-                              >
-                                Đóng bài
-                              </Button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </Card>
-          </>
-        )}
-      </MainContent>
-    </Page>
-  );
+  const api = useAuthFetch(); const navigate = useNavigate(); const { confirm } = useDialog();
+  const [items, setItems] = useState<AdminAssignmentListItem[]>([]); const [loading, setLoading] = useState(true); const [error, setError] = useState(''); const [busyId, setBusyId] = useState<number | null>(null);
+  const [tab, setTab] = useState<HubTab>('active'); const [query, setQuery] = useState(''); const [status, setStatus] = useState<'all' | AssignmentStatus>('all'); const [levelFilter, setLevelFilter] = useState('all'); const [purpose, setPurpose] = useState<'all' | AssessmentPurpose | 'none'>('all'); const [time, setTime] = useState<TimeFilter>('all'); const [from, setFrom] = useState(''); const [to, setTo] = useState(''); const [sort, setSort] = useState<SortOption>('newest'); const [summaryFilter, setSummaryFilter] = useState<'none' | 'open' | 'due' | 'incomplete' | 'appeals'>('none');
+  const load = useCallback(async () => { setError(''); const result = await api.get<{ assignments?: AdminAssignmentListItem[]; error?: string }>('/api/admin/assignments'); if (result.ok) setItems(result.data?.assignments ?? []); else setError(result.data?.error ?? 'Không thể tải danh sách đợt kiểm tra.'); setLoading(false); }, [api]);
+  useEffect(() => { load().catch(() => { setError('Không thể kết nối máy chủ.'); setLoading(false); }); }, [load]);
+  const clear = () => { setTab('active'); setQuery(''); setStatus('all'); setLevelFilter('all'); setPurpose('all'); setTime('all'); setFrom(''); setTo(''); setSort('newest'); setSummaryFilter('none'); };
+  async function close(item: AdminAssignmentListItem) { const proceed = await confirm({ title: 'Đóng đợt kiểm tra?', message: `Những lượt đang làm “${item.title}” sẽ kết thúc và không thể bắt đầu lượt mới.`, confirmText: 'Đóng đợt kiểm tra', cancelText: 'Hủy', variant: 'danger' }); if (!proceed) return; setBusyId(item.id); try { const result = await api.post<{ error?: string }>(`/api/admin/assignments/${item.id}/close`, {}); if (!result.ok) setError(result.data?.error ?? 'Không thể đóng đợt kiểm tra.'); else await load(); } catch { setError('Không thể kết nối máy chủ.'); } finally { setBusyId(null); } }
+  const summary = useMemo(() => { const now = Date.now(); const active = items.filter((item) => openNow(item, now)); return { open: active.length, dueSoon: items.filter((item) => item.status === 'published' && item.deadline_at_ms !== null && item.deadline_at_ms >= now && item.deadline_at_ms <= now + 259200000).length, incomplete: active.reduce((count, item) => count + Math.max(0, item.member_count - item.completed_count), 0), appeals: items.reduce((count, item) => count + item.open_appeal_count, 0) }; }, [items]);
+  const levels = useMemo(() => Array.from(new Set(items.flatMap((item) => [item.target_level_code_snapshot, item.promotion_target_level_code_snapshot]).filter((value): value is string => Boolean(value)))).sort(), [items]);
+  const visible = useMemo(() => { const now = new Date(); const nowMs = now.getTime(); const needle = normalized(query.trim()); return items.filter((item) => { const inTab = tab === 'all' || (tab === 'active' ? item.status === 'published' : item.status === tab); const inStatus = status === 'all' || item.status === status; const inLevel = levelFilter === 'all' || (levelFilter === 'none' ? !item.target_level_code_snapshot && !item.promotion_target_level_code_snapshot : item.target_level_code_snapshot === levelFilter || item.promotion_target_level_code_snapshot === levelFilter); const inPurpose = purpose === 'all' || (purpose === 'none' ? item.assessment_purpose === null : item.assessment_purpose === purpose); const search = !needle || [item.title, item.quiz_title ?? '', item.access_code ?? ''].some((value) => normalized(value).includes(needle)); const quick = summaryFilter === 'none' || (summaryFilter === 'open' && openNow(item, nowMs)) || (summaryFilter === 'due' && item.status === 'published' && item.deadline_at_ms !== null && item.deadline_at_ms >= nowMs && item.deadline_at_ms <= nowMs + 259200000) || (summaryFilter === 'incomplete' && openNow(item, nowMs) && item.member_count > item.completed_count) || (summaryFilter === 'appeals' && item.open_appeal_count > 0); return inTab && inStatus && inLevel && inPurpose && search && quick && timeMatches(item, time, from, to, now); }).sort((a, b) => { switch (sort) { case 'oldest': return a.opens_at_ms - b.opens_at_ms || a.id - b.id; case 'deadline_soon': return (a.deadline_at_ms ?? Number.MAX_SAFE_INTEGER) - (b.deadline_at_ms ?? Number.MAX_SAFE_INTEGER); case 'deadline_late': return (b.deadline_at_ms ?? -1) - (a.deadline_at_ms ?? -1); case 'completion_high': return completion(b) - completion(a) || b.id - a.id; case 'completion_low': return completion(a) - completion(b) || b.id - a.id; case 'title_asc': return a.title.localeCompare(b.title, 'vi'); case 'title_desc': return b.title.localeCompare(a.title, 'vi'); case 'appeals_high': return b.open_appeal_count - a.open_appeal_count || b.id - a.id; default: return b.opens_at_ms - a.opens_at_ms || b.id - a.id; } }); }, [from, items, levelFilter, purpose, query, sort, status, summaryFilter, tab, time, to]);
+  const filtering = tab !== 'active' || query || status !== 'all' || levelFilter !== 'all' || purpose !== 'all' || time !== 'all' || from || to || sort !== 'newest' || summaryFilter !== 'none';
+  const cards: Array<{ label: string; value: number; icon: typeof ClipboardList; action: () => void }> = [{ label: 'Đang mở', value: summary.open, icon: ClipboardList, action: () => { clear(); setSummaryFilter('open'); } }, { label: 'Sắp hết hạn', value: summary.dueSoon, icon: CalendarClock, action: () => { clear(); setSummaryFilter('due'); setSort('deadline_soon'); } }, { label: 'Chưa hoàn thành', value: summary.incomplete, icon: Flag, action: () => { clear(); setSummaryFilter('incomplete'); setSort('completion_low'); } }, { label: 'Khiếu nại', value: summary.appeals, icon: Archive, action: () => { clear(); setSummaryFilter('appeals'); setTab('all'); setSort('appeals_high'); } }];
+  return <Page><AdminNav /><MainContent><PageHeader title="Đợt kiểm tra" description="Tạo, theo dõi và quản lý các đợt kiểm tra dành cho nhân viên." actions={<Button asChild><Link to="/admin/assignments/new"><Plus className="size-4" /> Tạo đợt kiểm tra</Link></Button>} />
+    {error && <AppAlert variant="error">{error}</AppAlert>}{loading ? <p className="text-muted-foreground">Đang tải…</p> : <>
+      <div className="mb-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{cards.map(({ label, value, icon: Icon, action }) => <button key={label} type="button" onClick={action} className="rounded-xl border bg-card p-4 text-left transition-colors hover:border-primary hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"><div className="flex items-center justify-between text-sm text-muted-foreground"><span>{label}</span><Icon className="size-4" /></div><strong className="mt-2 block text-2xl">{value}</strong></button>)}</div>
+      <div className="mb-4 flex gap-1 overflow-x-auto border-b" role="tablist" aria-label="Trạng thái đợt kiểm tra">{tabs.map(([value, label]) => <button key={value} type="button" role="tab" aria-selected={tab === value} onClick={() => setTab(value)} className={`shrink-0 border-b-2 px-3 py-2 text-sm font-medium ${tab === value ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>{label}</button>)}</div>
+      <Card className="mb-4"><CardContent className="space-y-3 p-3 sm:p-4"><div className="flex flex-col gap-3 lg:flex-row"><div className="relative flex-1"><Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" /><Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Tìm đợt kiểm tra..." className="pl-9" /></div><select className="h-[var(--control-height-lg)] rounded-lg border bg-background px-3 text-sm lg:w-56" value={sort} onChange={(event) => setSort(event.target.value as SortOption)} aria-label="Sắp xếp"><option value="newest">Mới nhất</option><option value="oldest">Cũ nhất</option><option value="deadline_soon">Hạn gần nhất</option><option value="deadline_late">Hạn xa nhất</option><option value="completion_high">Hoàn thành cao → thấp</option><option value="completion_low">Hoàn thành thấp → cao</option><option value="title_asc">Tên A → Z</option><option value="title_desc">Tên Z → A</option><option value="appeals_high">Khiếu nại nhiều → ít</option></select></div>
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4"><select className="h-[var(--control-height-lg)] rounded-lg border bg-background px-3 text-sm" value={status} onChange={(event) => setStatus(event.target.value as typeof status)} aria-label="Trạng thái"><option value="all">Tất cả trạng thái</option><option value="draft">Nháp</option><option value="published">Đang mở</option><option value="closed">Đã đóng</option><option value="archived">Lưu trữ</option></select><select className="h-[var(--control-height-lg)] rounded-lg border bg-background px-3 text-sm" value={levelFilter} onChange={(event) => setLevelFilter(event.target.value)} aria-label="Level"><option value="all">Tất cả level</option><option value="none">Chưa gắn level</option>{levels.map((value) => <option key={value} value={value}>{value}</option>)}</select><select className="h-[var(--control-height-lg)] rounded-lg border bg-background px-3 text-sm" value={purpose} onChange={(event) => setPurpose(event.target.value as typeof purpose)} aria-label="Mục đích"><option value="all">Tất cả mục đích</option><option value="none">Chưa gắn nhãn</option>{Object.entries(purposes).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select><select className="h-[var(--control-height-lg)] rounded-lg border bg-background px-3 text-sm" value={time} onChange={(event) => setTime(event.target.value as TimeFilter)} aria-label="Thời gian"><option value="all">Tất cả thời gian</option><option value="this_month">Tháng này</option><option value="last_month">Tháng trước</option><option value="last_3_months">3 tháng gần nhất</option><option value="range">Chọn khoảng ngày</option></select></div>{time === 'range' && <div className="grid gap-2 sm:grid-cols-2"><Input type="date" aria-label="Từ ngày mở" value={from} onChange={(event) => setFrom(event.target.value)} /><Input type="date" aria-label="Đến ngày mở" value={to} onChange={(event) => setTo(event.target.value)} /></div>}</CardContent></Card>
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2 text-sm text-muted-foreground"><span>Hiển thị {visible.length} / {items.length} đợt kiểm tra</span>{filtering && <Button size="sm" variant="ghost" onClick={clear}><X className="size-3.5" /> Xóa bộ lọc</Button>}</div>
+      {visible.length === 0 ? <EmptyState icon={<ClipboardList className="size-10" />} title={query ? 'Không tìm thấy đợt kiểm tra phù hợp.' : tab === 'active' ? 'Không có đợt kiểm tra đang hoạt động.' : 'Không có đợt kiểm tra phù hợp.'} description={query ? 'Thử thay đổi từ khóa tìm kiếm hoặc bộ lọc.' : 'Bạn có thể thay đổi bộ lọc hoặc tạo một đợt kiểm tra mới.'} action={filtering ? <Button variant="outline" onClick={clear}>Xóa bộ lọc</Button> : <Button asChild><Link to="/admin/assignments/new">Tạo đợt kiểm tra</Link></Button>} /> : <div className="space-y-3">{visible.map((item) => <Card key={item.id} className="group cursor-pointer transition-colors hover:border-primary/60" role="link" tabIndex={0} onClick={(event) => { if (!(event.target as HTMLElement).closest('a,button,summary')) navigate(`/admin/assignments/${item.id}`); }} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); navigate(`/admin/assignments/${item.id}`); } }}><CardContent className="p-4 sm:p-5"><div className="flex flex-col gap-4 lg:flex-row lg:items-center"><div className="min-w-0 flex-1"><div className="flex items-start gap-2"><div className="min-w-0"><h2 className="truncate text-base font-semibold sm:text-lg">{item.title}</h2><p className="mt-0.5 truncate text-sm text-muted-foreground">Bộ đề: {item.quiz_title ?? 'Bộ đề đã xóa'}</p></div><ChevronRight className="mt-1 hidden size-5 shrink-0 text-muted-foreground group-hover:text-primary sm:block" /></div><AssignmentMeta item={item} /></div><div className="grid gap-3 text-sm sm:grid-cols-2 lg:w-[27rem] lg:grid-cols-[1fr_1.25fr]"><div className="text-muted-foreground"><span className="block">Mở: {dateTime(item.opens_at_ms)}</span><span className="block">Hạn: {dateTime(item.deadline_at_ms)}</span></div><Progress item={item} /></div><div className="flex shrink-0 justify-end"><details className="relative"><summary className="flex size-9 cursor-pointer list-none items-center justify-center rounded-lg border hover:bg-muted" aria-label={`Thao tác với ${item.title}`}><Ellipsis className="size-4" /></summary><div className="absolute right-0 z-10 mt-1 flex min-w-40 flex-col rounded-lg border bg-popover p-1 shadow-md"><Link className="rounded-md px-3 py-2 text-sm hover:bg-muted" to={`/admin/assignments/${item.id}`}>Chi tiết</Link>{item.status === 'draft' && <Link className="rounded-md px-3 py-2 text-sm hover:bg-muted" to={`/admin/assignments/${item.id}/edit`}>Chỉnh sửa</Link>}{item.status === 'published' && <button type="button" disabled={busyId === item.id} onClick={() => close(item)} className="rounded-md px-3 py-2 text-left text-sm text-destructive hover:bg-destructive/10 disabled:opacity-50">Đóng đợt kiểm tra</button>}</div></details></div></div></CardContent></Card>)}</div>}
+    </>}</MainContent></Page>;
 }

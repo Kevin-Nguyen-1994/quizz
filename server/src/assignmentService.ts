@@ -931,7 +931,9 @@ export async function listAssignmentsForAdmin(actor: AssignmentActor): Promise<u
        (SELECT COUNT(DISTINCT t.user_id) FROM assignment_attempts t
           WHERE t.assignment_id = a.id) as started_count,
        (SELECT COUNT(DISTINCT t.user_id) FROM assignment_attempts t
-          WHERE t.assignment_id = a.id AND t.status = 'completed') as completed_count
+          WHERE t.assignment_id = a.id AND t.status = 'completed') as completed_count,
+       (SELECT COUNT(*) FROM assignment_answer_appeals ap
+          WHERE ap.assignment_id = a.id AND ap.status IN ('pending', 'in_review')) as open_appeal_count
      FROM assignments a LEFT JOIN quizzes q ON q.id = a.quiz_id ${ownerFilter}
      ORDER BY a.created_at_ms DESC`,
     ...(actor.role === 'super_admin' ? [] : [actor.id]),

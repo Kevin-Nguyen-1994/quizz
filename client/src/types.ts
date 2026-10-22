@@ -55,6 +55,16 @@ export interface AdminAssignmentListItem {
   attempt_count: number;
   started_count: number;
   completed_count: number;
+  assignment_kind: AssignmentKind;
+  target_mode: AssignmentTargetMode;
+  target_level_id: number | null;
+  promotion_target_level_id: number | null;
+  target_level_code_snapshot: string | null;
+  target_level_name_snapshot: string | null;
+  promotion_target_level_code_snapshot: string | null;
+  promotion_target_level_name_snapshot: string | null;
+  assessment_purpose: AssessmentPurpose | null;
+  open_appeal_count: number;
 }
 
 export interface AdminAssignmentMember {
