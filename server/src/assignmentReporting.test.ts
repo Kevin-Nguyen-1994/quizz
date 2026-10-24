@@ -387,6 +387,19 @@ describe('assignment reporting', () => {
     const review = await reporting.getParticipantAttemptReview(attemptA1, userA, baseTime + 61_000);
     assert.equal(review.questions[0].correctAnswer, 'Đúng');
     assert.equal(review.questions[0].explanation, 'Giải thích câu 1');
+    assert.deepEqual(review.questions[0].replay, {
+      options: ['Đúng', 'Sai'],
+      rightOptions: [],
+      chosenIndex: 0,
+      chosenIndices: null,
+      chosenText: null,
+      imageUrl: null,
+      mediaUrl: null,
+      mediaType: null,
+      rangeMin: null,
+      rangeMax: null,
+    });
+    assert.deepEqual(review.questions[1].replay.chosenText, '["Hà Nội","Lào"]');
     assert.equal(review.questions[1].result, 'incorrect');
     assert.equal(review.questions[1].score, 50);
 

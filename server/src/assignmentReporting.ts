@@ -131,6 +131,18 @@ export interface AttemptQuestionDetail {
   originalScore: number;
   originalIsCorrect: boolean | null;
   isAdjusted: boolean;
+  replay: {
+    options: string[];
+    rightOptions: string[];
+    chosenIndex: number | null;
+    chosenIndices: Array<number | null> | null;
+    chosenText: string | null;
+    imageUrl: string | null;
+    mediaUrl: string | null;
+    mediaType: 'audio' | 'video' | null;
+    rangeMin: number | null;
+    rangeMax: number | null;
+  };
 }
 
 export interface AttemptDetailDto {
@@ -267,14 +279,21 @@ function calculateAttemptMetrics(
 ): AttemptReportRow {
   const questionById = new Map(questions.map((question) => [question.id, question]));
   const answered = answers.filter((answer) => answer.status === 'answered');
-  const answerByQuestion = new Map(answers.map((answer) => [answer.assignment_question_id, answer]));
+  const answerByQuestion = new Map(
+    answers.map((answer) => [answer.assignment_question_id, answer]),
+  );
   let correct = 0;
   let incorrect = 0;
   let noAnswer = 0;
   for (const question of questions) {
     const answer = answerByQuestion.get(question.id);
     if (!answer || answer.status === 'timed_out') {
-      if (attempt.status === 'completed' || attempt.status === 'expired' || answer?.status === 'timed_out') noAnswer++;
+      if (
+        attempt.status === 'completed' ||
+        attempt.status === 'expired' ||
+        answer?.status === 'timed_out'
+      )
+        noAnswer++;
       continue;
     }
     const effective = effectiveResults?.get(effectiveResultKey(attempt.id, question.id));
@@ -385,7 +404,9 @@ export function buildAssignmentReport(data: LoadedReportData): AssignmentReportD
     for (const member of members) {
       const selected = selectedByMember.get(member.id);
       const answer = selected ? answerMaps.get(selected.id)?.get(question.id) : undefined;
-      const effective = selected ? effectiveResults.get(effectiveResultKey(selected.id, question.id)) : undefined;
+      const effective = selected
+        ? effectiveResults.get(effectiveResultKey(selected.id, question.id))
+        : undefined;
       if (answer?.status === 'answered') {
         sampleSize++;
         answeredCount++;
@@ -480,7 +501,8 @@ function questionFlags(question: {
   if (question.wrongRate >= 50 && question.timeoutRate >= 30) flags.push('QUESTION_REVIEW');
   if (question.critical && question.wrongRate >= 20) flags.push('CRITICAL_REVIEW');
   if (question.timeoutRate >= 30) flags.push('TIMER_REVIEW');
-  if (question.wrongRate >= 50 && question.timeoutRate < 30) flags.push('HIGH_PRIORITY_GROUP_REVIEW');
+  if (question.wrongRate >= 50 && question.timeoutRate < 30)
+    flags.push('HIGH_PRIORITY_GROUP_REVIEW');
   else if (question.wrongRate >= 30 && question.timeoutRate < 30) flags.push('NEEDS_GROUP_REVIEW');
   return flags;
 }
@@ -506,11 +528,17 @@ export async function getAssignmentAnalytics(
       member.id,
       member.user_id === null
         ? null
-        : selectPrimaryAttempt(attemptsByUser.get(member.user_id) ?? [], data.assignment.result_policy),
+        : selectPrimaryAttempt(
+            attemptsByUser.get(member.user_id) ?? [],
+            data.assignment.result_policy,
+          ),
     );
   }
   const answerByAttemptQuestion = new Map(
-    data.answers.map((answer) => [effectiveResultKey(answer.attempt_id, answer.assignment_question_id), answer]),
+    data.answers.map((answer) => [
+      effectiveResultKey(answer.attempt_id, answer.assignment_question_id),
+      answer,
+    ]),
   );
   const questionRows = data.questions.map((question, index) => {
     let encountered = 0;
@@ -563,7 +591,10 @@ export async function getAssignmentAnalytics(
       wrongRate,
       timeoutRate,
       averageAwardedScore: encountered ? round(scoreTotal / encountered) : 0,
-      averageScoreRatio: question.base_score > 0 && encountered ? round((scoreTotal / encountered / question.base_score) * 100) : 0,
+      averageScoreRatio:
+        question.base_score > 0 && encountered
+          ? round((scoreTotal / encountered / question.base_score) * 100)
+          : 0,
       flags: questionFlags({ wrongRate, timeoutRate, critical }),
       commonWrongAnswers: [...wrongText.entries()]
         .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0], 'vi'))
@@ -572,63 +603,159 @@ export async function getAssignmentAnalytics(
     };
   });
   const completedRows = report.participants.flatMap((participant) =>
-    participant.attempts.filter((attempt) => attempt.isSelected && (attempt.status === 'completed' || attempt.status === 'expired')),
+    participant.attempts.filter(
+      (attempt) =>
+        attempt.isSelected && (attempt.status === 'completed' || attempt.status === 'expired'),
+    ),
   );
   const criticalQuestions = questionRows.filter((question) => question.critical);
-  const categoryMap = new Map<string, { name: string; responses: number; correct: number; wrong: number; timeout: number; criticalResponses: number; criticalCorrect: number }>();
-  const matrix = new Map<string, { level: string; difficulty: string; responses: number; correct: number }>();
+  const categoryMap = new Map<
+    string,
+    {
+      name: string;
+      responses: number;
+      correct: number;
+      wrong: number;
+      timeout: number;
+      criticalResponses: number;
+      criticalCorrect: number;
+    }
+  >();
+  const matrix = new Map<
+    string,
+    { level: string; difficulty: string; responses: number; correct: number }
+  >();
   for (const row of questionRows) {
     if (row.categoryCode) {
-      const bucket = categoryMap.get(row.categoryCode) ?? { name: row.categoryName ?? row.categoryCode, responses: 0, correct: 0, wrong: 0, timeout: 0, criticalResponses: 0, criticalCorrect: 0 };
-      bucket.responses += row.encountered; bucket.correct += row.correct; bucket.wrong += row.wrong; bucket.timeout += row.timeout;
-      if (row.critical) { bucket.criticalResponses += row.encountered; bucket.criticalCorrect += row.correct; }
+      const bucket = categoryMap.get(row.categoryCode) ?? {
+        name: row.categoryName ?? row.categoryCode,
+        responses: 0,
+        correct: 0,
+        wrong: 0,
+        timeout: 0,
+        criticalResponses: 0,
+        criticalCorrect: 0,
+      };
+      bucket.responses += row.encountered;
+      bucket.correct += row.correct;
+      bucket.wrong += row.wrong;
+      bucket.timeout += row.timeout;
+      if (row.critical) {
+        bucket.criticalResponses += row.encountered;
+        bucket.criticalCorrect += row.correct;
+      }
       categoryMap.set(row.categoryCode, bucket);
     }
     if (row.levelCode && row.difficulty) {
       const matrixKey = `${row.levelCode}:${row.difficulty}`;
-      const bucket = matrix.get(matrixKey) ?? { level: row.levelCode, difficulty: row.difficulty, responses: 0, correct: 0 };
-      bucket.responses += row.encountered; bucket.correct += row.correct; matrix.set(matrixKey, bucket);
+      const bucket = matrix.get(matrixKey) ?? {
+        level: row.levelCode,
+        difficulty: row.difficulty,
+        responses: 0,
+        correct: 0,
+      };
+      bucket.responses += row.encountered;
+      bucket.correct += row.correct;
+      matrix.set(matrixKey, bucket);
     }
   }
   const employees = data.members.map((member) => {
     const attempt = selectedByMember.get(member.id);
-    const metric = report.participants.find((participant) => participant.memberId === member.id)?.attempts.find((item) => item.isSelected);
-    let criticalCorrect = 0; let criticalTotal = 0;
-    if (attempt) for (const question of data.questions.filter((item) => item.critical_snapshot === 1)) {
-      const effective = data.effectiveResults.get(effectiveResultKey(attempt.id, question.id));
-      const answer = answerByAttemptQuestion.get(effectiveResultKey(attempt.id, question.id));
-      if (attempt.status === 'completed' || attempt.status === 'expired') {
-        criticalTotal++;
-        if ((effective?.effectiveIsCorrect ?? answer?.is_correct) === 1 && answer?.status === 'answered') criticalCorrect++;
+    const metric = report.participants
+      .find((participant) => participant.memberId === member.id)
+      ?.attempts.find((item) => item.isSelected);
+    let criticalCorrect = 0;
+    let criticalTotal = 0;
+    if (attempt)
+      for (const question of data.questions.filter((item) => item.critical_snapshot === 1)) {
+        const effective = data.effectiveResults.get(effectiveResultKey(attempt.id, question.id));
+        const answer = answerByAttemptQuestion.get(effectiveResultKey(attempt.id, question.id));
+        if (attempt.status === 'completed' || attempt.status === 'expired') {
+          criticalTotal++;
+          if (
+            (effective?.effectiveIsCorrect ?? answer?.is_correct) === 1 &&
+            answer?.status === 'answered'
+          )
+            criticalCorrect++;
+        }
       }
-    }
     return {
-      memberId: member.id, userId: member.user_id, name: member.display_name_snapshot,
-      loginName: member.login_name_snapshot, levelCode: member.level_code_snapshot,
-      status: metric?.status ?? 'not_started', score: metric?.score ?? null, scorePercent: metric?.scorePercent ?? null,
-      correct: metric?.correct ?? 0, total: data.questions.length, wrong: metric?.incorrect ?? 0,
-      timeout: metric?.noAnswer ?? 0, criticalCorrect, criticalTotal,
+      memberId: member.id,
+      userId: member.user_id,
+      name: member.display_name_snapshot,
+      loginName: member.login_name_snapshot,
+      levelCode: member.level_code_snapshot,
+      status: metric?.status ?? 'not_started',
+      score: metric?.score ?? null,
+      scorePercent: metric?.scorePercent ?? null,
+      correct: metric?.correct ?? 0,
+      total: data.questions.length,
+      wrong: metric?.incorrect ?? 0,
+      timeout: metric?.noAnswer ?? 0,
+      criticalCorrect,
+      criticalTotal,
       criticalAccuracy: criticalTotal ? round((criticalCorrect / criticalTotal) * 100) : null,
     };
   });
   return {
-    assignment: { id: data.assignment.id, title: data.assignment.title, assessmentPurpose: data.assignment.assessment_purpose ?? null, resultPolicy: data.assignment.result_policy },
+    assignment: {
+      id: data.assignment.id,
+      title: data.assignment.title,
+      assessmentPurpose: data.assignment.assessment_purpose ?? null,
+      resultPolicy: data.assignment.result_policy,
+    },
     overview: {
       ...report.overview,
       medianScore: median(completedRows.map((row) => row.score)),
       highestScore: completedRows.length ? Math.max(...completedRows.map((row) => row.score)) : 0,
       lowestScore: completedRows.length ? Math.min(...completedRows.map((row) => row.score)) : 0,
-      averageCorrectRate: completedRows.length ? round(average(completedRows.map((row) => (data.questions.length > 0 ? row.correct / data.questions.length * 100 : 0))) ?? 0) : 0,
+      averageCorrectRate: completedRows.length
+        ? round(
+            average(
+              completedRows.map((row) =>
+                data.questions.length > 0 ? (row.correct / data.questions.length) * 100 : 0,
+              ),
+            ) ?? 0,
+          )
+        : 0,
       totalNoAnswer: questionRows.reduce((sum, row) => sum + row.timeout, 0),
       criticalQuestionCount: criticalQuestions.length,
-      criticalAccuracy: criticalQuestions.reduce((sum, row) => sum + row.encountered, 0) ? round((criticalQuestions.reduce((sum, row) => sum + row.correct, 0) / criticalQuestions.reduce((sum, row) => sum + row.encountered, 0)) * 100) : null,
+      criticalAccuracy: criticalQuestions.reduce((sum, row) => sum + row.encountered, 0)
+        ? round(
+            (criticalQuestions.reduce((sum, row) => sum + row.correct, 0) /
+              criticalQuestions.reduce((sum, row) => sum + row.encountered, 0)) *
+              100,
+          )
+        : null,
     },
-    priorityQuestions: [...questionRows].filter((row) => row.encountered > 0).sort((left, right) => Number(right.critical && right.wrong > 0) - Number(left.critical && left.wrong > 0) || left.correctRate - right.correctRate || right.wrongRate - left.wrongRate || right.timeoutRate - left.timeoutRate),
+    priorityQuestions: [...questionRows]
+      .filter((row) => row.encountered > 0)
+      .sort(
+        (left, right) =>
+          Number(right.critical && right.wrong > 0) - Number(left.critical && left.wrong > 0) ||
+          left.correctRate - right.correctRate ||
+          right.wrongRate - left.wrongRate ||
+          right.timeoutRate - left.timeoutRate,
+      ),
     questions: questionRows,
-    categories: [...categoryMap.entries()].map(([code, value]) => ({ code, ...value, accuracy: value.responses ? round(value.correct / value.responses * 100) : 0, criticalAccuracy: value.criticalResponses ? round(value.criticalCorrect / value.criticalResponses * 100) : null, sufficientData: value.responses >= ANALYTICS_MINIMUM_RESPONSES })),
-    levelDifficulty: [...matrix.values()].map((value) => ({ ...value, accuracy: value.responses ? round(value.correct / value.responses * 100) : 0 })),
+    categories: [...categoryMap.entries()].map(([code, value]) => ({
+      code,
+      ...value,
+      accuracy: value.responses ? round((value.correct / value.responses) * 100) : 0,
+      criticalAccuracy: value.criticalResponses
+        ? round((value.criticalCorrect / value.criticalResponses) * 100)
+        : null,
+      sufficientData: value.responses >= ANALYTICS_MINIMUM_RESPONSES,
+    })),
+    levelDifficulty: [...matrix.values()].map((value) => ({
+      ...value,
+      accuracy: value.responses ? round((value.correct / value.responses) * 100) : 0,
+    })),
     employees,
-    historicalMetadata: { complete: questionRows.every((row) => row.historicalMetadataAvailable), missingQuestionCount: questionRows.filter((row) => !row.historicalMetadataAvailable).length },
+    historicalMetadata: {
+      complete: questionRows.every((row) => row.historicalMetadataAvailable),
+      missingQuestionCount: questionRows.filter((row) => !row.historicalMetadataAvailable).length,
+    },
   };
 }
 
@@ -754,6 +881,26 @@ function buildAttemptDetail(
         originalScore: answer?.score ?? 0,
         originalIsCorrect: answer ? answer.is_correct === 1 : null,
         isAdjusted: effective?.isAdjusted ?? false,
+        // The attempt table deliberately keeps the final submitted value, not
+        // every intermediate click. Expose that immutable value and the
+        // question snapshot so the UI can replay the submitted state safely.
+        replay: {
+          options: parseArray<string>(question.options),
+          rightOptions: parseArray<string>(question.matches),
+          chosenIndex: answer?.chosen_index ?? null,
+          chosenIndices: answer?.chosen_indices
+            ? parseArray<number | null>(answer.chosen_indices)
+            : null,
+          chosenText: answer?.chosen_text ?? null,
+          imageUrl: question.image_url ?? null,
+          mediaUrl: question.media_url ?? null,
+          mediaType:
+            question.media_type === 'audio' || question.media_type === 'video'
+              ? question.media_type
+              : null,
+          rangeMin: question.range_min ?? null,
+          rangeMax: question.range_max ?? null,
+        },
       };
     }),
   };
@@ -842,17 +989,36 @@ export async function getAdminQuestionDetail(
         submittedAnswer: formatSubmittedAnswer(question, answer),
         result: effectiveResultFor(selected?.id ?? 0, question.id, answer, data.effectiveResults),
         responseTimeMs: answer?.status === 'answered' ? answer.response_time_ms : null,
-        score: selected ? (data.effectiveResults.get(effectiveResultKey(selected.id, question.id))?.effectiveScore ?? answer?.score ?? 0) : 0,
+        score: selected
+          ? (data.effectiveResults.get(effectiveResultKey(selected.id, question.id))
+              ?.effectiveScore ??
+            answer?.score ??
+            0)
+          : 0,
         originalScore: answer?.score ?? 0,
         originalIsCorrect: answer ? answer.is_correct === 1 : null,
-        isAdjusted: selected ? (data.effectiveResults.get(effectiveResultKey(selected.id, question.id))?.isAdjusted ?? false) : false,
-        expectedCurrentAdjustmentId: selected ? (data.effectiveResults.get(effectiveResultKey(selected.id, question.id))?.adjustmentId ?? null) : null,
+        isAdjusted: selected
+          ? (data.effectiveResults.get(effectiveResultKey(selected.id, question.id))?.isAdjusted ??
+            false)
+          : false,
+        expectedCurrentAdjustmentId: selected
+          ? (data.effectiveResults.get(effectiveResultKey(selected.id, question.id))
+              ?.adjustmentId ?? null)
+          : null,
       };
     }),
-    adjustments: await db.all<{
-      id: number; scope: string; reason_code: string; reason_text: string; source: string;
-      actor_name_snapshot: string; created_at_ms: number; affected_count: number;
-    }[]>(
+    adjustments: await db.all<
+      {
+        id: number;
+        scope: string;
+        reason_code: string;
+        reason_text: string;
+        source: string;
+        actor_name_snapshot: string;
+        created_at_ms: number;
+        affected_count: number;
+      }[]
+    >(
       `SELECT b.id,b.scope,b.reason_code,b.reason_text,b.source,b.actor_name_snapshot,b.created_at_ms,COUNT(a.id) AS affected_count
        FROM assignment_answer_adjustment_batches b
        LEFT JOIN assignment_answer_adjustments a ON a.batch_id=b.id
@@ -892,7 +1058,12 @@ export async function getParticipantAttemptReview(
     'SELECT recipient_status, entitlement_version FROM assignment_members WHERE assignment_id = ? AND user_id = ?',
     [assignment.id, userId],
   );
-  if (!member || member.recipient_status !== 'assigned' || attempt.recipient_entitlement_version !== member.entitlement_version || attempt.termination_reason === 'revoked_by_admin') {
+  if (
+    !member ||
+    member.recipient_status !== 'assigned' ||
+    attempt.recipient_entitlement_version !== member.entitlement_version ||
+    attempt.termination_reason === 'revoked_by_admin'
+  ) {
     throw new AssignmentServiceError('Bài kiểm tra đã được thu hồi.', 403, 'ASSIGNMENT_REVOKED');
   }
   if (!reviewIsAvailable(assignment, nowMs)) {
@@ -943,13 +1114,15 @@ export async function buildAssignmentCsv(
     list.push(attempt);
     attemptsByUser.set(attempt.user_id, list);
   }
-  const adjustmentRows = await db.all<{
-    attempt_id: number;
-    assignment_question_id: number;
-    reason_code: string;
-    reason_text: string;
-    created_at_ms: number;
-  }[]>(
+  const adjustmentRows = await db.all<
+    {
+      attempt_id: number;
+      assignment_question_id: number;
+      reason_code: string;
+      reason_text: string;
+      created_at_ms: number;
+    }[]
+  >(
     `SELECT a.attempt_id,a.assignment_question_id,b.reason_code,b.reason_text,a.created_at_ms
      FROM assignment_answer_adjustments a
      JOIN assignment_answer_adjustment_batches b ON b.id=a.batch_id
@@ -958,7 +1131,10 @@ export async function buildAssignmentCsv(
     [assignmentId],
   );
   const adjustmentByAttemptQuestion = new Map(
-    adjustmentRows.map((row) => [effectiveResultKey(row.attempt_id, row.assignment_question_id), row]),
+    adjustmentRows.map((row) => [
+      effectiveResultKey(row.attempt_id, row.assignment_question_id),
+      row,
+    ]),
   );
   const headers = [
     'Assignment',
@@ -1008,7 +1184,13 @@ export async function buildAssignmentCsv(
         attemptAnswers.map((answer) => [answer.assignment_question_id, answer]),
       );
       const metrics = attempt
-        ? calculateAttemptMetrics(attempt, data.questions, attemptAnswers, false, data.effectiveResults)
+        ? calculateAttemptMetrics(
+            attempt,
+            data.questions,
+            attemptAnswers,
+            false,
+            data.effectiveResults,
+          )
         : null;
       const questionOrder = attempt
         ? getAssignmentQuestionOrder(
@@ -1045,7 +1227,9 @@ export async function buildAssignmentCsv(
           question.question_type,
           formatSubmittedAnswer(question, answer),
           formatCorrectAnswer(question),
-          resultLabel(effectiveResultFor(attempt?.id ?? 0, question.id, answer, data.effectiveResults)),
+          resultLabel(
+            effectiveResultFor(attempt?.id ?? 0, question.id, answer, data.effectiveResults),
+          ),
           answer?.status === 'answered' ? (answer.response_time_ms ?? '') : '',
           answer?.status === 'answered' && answer.response_time_ms !== null
             ? round(answer.response_time_ms / 1000)

@@ -113,7 +113,15 @@ export interface AdminAssignmentDetail {
   questions: Array<{ id: number; text: string; order_index: number; time_sec: number }>;
   members: AdminAssignmentMember[];
   targetOverrides: AssignmentTargetOverride[];
-  recipientEvents: Array<{id:number;user_id:number|null;action:'added_after_publish'|'revoked'|'reassigned';entitlement_version:number;actor_name_snapshot:string;reason:string|null;created_at_ms:number}>;
+  recipientEvents: Array<{
+    id: number;
+    user_id: number | null;
+    action: 'added_after_publish' | 'revoked' | 'reassigned';
+    entitlement_version: number;
+    actor_name_snapshot: string;
+    reason: string | null;
+    created_at_ms: number;
+  }>;
 }
 
 export interface AssignmentTargetOverride {
@@ -343,6 +351,18 @@ export interface AssignmentAttemptQuestionDetail {
   originalScore: number;
   originalIsCorrect: boolean | null;
   isAdjusted: boolean;
+  replay: {
+    options: string[];
+    rightOptions: string[];
+    chosenIndex: number | null;
+    chosenIndices: Array<number | null> | null;
+    chosenText: string | null;
+    imageUrl: string | null;
+    mediaUrl: string | null;
+    mediaType: 'audio' | 'video' | null;
+    rangeMin: number | null;
+    rangeMax: number | null;
+  };
 }
 
 export interface AssignmentAttemptDetail {
@@ -356,7 +376,12 @@ export type AssignmentAppealStatus = 'pending' | 'in_review' | 'resolved';
 export interface AssignmentAnswerAppeal {
   id: number;
   assignment_question_id: number;
-  reason_code: 'ANSWER_MARKED_WRONG' | 'ANSWER_KEY_DISPUTE' | 'QUESTION_AMBIGUOUS' | 'TIMER_OR_SYSTEM_ISSUE' | 'OTHER';
+  reason_code:
+    | 'ANSWER_MARKED_WRONG'
+    | 'ANSWER_KEY_DISPUTE'
+    | 'QUESTION_AMBIGUOUS'
+    | 'TIMER_OR_SYSTEM_ISSUE'
+    | 'OTHER';
   message: string;
   status: AssignmentAppealStatus;
   resolution_outcome: 'adjusted' | 'accepted_no_score_change' | 'rejected' | null;
@@ -400,7 +425,16 @@ export interface AssignmentQuestionDetail {
     isAdjusted?: boolean;
     expectedCurrentAdjustmentId?: number | null;
   }>;
-  adjustments?: Array<{ id: number; scope: string; reason_code: string; reason_text: string; source: string; actor_name_snapshot: string; created_at_ms: number; affected_count: number }>;
+  adjustments?: Array<{
+    id: number;
+    scope: string;
+    reason_code: string;
+    reason_text: string;
+    source: string;
+    actor_name_snapshot: string;
+    created_at_ms: number;
+    affected_count: number;
+  }>;
 }
 
 export interface AuthUser {
