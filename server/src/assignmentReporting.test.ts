@@ -360,6 +360,161 @@ describe('assignment reporting', () => {
     assert.equal(reporting.selectPrimaryAttempt(attempts, 'latest_completed')?.id, 2);
   });
 
+  it('exposes question replay snapshot and original raw answer states', async () => {
+    const questions = await databaseModule.db.all<{ id: number }[]>(
+      'SELECT id FROM assignment_questions WHERE assignment_id = ? ORDER BY order_index',
+      [assignmentId],
+    );
+    const first = (await reporting.getAdminQuestionDetail(
+      { id: 0, role: 'super_admin' },
+      assignmentId,
+      questions[0].id,
+    )) as {
+      question: { replay: unknown };
+      participants: Array<{
+        name: string;
+        answerStatus: string;
+        chosenIndex: number | null;
+        chosenIndices: Array<number | null> | null;
+        chosenText: string | null;
+      }>;
+    };
+    assert.deepEqual(first.question.replay, {
+      options: ['Đúng', 'Sai'],
+      rightOptions: [],
+      imageUrl: null,
+      mediaUrl: null,
+      mediaType: null,
+      rangeMin: null,
+      rangeMax: null,
+    });
+    const answered = first.participants.find((participant) => participant.name === 'An');
+    assert.equal(answered?.answerStatus, 'answered');
+    assert.equal(answered?.chosenIndex, 0);
+    assert.equal(answered?.chosenIndices, null);
+    assert.equal(answered?.chosenText, null);
+    const notStarted = first.participants.find((participant) => participant.name === 'Dũng');
+    assert.equal(notStarted?.answerStatus, 'not_answered');
+    assert.equal(notStarted?.chosenIndex, null);
+    assert.equal(notStarted?.chosenIndices, null);
+    assert.equal(notStarted?.chosenText, null);
+
+    const timedOut = (await reporting.getAdminQuestionDetail(
+      { id: 0, role: 'super_admin' },
+      assignmentId,
+      questions[2].id,
+    )) as {
+      participants: Array<{
+        name: string;
+        answerStatus: string;
+        chosenIndex: number | null;
+        chosenText: string | null;
+        responseTimeMs: number | null;
+      }>;
+    };
+    const anTimeout = timedOut.participants.find((participant) => participant.name === 'An');
+    assert.equal(anTimeout?.answerStatus, 'timed_out');
+    assert.equal(anTimeout?.chosenIndex, null);
+    assert.equal(anTimeout?.chosenText, null);
+    assert.equal(anTimeout?.responseTimeMs, null);
+  });
+
+  it('keeps raw replay payloads for every supported question type', async () => {
+    const now = Date.now();
+    const assignment = await databaseModule.db.run(
+      `INSERT INTO assignments (
+        owner_kind,title,opens_at_ms,status,max_attempts,result_policy,review_policy,
+        shuffle_questions,shuffle_options,created_at_ms,updated_at_ms
+      ) VALUES ('admin','Replay types',?,'closed',1,'highest_score','after_close',0,0,?,?)`,
+      [now - 1_000, now, now],
+    );
+    const replayAssignmentId = Number(assignment.lastID);
+    const member = await databaseModule.db.run(
+      `INSERT INTO assignment_members (
+        assignment_id,user_id,display_name_snapshot,email_snapshot,assigned_at_ms
+      ) VALUES (?,?,'An','an@example.com',?)`,
+      [replayAssignmentId, userA, now],
+    );
+    const attempt = await databaseModule.db.run(
+      `INSERT INTO assignment_attempts (
+        assignment_id,assignment_member_id,user_id,participant_name,participant_email,
+        attempt_number,status,started_at_ms,completed_at_ms,last_activity_at_ms,
+        correct_count,total_score
+      ) VALUES (?,?,?,'An','an@example.com',1,'completed',?,?,?,0,0)`,
+      [replayAssignmentId, member.lastID, userA, now, now, now],
+    );
+    const types = [
+      'multiple_choice',
+      'true_false',
+      'multi_select',
+      'fill_blank',
+      'open_text',
+      'closest_to',
+      'ordering',
+      'matching',
+      'geo',
+    ] as const;
+    const questionIds: number[] = [];
+    for (const [index, type] of types.entries()) {
+      const question = await databaseModule.db.run(
+        `INSERT INTO assignment_questions (
+          assignment_id,text,options,matches,correct_index,base_score,time_sec,
+          order_index,question_type,range_min,range_max
+        ) VALUES (?,?,'["A","B"]','["X","Y"]',0,100,30,?,?,1,99)`,
+        [replayAssignmentId, `Replay ${type}`, index, type],
+      );
+      const questionId = Number(question.lastID);
+      questionIds.push(questionId);
+      const chosenIndex = type === 'multiple_choice' || type === 'true_false' ? 1 : null;
+      const chosenIndices =
+        type === 'multi_select' || type === 'ordering' || type === 'matching' ? '[1,0]' : null;
+      const chosenText =
+        type === 'fill_blank'
+          ? '["Nội dung"]'
+          : type === 'open_text' || type === 'closest_to' || type === 'geo'
+            ? 'Giá trị thô'
+            : null;
+      await databaseModule.db.run(
+        `INSERT INTO attempt_answers (
+          attempt_id,assignment_question_id,status,chosen_index,chosen_indices,chosen_text,
+          is_correct,score,question_started_at_ms,response_time_ms,answered_at_ms
+        ) VALUES (?,?,'answered',?,?,?,0,0,?,1000,?)`,
+        [attempt.lastID, questionId, chosenIndex, chosenIndices, chosenText, now, now],
+      );
+    }
+
+    for (const [index, type] of types.entries()) {
+      const detail = (await reporting.getAdminQuestionDetail(
+        { id: 0, role: 'super_admin' },
+        replayAssignmentId,
+        questionIds[index],
+      )) as {
+        question: {
+          questionType: string;
+          replay: { options: string[]; rightOptions: string[]; rangeMin: number | null };
+        };
+        participants: Array<{
+          answerStatus: string;
+          chosenIndex: number | null;
+          chosenIndices: Array<number | null> | null;
+          chosenText: string | null;
+        }>;
+      };
+      assert.equal(detail.question.questionType, type);
+      assert.deepEqual(detail.question.replay.options, ['A', 'B']);
+      assert.deepEqual(detail.question.replay.rightOptions, ['X', 'Y']);
+      assert.equal(detail.question.replay.rangeMin, 1);
+      assert.equal(detail.participants[0].answerStatus, 'answered');
+      if (type === 'multiple_choice' || type === 'true_false') {
+        assert.equal(detail.participants[0].chosenIndex, 1);
+      } else if (type === 'multi_select' || type === 'ordering' || type === 'matching') {
+        assert.deepEqual(detail.participants[0].chosenIndices, [1, 0]);
+      } else {
+        assert.ok(detail.participants[0].chosenText);
+      }
+    }
+  });
+
   it('protects participant review and exposes answer keys only when allowed', async () => {
     await assert.rejects(
       reporting.getParticipantAttemptReview(attemptA1, userA, baseTime),

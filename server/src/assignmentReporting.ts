@@ -967,6 +967,18 @@ export async function getAdminQuestionDetail(
       difficulty: question.difficulty_snapshot ?? null,
       critical: question.critical_snapshot === 1,
       competency: question.competency_snapshot ?? null,
+      replay: {
+        options: parseArray<string>(question.options),
+        rightOptions: parseArray<string>(question.matches),
+        imageUrl: question.image_url ?? null,
+        mediaUrl: question.media_url ?? null,
+        mediaType:
+          question.media_type === 'audio' || question.media_type === 'video'
+            ? question.media_type
+            : null,
+        rangeMin: question.range_min ?? null,
+        rangeMax: question.range_max ?? null,
+      },
     },
     participants: data.members.map((member) => {
       const selected = selectPrimaryAttempt(
@@ -987,6 +999,12 @@ export async function getAdminQuestionDetail(
         attemptNumber: selected?.attempt_number ?? null,
         attemptStatus: selected?.status ?? 'not_started',
         submittedAnswer: formatSubmittedAnswer(question, answer),
+        answerStatus: answer?.status ?? 'not_answered',
+        chosenIndex: answer?.chosen_index ?? null,
+        chosenIndices: answer?.chosen_indices
+          ? parseArray<number | null>(answer.chosen_indices)
+          : null,
+        chosenText: answer?.chosen_text ?? null,
         result: effectiveResultFor(selected?.id ?? 0, question.id, answer, data.effectiveResults),
         responseTimeMs: answer?.status === 'answered' ? answer.response_time_ms : null,
         score: selected

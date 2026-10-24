@@ -57,6 +57,16 @@ describe('assessment adjustments', () => {
     assert.deepEqual(original, { is_correct: 0, score: 0, chosen_text: '["Airway Bill"]' });
     const effective = await database.db.get<{ effective_total_score: number; effective_correct_count: number }>('SELECT effective_total_score,effective_correct_count FROM assignment_attempts WHERE id=?',[attemptA]);
     assert.deepEqual(effective, { effective_total_score: 100, effective_correct_count: 1 });
+    const detail = (await reporting.getAdminQuestionDetail(actor, assignmentId, questionId)) as {
+      participants: Array<{ attemptId: number | null; result: string; score: number; originalScore: number; isAdjusted: boolean; answerStatus: string; chosenText: string | null }>;
+    };
+    const participant = detail.participants.find((item) => item.attemptId === attemptA);
+    assert.equal(participant?.result, 'correct');
+    assert.equal(participant?.score, 100);
+    assert.equal(participant?.originalScore, 0);
+    assert.equal(participant?.isAdjusted, true);
+    assert.equal(participant?.answerStatus, 'answered');
+    assert.equal(participant?.chosenText, '["Airway Bill"]');
   });
 
   it('does not turn timeout into correct for a text-variant adjustment', async () => {

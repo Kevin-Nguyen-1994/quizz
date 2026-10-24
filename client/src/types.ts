@@ -334,6 +334,23 @@ export interface AssignmentReport {
   questions: AssignmentQuestionReportRow[];
 }
 
+export interface AssignmentReplayQuestionSnapshot {
+  options: string[];
+  rightOptions: string[];
+  imageUrl: string | null;
+  mediaUrl: string | null;
+  mediaType: 'audio' | 'video' | null;
+  rangeMin: number | null;
+  rangeMax: number | null;
+}
+
+export interface AssignmentReplaySubmittedState {
+  answerStatus: 'answered' | 'timed_out' | 'not_answered';
+  chosenIndex: number | null;
+  chosenIndices: Array<number | null> | null;
+  chosenText: string | null;
+}
+
 export interface AssignmentAttemptQuestionDetail {
   questionId: number;
   questionNumber: number;
@@ -351,18 +368,7 @@ export interface AssignmentAttemptQuestionDetail {
   originalScore: number;
   originalIsCorrect: boolean | null;
   isAdjusted: boolean;
-  replay: {
-    options: string[];
-    rightOptions: string[];
-    chosenIndex: number | null;
-    chosenIndices: Array<number | null> | null;
-    chosenText: string | null;
-    imageUrl: string | null;
-    mediaUrl: string | null;
-    mediaType: 'audio' | 'video' | null;
-    rangeMin: number | null;
-    rangeMax: number | null;
-  };
+  replay: AssignmentReplayQuestionSnapshot & Omit<AssignmentReplaySubmittedState, 'answerStatus'>;
 }
 
 export interface AssignmentAttemptDetail {
@@ -407,6 +413,7 @@ export interface AssignmentQuestionDetail {
     difficulty?: string | null;
     critical?: boolean;
     competency?: string | null;
+    replay: AssignmentReplayQuestionSnapshot;
   };
   participants: Array<{
     memberId: number;
@@ -424,6 +431,10 @@ export interface AssignmentQuestionDetail {
     originalIsCorrect?: boolean | null;
     isAdjusted?: boolean;
     expectedCurrentAdjustmentId?: number | null;
+    answerStatus: AssignmentReplaySubmittedState['answerStatus'];
+    chosenIndex: number | null;
+    chosenIndices: Array<number | null> | null;
+    chosenText: string | null;
   }>;
   adjustments?: Array<{
     id: number;

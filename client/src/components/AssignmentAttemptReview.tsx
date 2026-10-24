@@ -1,12 +1,9 @@
 import { Badge } from '@/components/ui/badge';
-import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { OptionText } from '@/components/OptionText';
-import { QuestionImage } from '@/components/QuestionImage';
-import { QuestionMedia } from '@/components/QuestionMedia';
-import { QuestionText } from '@/components/QuestionText';
+import { Card, CardContent } from '@/components/ui/card';
+import { ReplayQuestionView } from '@/components/ReplayQuestionView';
 import { cn } from '@/lib/utils';
-import { ChevronLeft, ChevronRight, Eye, EyeOff, RotateCcw } from 'lucide-react';
+import { ChevronLeft, ChevronRight, RotateCcw } from 'lucide-react';
 import { useState } from 'react';
 import type {
   AssignmentAttemptDetail,
@@ -65,139 +62,6 @@ const appealLabels = {
   resolved: 'Đã xử lý',
 } as const;
 
-function parseStringArray(value: string | null): string[] {
-  try {
-    const parsed: unknown = JSON.parse(value ?? '[]');
-    return Array.isArray(parsed) && parsed.every((item) => typeof item === 'string') ? parsed : [];
-  } catch {
-    return [];
-  }
-}
-
-function ReplayAnswer({ question }: { question: AssignmentAttemptQuestionDetail }) {
-  const { replay } = question;
-  const indices = replay.chosenIndices ?? [];
-  const selected = new Set(indices.filter((value): value is number => value !== null));
-  const noAnswer = question.answerStatus !== 'answered';
-  const optionClass = (isSelected: boolean) =>
-    cn(
-      'min-h-12 rounded-lg border p-3 text-left text-sm',
-      isSelected ? 'border-primary bg-primary/15 ring-1 ring-primary' : 'border-border bg-muted/40',
-    );
-
-  if (noAnswer) {
-    return (
-      <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm">
-        {question.answerStatus === 'timed_out'
-          ? 'Nhân viên không kịp nộp đáp án cho câu này.'
-          : 'Nhân viên chưa nộp đáp án cho câu này.'}
-      </p>
-    );
-  }
-  if (question.questionType === 'multiple_choice' || question.questionType === 'true_false') {
-    return (
-      <div className="grid gap-2 sm:grid-cols-2">
-        {replay.options.map((option, index) => (
-          <div key={`${index}-${option}`} className={optionClass(replay.chosenIndex === index)}>
-            <span className="mb-1 block text-xs text-muted-foreground">
-              {replay.chosenIndex === index ? 'Nhân viên đã chọn' : 'Không chọn'}
-            </span>
-            <OptionText value={option} imgClassName="option-img-sm" />
-          </div>
-        ))}
-      </div>
-    );
-  }
-  if (question.questionType === 'multi_select') {
-    return (
-      <div className="grid gap-2 sm:grid-cols-2">
-        {replay.options.map((option, index) => (
-          <div key={`${index}-${option}`} className={optionClass(selected.has(index))}>
-            <span className="mb-1 block text-xs text-muted-foreground">
-              {selected.has(index) ? 'Nhân viên đã chọn' : 'Không chọn'}
-            </span>
-            <OptionText value={option} imgClassName="option-img-sm" />
-          </div>
-        ))}
-      </div>
-    );
-  }
-  if (question.questionType === 'ordering') {
-    return (
-      <ol className="space-y-2">
-        {indices.map((optionIndex, position) => (
-          <li
-            key={`${position}-${optionIndex}`}
-            className="flex gap-3 rounded-lg border border-primary bg-primary/10 p-3 text-sm"
-          >
-            <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
-              {position + 1}
-            </span>
-            <OptionText
-              value={optionIndex === null ? '—' : (replay.options[optionIndex] ?? '—')}
-              imgClassName="option-img-sm"
-            />
-          </li>
-        ))}
-      </ol>
-    );
-  }
-  if (question.questionType === 'matching') {
-    return (
-      <div className="space-y-2">
-        {replay.options.map((left, index) => {
-          const rightIndex = indices[index];
-          return (
-            <div
-              key={`${index}-${left}`}
-              className="grid gap-2 rounded-lg border border-primary bg-primary/10 p-3 text-sm sm:grid-cols-[1fr_auto_1fr]"
-            >
-              <OptionText value={left} imgClassName="option-img-sm" />
-              <span className="text-muted-foreground">→</span>
-              <OptionText
-                value={
-                  rightIndex === null || rightIndex === undefined
-                    ? '—'
-                    : (replay.rightOptions[rightIndex] ?? '—')
-                }
-                imgClassName="option-img-sm"
-              />
-            </div>
-          );
-        })}
-      </div>
-    );
-  }
-  if (question.questionType === 'fill_blank') {
-    const blanks = parseStringArray(replay.chosenText);
-    return (
-      <div className="grid gap-2 sm:grid-cols-2">
-        {blanks.map((value, index) => (
-          <div
-            key={`${index}-${value}`}
-            className="rounded-lg border border-primary bg-primary/10 p-3 text-sm"
-          >
-            <span className="block text-xs text-muted-foreground">Ô trống {index + 1}</span>
-            {value || '—'}
-          </div>
-        ))}
-      </div>
-    );
-  }
-  const label =
-    question.questionType === 'geo'
-      ? 'Vị trí đã chọn'
-      : question.questionType === 'closest_to'
-        ? 'Số đã nhập'
-        : 'Câu trả lời đã nhập';
-  return (
-    <div className="rounded-lg border border-primary bg-primary/10 p-3 text-sm">
-      <span className="block text-xs text-muted-foreground">{label}</span>
-      <span className="whitespace-pre-wrap">{replay.chosenText || '—'}</span>
-    </div>
-  );
-}
-
 function AttemptReplay({ detail }: { detail: AssignmentAttemptDetail }) {
   const [index, setIndex] = useState(0);
   const [reveal, setReveal] = useState(false);
@@ -207,16 +71,6 @@ function AttemptReplay({ detail }: { detail: AssignmentAttemptDetail }) {
     setIndex(nextIndex);
     setReveal(false);
   };
-  const media =
-    question.replay.mediaType && question.replay.mediaUrl ? (
-      <QuestionMedia
-        url={question.replay.mediaUrl}
-        kind={question.replay.mediaType}
-        className="mb-4"
-      />
-    ) : (
-      <QuestionImage src={question.replay.imageUrl ?? undefined} className="question-image mb-4" />
-    );
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-muted p-3 text-sm">
@@ -235,57 +89,37 @@ function AttemptReplay({ detail }: { detail: AssignmentAttemptDetail }) {
           </span>
         </div>
       </div>
-      <Card>
-        <CardContent className="p-4 sm:p-6">
-          {media}
-          <div className="question-text mb-5">
-            <QuestionText text={question.text} />
-          </div>
-          <ReplayAnswer question={question} />
-          {reveal && (
-            <div className="mt-4 space-y-3">
-              <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm">
-                <strong className="block text-xs text-muted-foreground">Đáp án đúng</strong>
-                <p className="mt-1 whitespace-pre-wrap">{question.correctAnswer}</p>
-              </div>
-              {question.explanation && (
-                <div className="rounded-lg border border-border p-3 text-sm">
-                  <strong className="block text-xs text-muted-foreground">Giải thích</strong>
-                  <p className="mt-1 whitespace-pre-wrap">{question.explanation}</p>
-                </div>
-              )}
-            </div>
-          )}
-          <div className="mt-5 flex flex-wrap justify-between gap-2 border-t pt-4">
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => setReveal((current) => !current)}
-            >
-              {reveal ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
-              {reveal ? 'Ẩn đáp án' : 'Hiện đáp án & giải thích'}
-            </Button>
-            <div className="flex gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                disabled={index === 0}
-                onClick={() => move(index - 1)}
-              >
-                <ChevronLeft className="size-4" /> Câu trước
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                disabled={index === detail.questions.length - 1}
-                onClick={() => move(index + 1)}
-              >
-                Câu sau <ChevronRight className="size-4" />
-              </Button>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      <ReplayQuestionView
+        question={question}
+        submission={{
+          answerStatus: question.answerStatus,
+          chosenIndex: question.replay.chosenIndex,
+          chosenIndices: question.replay.chosenIndices,
+          chosenText: question.replay.chosenText,
+        }}
+        reveal={reveal}
+        onRevealChange={setReveal}
+      />
+      <div className="flex flex-wrap justify-end gap-2">
+        <div className="flex gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            disabled={index === 0}
+            onClick={() => move(index - 1)}
+          >
+            <ChevronLeft className="size-4" /> Câu trước
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={index === detail.questions.length - 1}
+            onClick={() => move(index + 1)}
+          >
+            Câu sau <ChevronRight className="size-4" />
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }

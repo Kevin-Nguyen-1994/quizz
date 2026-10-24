@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowLeft, ArrowUp, Check, Copy, Download, ExternalLink, Eye, UserPlus } from 'lucide-react';
+import { ArrowDown, ArrowLeft, ArrowUp, Check, Copy, Download, ExternalLink, Eye, RotateCcw, UserPlus } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { AppAlert } from '@/components/AppAlert';
@@ -27,6 +27,7 @@ import { authHeaders } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { AssessmentAnalytics } from './components/AssessmentAnalytics';
 import { ResultAdjustmentDialog } from './components/ResultAdjustmentDialog';
+import { QuestionReplay } from './components/QuestionReplay';
 import { AssignmentAppealsPanel, type AdminAppeal } from './components/AssignmentAppealsPanel';
 import type {
   AssignmentAttemptDetail,
@@ -111,6 +112,7 @@ export default function AssignmentDetail() {
   const [questionOpen, setQuestionOpen] = useState(false);
   const [questionDetail, setQuestionDetail] = useState<AssignmentQuestionDetail | null>(null);
   const [questionError, setQuestionError] = useState('');
+  const [questionReplay, setQuestionReplay] = useState(false);
   const [adjustmentOpen, setAdjustmentOpen] = useState(false);
   const [appealForAdjustment, setAppealForAdjustment] = useState<AdminAppeal | null>(null);
   const [appealRefreshKey, setAppealRefreshKey] = useState(0);
@@ -246,6 +248,7 @@ export default function AssignmentDetail() {
 
   async function openQuestion(questionId: number) {
     setQuestionOpen(true);
+    setQuestionReplay(false);
     setQuestionDetail(null);
     setQuestionError('');
     try {
@@ -723,6 +726,24 @@ export default function AssignmentDetail() {
             <AppAlert variant="error">{questionError}</AppAlert>
           ) : questionDetail ? (
             <div className="space-y-4">
+              <div className="flex flex-wrap justify-end gap-2">
+                <Button type="button" variant={questionReplay ? 'secondary' : 'outline'} onClick={() => setQuestionReplay((current) => !current)}>
+                  <RotateCcw className="size-4" />
+                  {questionReplay ? 'Quay về phân tích' : 'Mô phỏng câu hỏi'}
+                </Button>
+                {!questionReplay && (
+                  <Button variant="secondary" onClick={() => { setAppealForAdjustment(null); setAdjustmentOpen(true); }}>
+                    Điều chỉnh kết quả
+                  </Button>
+                )}
+              </div>
+              {questionReplay ? (
+                <QuestionReplay
+                  detail={questionDetail}
+                  onAdjust={() => { setAppealForAdjustment(null); setAdjustmentOpen(true); }}
+                />
+              ) : (
+                <>
               <div className="rounded-lg bg-emerald-500/10 p-3 text-sm">
                 <span className="block text-xs text-muted-foreground">Đáp án đúng</span>
                 <span className="whitespace-pre-wrap">{questionDetail.question.correctAnswer}</span>
@@ -744,11 +765,6 @@ export default function AssignmentDetail() {
                   </div>
                 </div>
               )}
-              <div className="flex justify-end">
-                <Button variant="secondary" onClick={() => { setAppealForAdjustment(null); setAdjustmentOpen(true); }}>
-                  Điều chỉnh kết quả
-                </Button>
-              </div>
               <div className="overflow-x-auto rounded-lg border border-border">
                 <table className="w-full min-w-[800px] text-sm">
                   <thead>
@@ -795,6 +811,8 @@ export default function AssignmentDetail() {
                   </tbody>
                 </table>
               </div>
+                </>
+              )}
             </div>
           ) : (
             <p className="text-muted-foreground">Đang tải…</p>
